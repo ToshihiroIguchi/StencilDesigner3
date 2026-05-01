@@ -136,7 +136,7 @@ export class CanvasRenderer {
     const ctx = this.ctx;
     const strokeColor = selected ? COLORS.shapeSelected : COLORS.shape;
     const fillColor = selected ? COLORS.shapeFillSelected : COLORS.shapeFill;
-    ctx.lineWidth = Math.max(1, 1 / vt.zoom);
+    ctx.lineWidth = 1;
 
     // Fill with even-odd rule for holes
     ctx.fillStyle = fillColor;
