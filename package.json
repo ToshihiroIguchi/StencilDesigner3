@@ -1,0 +1,30 @@
+{
+  "name": "stencil-designer-3",
+  "version": "1.0.0",
+  "description": "Browser-based 2D CAD editor for stencil/mask design",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "test:unit:watch": "vitest"
+  },
+  "dependencies": {
+    "@tarikjabiri/dxf": "3.0.0-alpha.13",
+    "clipper-lib": "^6.4.2",
+    "dxf-parser": "^1.1.2",
+    "localforage": "^1.10.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.41.2",
+    "@types/node": "^20.11.16",
+    "@vitest/coverage-v8": "^1.2.2",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "vitest": "^1.2.2"
+  }
+}
