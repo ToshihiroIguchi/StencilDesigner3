@@ -55,7 +55,7 @@ export class CanvasRenderer {
   get width(): number { return this.canvas.width; }
   get height(): number { return this.canvas.height; }
 
-  render(state: AppState, draft?: DraftShape, snapPt?: { x: number; y: number }, showAllVertices = false): void {
+  render(state: AppState, draft?: DraftShape, snapPt?: { x: number; y: number }, showAllVertices = false, rubberBand?: { start: { x: number; y: number }; end: { x: number; y: number } }): void {
     const ctx = this.ctx;
     const vt: ViewTransform = { zoom: state.zoom, panX: state.panX, panY: state.panY };
     const c = this.isDark ? COLORS : { ...COLORS, background: COLORS.backgroundLight, grid: COLORS.gridLight, ruler: COLORS.rulerLight, rulerText: COLORS.rulerTextLight };
@@ -92,6 +92,11 @@ export class CanvasRenderer {
       ctx.strokeStyle = COLORS.snapIndicator;
       ctx.lineWidth = 1.5;
       ctx.stroke();
+    }
+
+    // Rubber-band selection rectangle
+    if (rubberBand) {
+      this.drawRubberBand(rubberBand.start, rubberBand.end);
     }
 
     ctx.restore();
@@ -221,6 +226,23 @@ export class CanvasRenderer {
     }
 
     ctx.setLineDash([]);
+  }
+
+  private drawRubberBand(start: { x: number; y: number }, end: { x: number; y: number }): void {
+    const ctx = this.ctx;
+    const x = Math.min(start.x, end.x);
+    const y = Math.min(start.y, end.y);
+    const w = Math.abs(end.x - start.x);
+    const h = Math.abs(end.y - start.y);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(100,200,255,0.9)';
+    ctx.fillStyle = 'rgba(100,200,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   private drawRulers(_state: AppState, vt: ViewTransform): void {

@@ -85,7 +85,16 @@ export class App {
 
   private doRender(): void {
     const state = this.history.state;
-    this.renderer.render(state, this.activeTool.getDraft() ?? undefined, this.activeTool.getSnapPoint() ?? undefined, this.activeTool.showsAllVertices());
+    const rubberBand = this.activeTool instanceof SelectTool
+      ? (this.activeTool.getRubberBand() ?? undefined)
+      : undefined;
+    this.renderer.render(
+      state,
+      this.activeTool.getDraft() ?? undefined,
+      this.activeTool.getSnapPoint() ?? undefined,
+      this.activeTool.showsAllVertices(),
+      rubberBand,
+    );
     this.updateFooter(state);
     this.updateRightPanel(state);
     this.updateUndoButtons();
