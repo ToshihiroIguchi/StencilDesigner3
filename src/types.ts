@@ -25,7 +25,8 @@ export type ToolType =
   | 'delete'
   | 'array'
   | 'union'
-  | 'difference';
+  | 'difference'
+  | 'fillet';
 
 export interface Selection {
   type: 'vertex' | 'edge' | 'polygon';

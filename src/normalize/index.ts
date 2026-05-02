@@ -61,7 +61,7 @@ function ensureCW(ring: Ring): Ring {
 }
 
 /** Check for self-intersections using O(n²) sweep. Returns true if self-intersecting. */
-function hasSelfIntersection(ring: Ring): boolean {
+export function hasSelfIntersection(ring: Ring): boolean {
   const n = ring.length;
   if (n < 4) return false;
   for (let i = 0; i < n; i++) {

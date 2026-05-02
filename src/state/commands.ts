@@ -1,7 +1,7 @@
-import type { AppState, Command, Selection, Polygon } from '../types';
+import type { AppState, Command, Selection, Polygon, Ring } from '../types';
 import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
-import { normalizeAll } from '../normalize';
+import { normalize, normalizeAll } from '../normalize';
 
 // ─── Add Shape ───────────────────────────────────────────────────────────────
 
@@ -165,6 +165,37 @@ export class DifferenceCommand implements Command {
       ...state,
       shapes: normalizeAll([...remaining, this.originalA, this.originalB]),
       selection: [],
+    };
+  }
+}
+
+// ─── Fillet ──────────────────────────────────────────────────────────────────
+
+export class FilletCommand implements Command {
+  private originalShape: Polygon;
+  private newShape: Polygon;
+
+  constructor(originalShape: Polygon, holeIndex: number, newRing: Ring) {
+    this.originalShape = originalShape;
+    if (holeIndex < 0) {
+      this.newShape = normalize({ ...originalShape, outer: newRing });
+    } else {
+      const newHoles = originalShape.holes.map((h, i) => (i === holeIndex ? newRing : h));
+      this.newShape = normalize({ ...originalShape, holes: newHoles });
+    }
+  }
+
+  do(state: AppState): AppState {
+    return {
+      ...state,
+      shapes: state.shapes.map((s) => (s.id === this.originalShape.id ? this.newShape : s)),
+    };
+  }
+
+  undo(state: AppState): AppState {
+    return {
+      ...state,
+      shapes: state.shapes.map((s) => (s.id === this.newShape.id ? this.originalShape : s)),
     };
   }
 }

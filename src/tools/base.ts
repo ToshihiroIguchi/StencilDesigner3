@@ -19,6 +19,7 @@ export abstract class BaseTool {
 
   getDraft(): DraftShape | null { return this.draft; }
   getSnapPoint(): Point | null { return this.snapPoint; }
+  showsAllVertices(): boolean { return false; }
 
   abstract onMouseDown(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void;
   abstract onMouseMove(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void;

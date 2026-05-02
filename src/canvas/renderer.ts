@@ -55,7 +55,7 @@ export class CanvasRenderer {
   get width(): number { return this.canvas.width; }
   get height(): number { return this.canvas.height; }
 
-  render(state: AppState, draft?: DraftShape, snapPt?: { x: number; y: number }): void {
+  render(state: AppState, draft?: DraftShape, snapPt?: { x: number; y: number }, showAllVertices = false): void {
     const ctx = this.ctx;
     const vt: ViewTransform = { zoom: state.zoom, panX: state.panX, panY: state.panY };
     const c = this.isDark ? COLORS : { ...COLORS, background: COLORS.backgroundLight, grid: COLORS.gridLight, ruler: COLORS.rulerLight, rulerText: COLORS.rulerTextLight };
@@ -76,7 +76,7 @@ export class CanvasRenderer {
     // Shapes
     const selIds = selectedIds(state.selection);
     for (const shape of state.shapes) {
-      this.drawPolygon(shape, selIds.has(shape.id), vt);
+      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices);
     }
 
     // Draft (preview while drawing)
@@ -132,7 +132,7 @@ export class CanvasRenderer {
     ctx.stroke();
   }
 
-  private drawPolygon(poly: Polygon, selected: boolean, vt: ViewTransform): void {
+  private drawPolygon(poly: Polygon, selected: boolean, vt: ViewTransform, showAllVertices = false): void {
     const ctx = this.ctx;
     const strokeColor = selected ? COLORS.shapeSelected : COLORS.shape;
     const fillColor = selected ? COLORS.shapeFillSelected : COLORS.shapeFill;
@@ -162,12 +162,15 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
-    // Vertices (only when selected)
-    if (selected) {
+    // Vertices: always show when fillet tool active, otherwise only when selected
+    if (selected || showAllVertices) {
       ctx.fillStyle = COLORS.vertex;
-      for (const p of poly.outer) {
-        const cp = worldToCanvas(p.x, p.y, vt);
-        ctx.fillRect(cp.x - 3, cp.y - 3, 6, 6);
+      const rings = [poly.outer, ...poly.holes];
+      for (const ring of rings) {
+        for (const p of ring) {
+          const cp = worldToCanvas(p.x, p.y, vt);
+          ctx.fillRect(cp.x - 3, cp.y - 3, 6, 6);
+        }
       }
     }
   }

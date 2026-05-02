@@ -5,6 +5,7 @@ import { CanvasRenderer } from '../canvas/renderer';
 import { SelectTool } from '../tools/select';
 import { RectTool } from '../tools/rect';
 import { CircleTool } from '../tools/circle';
+import { FilletTool } from '../tools/fillet';
 import { findSnapPoint } from '../core/selection';
 import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand } from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty } from '../state/autosave';
@@ -12,7 +13,7 @@ import { importDxf } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
 
-type AnyTool = SelectTool | RectTool | CircleTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool;
 
 export class App {
   private history: History;
@@ -84,7 +85,7 @@ export class App {
 
   private doRender(): void {
     const state = this.history.state;
-    this.renderer.render(state, this.activeTool.getDraft() ?? undefined, this.activeTool.getSnapPoint() ?? undefined);
+    this.renderer.render(state, this.activeTool.getDraft() ?? undefined, this.activeTool.getSnapPoint() ?? undefined, this.activeTool.showsAllVertices());
     this.updateFooter(state);
     this.updateRightPanel(state);
     this.updateUndoButtons();
@@ -208,10 +209,16 @@ export class App {
       if (e.key === 'y') { e.preventDefault(); this.redo(); return; }
       if (e.key === 's') { e.preventDefault(); saveState(this.history.state); return; }
     }
+    const target = e.target as HTMLElement;
+    const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+    if (!inInput && !e.ctrlKey && !e.metaKey) {
+      if (e.key === 'v' || e.key === 'V') { this.setTool('select'); return; }
+      if (e.key === 'r' || e.key === 'R') { this.setTool('rect'); return; }
+      if (e.key === 'c' || e.key === 'C') { this.setTool('circle'); return; }
+      if (e.key === 'f' || e.key === 'F') { this.setTool('fillet'); return; }
+    }
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (!(e.target instanceof HTMLInputElement)) {
-        this.deleteSelected();
-      }
+      if (!inInput) this.deleteSelected();
     }
     if (e.key === 'Escape') this.activeTool.cancel();
     this.activeTool.onKeyDown(e.key, this.history.state);
@@ -233,6 +240,7 @@ export class App {
       case 'select': case 'move': this.activeTool = new SelectTool(toolCtx); break;
       case 'rect': this.activeTool = new RectTool(toolCtx); break;
       case 'circle': this.activeTool = new CircleTool(toolCtx); break;
+      case 'fillet': this.activeTool = new FilletTool(toolCtx); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
 
