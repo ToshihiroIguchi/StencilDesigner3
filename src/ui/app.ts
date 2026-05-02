@@ -4,7 +4,6 @@ import { History } from '../state/history';
 import { CanvasRenderer } from '../canvas/renderer';
 import { SelectTool } from '../tools/select';
 import { RectTool } from '../tools/rect';
-import { LineTool } from '../tools/line';
 import { CircleTool } from '../tools/circle';
 import { findSnapPoint } from '../core/selection';
 import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand } from '../state/commands';
@@ -13,7 +12,7 @@ import { importDxf } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
 
-type AnyTool = SelectTool | RectTool | LineTool | CircleTool;
+type AnyTool = SelectTool | RectTool | CircleTool;
 
 export class App {
   private history: History;
@@ -233,7 +232,6 @@ export class App {
     switch (tool) {
       case 'select': case 'move': this.activeTool = new SelectTool(toolCtx); break;
       case 'rect': this.activeTool = new RectTool(toolCtx); break;
-      case 'line': this.activeTool = new LineTool(toolCtx); break;
       case 'circle': this.activeTool = new CircleTool(toolCtx); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }

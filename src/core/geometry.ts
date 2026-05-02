@@ -30,23 +30,6 @@ export function rectToPolygon(x1: number, y1: number, x2: number, y2: number): P
   return normalize({ id: newId(), outer, holes: [], layer: '0' });
 }
 
-/** Create a line as a thin rectangle (width = 100µm = 0.1mm). */
-export function lineToPolygon(x1: number, y1: number, x2: number, y2: number, width = 100): Polygon {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) throw new Error('Zero-length line');
-  const nx = Math.round((-dy / len) * (width / 2));
-  const ny = Math.round((dx / len) * (width / 2));
-  const outer: Ring = [
-    { x: x1 - nx, y: y1 - ny },
-    { x: x2 - nx, y: y2 - ny },
-    { x: x2 + nx, y: y2 + ny },
-    { x: x1 + nx, y: y1 + ny },
-  ];
-  return normalize({ id: newId(), outer, holes: [], layer: '0' });
-}
-
 /** Get polygon bounding box. */
 export function polygonBbox(poly: Polygon): { minX: number; minY: number; maxX: number; maxY: number } {
   return bbox(poly.outer);

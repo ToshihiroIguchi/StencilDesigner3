@@ -17,7 +17,6 @@ export interface Polygon {
 
 export type ToolType =
   | 'select'
-  | 'line'
   | 'rect'
   | 'circle'
   | 'text'

@@ -24,7 +24,7 @@ const COLORS = {
 const RULER_SIZE = 24; // pixels
 
 export interface DraftShape {
-  type: 'line' | 'rect' | 'circle';
+  type: 'rect' | 'circle';
   points: { x: number; y: number }[]; // world coordinates
 }
 
@@ -205,13 +205,6 @@ export class CanvasRenderer {
       const h = Math.abs(p2.y - p1.y);
       ctx.fillRect(x, y, w, h);
       ctx.strokeRect(x, y, w, h);
-    } else if (draft.type === 'line' && pts.length >= 2) {
-      const p1 = worldToCanvas(pts[0].x, pts[0].y, vt);
-      const p2 = worldToCanvas(pts[1].x, pts[1].y, vt);
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
     } else if (draft.type === 'circle' && pts.length >= 2) {
       const center = worldToCanvas(pts[0].x, pts[0].y, vt);
       const edge = worldToCanvas(pts[1].x, pts[1].y, vt);
