@@ -112,13 +112,13 @@ export function roundAllCorners(
   return { ring: ([] as Ring).concat(...parts), applied, skipped };
 }
 
-/** Human-readable skip reason (Japanese). */
+/** Human-readable skip reason. */
 export function filletSkipMessage(reason: FilletSkipReason): string {
   switch (reason) {
-    case 'zero-length-edge': return '辺長がゼロです';
-    case 'near-straight':    return '頂点がほぼ直線上にあります';
-    case 'r-too-small':      return 'Rが小さすぎます（1µm未満）';
-    case 'r-too-large':      return 'Rが辺長を超えています';
-    case 'degenerate':       return '形状が縮退しています';
+    case 'zero-length-edge': return 'Edge length is zero';
+    case 'near-straight':    return 'Vertex is nearly collinear';
+    case 'r-too-small':      return 'R is too small (< 1µm)';
+    case 'r-too-large':      return 'R exceeds edge length';
+    case 'degenerate':       return 'Shape is degenerate';
   }
 }

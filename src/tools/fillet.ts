@@ -58,14 +58,14 @@ export class FilletTool extends BaseTool {
       return;
     }
     if (hasSelfIntersection(result.ring)) {
-      this.statusMessage = '自己交差が発生します。Rを小さくしてください';
+      this.statusMessage = 'Self-intersection detected. Reduce R.';
       this.ctx.requestRender();
       return;
     }
 
     this.ctx.history.execute(new FilletCommand(shape, holeIndex, result.ring));
     markDirty();
-    this.statusMessage = `適用済み R=${this.R}µm`;
+    this.statusMessage = `Applied R=${this.R}µm`;
 
     this.hoveredVtx = null;
     this.previewDraft = null;
@@ -171,15 +171,15 @@ export class FilletTool extends BaseTool {
 
     if (before.length === 0) {
       this.statusMessage = totalSkipped > 0
-        ? `0 適用 (${totalSkipped} スキップ)`
-        : ids ? '適用可能な頂点がありません' : '形状を選択してください';
+        ? `0 applied (${totalSkipped} skipped)`
+        : ids ? 'No applicable vertices' : 'Select a shape first';
       this.ctx.requestRender();
       return;
     }
 
     this.ctx.history.execute(new FilletAllCommand(before, after));
     markDirty();
-    this.statusMessage = `${totalApplied} 頂点に適用, ${totalSkipped} スキップ`;
+    this.statusMessage = `${totalApplied} vertices applied, ${totalSkipped} skipped`;
 
     this.hoveredVtx = null;
     this.previewDraft = null;
@@ -228,13 +228,13 @@ export class FilletTool extends BaseTool {
     }
     if (hasSelfIntersection(result.ring)) {
       this.previewDraft = null;
-      this.statusMessage = '自己交差が発生します。Rを小さくしてください';
+      this.statusMessage = 'Self-intersection detected. Reduce R.';
       this.vtxStatuses.set(`${shapeId}_${holeIndex}_${index}`, 'bad');
       return;
     }
 
     this.previewDraft = { type: 'fillet-preview', points: result.ring };
-    this.statusMessage = `R = ${this.R}µm — クリックで適用`;
+    this.statusMessage = `R = ${this.R}µm — click to apply`;
     this.vtxStatuses.set(`${shapeId}_${holeIndex}_${index}`, 'hover');
   }
 
