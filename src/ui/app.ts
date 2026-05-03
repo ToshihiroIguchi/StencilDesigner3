@@ -491,6 +491,21 @@ export class App {
       if (statusEl) statusEl.textContent = ft.getStatusMessage();
     }
 
+    // DRC results (always runs, independent of selection)
+    const drcListEl = document.getElementById('drc-list');
+    if (drcListEl) {
+      const errors = runDrc(state.shapes, this.drcConfig);
+      if (errors.length === 0) {
+        drcListEl.innerHTML = '<p class="muted">No errors</p>';
+      } else {
+        const lines = errors.map((e) =>
+          `<p class="${e.severity === 'error' ? 'drc-error' : 'drc-warning'}">${e.message}</p>`
+        );
+        if (errors.length >= 20) lines.push('<p class="muted">… (truncated at 20)</p>');
+        drcListEl.innerHTML = lines.join('');
+      }
+    }
+
     const sel = state.selection;
     const infoEl = document.getElementById('selection-info');
     const propsEl = document.getElementById('shape-props');
@@ -543,20 +558,6 @@ export class App {
       }
     }
 
-    // DRC results
-    const drcListEl = document.getElementById('drc-list');
-    if (drcListEl) {
-      const errors = runDrc(state.shapes, this.drcConfig);
-      if (errors.length === 0) {
-        drcListEl.innerHTML = '<p class="muted">No errors</p>';
-      } else {
-        const lines = errors.map((e) =>
-          `<p class="${e.severity === 'error' ? 'drc-error' : 'drc-warning'}">${e.message}</p>`
-        );
-        if (errors.length >= 20) lines.push('<p class="muted">… (truncated at 20)</p>');
-        drcListEl.innerHTML = lines.join('');
-      }
-    }
   }
 
   private updateUndoButtons(): void {
