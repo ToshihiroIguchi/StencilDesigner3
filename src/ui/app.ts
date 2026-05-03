@@ -13,6 +13,7 @@ import { importDxf } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
 import { resizePolygon } from '../core/transform';
+import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 
 type AnyTool = SelectTool | RectTool | CircleTool | FilletTool;
 
@@ -29,6 +30,7 @@ export class App {
   private animFrame: number | null = null;
   private pendingRender = false;
   private filletRadius = 500;
+  private drcConfig: DrcConfig = { ...DEFAULT_DRC_CONFIG };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -199,6 +201,18 @@ export class App {
     propY?.addEventListener('change', applyPropXY);
     propW?.addEventListener('change', applyPropWH);
     propH?.addEventListener('change', applyPropWH);
+
+    // DRC config
+    const drcApertureInput = document.getElementById('drc-min-aperture') as HTMLInputElement | null;
+    const drcSpacingInput = document.getElementById('drc-min-spacing') as HTMLInputElement | null;
+    drcApertureInput?.addEventListener('change', () => {
+      const v = parseInt(drcApertureInput.value, 10);
+      if (!isNaN(v) && v > 0) { this.drcConfig = { ...this.drcConfig, minApertureUm: v }; this.requestRender(); }
+    });
+    drcSpacingInput?.addEventListener('change', () => {
+      const v = parseInt(drcSpacingInput.value, 10);
+      if (!isNaN(v) && v >= 0) { this.drcConfig = { ...this.drcConfig, minSpacingUm: v }; this.requestRender(); }
+    });
 
     // File input
     const fileInput = document.getElementById('dxf-file-input') as HTMLInputElement | null;
@@ -526,6 +540,21 @@ export class App {
         if (ph && document.activeElement !== ph) ph.value = String(bb.maxY - bb.minY);
       } else {
         propsEl.style.display = 'none';
+      }
+    }
+
+    // DRC results
+    const drcListEl = document.getElementById('drc-list');
+    if (drcListEl) {
+      const errors = runDrc(state.shapes, this.drcConfig);
+      if (errors.length === 0) {
+        drcListEl.innerHTML = '<p class="muted">No errors</p>';
+      } else {
+        const lines = errors.map((e) =>
+          `<p class="${e.severity === 'error' ? 'drc-error' : 'drc-warning'}">${e.message}</p>`
+        );
+        if (errors.length >= 20) lines.push('<p class="muted">… (truncated at 20)</p>');
+        drcListEl.innerHTML = lines.join('');
       }
     }
   }

@@ -207,6 +207,32 @@ body.light {
   flex-shrink: 0;
 }
 
+/* ── DRC config ────────────────────────────────────────────────────────────── */
+.drc-config { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.drc-cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg2);
+  cursor: default;
+}
+.drc-cfg-row span:first-child { flex: 1; }
+.drc-cfg-row input[type=number] {
+  width: 56px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: monospace;
+}
+.drc-cfg-row input[type=number]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* ── Fillet panel ──────────────────────────────────────────────────────────── */
 .fillet-row {
   display: flex;
