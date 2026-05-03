@@ -169,6 +169,48 @@ body.light {
 .drc-error { color: var(--danger); margin: 2px 0; }
 .drc-warning { color: var(--accent2); margin: 2px 0; }
 
+/* ── Fillet panel ──────────────────────────────────────────────────────────── */
+.fillet-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: default;
+}
+.fillet-row input[type=number] {
+  width: 68px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 3px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: monospace;
+}
+.fillet-row input[type=number]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.fillet-status {
+  font-size: 11px;
+  color: var(--fg2);
+  margin-top: 6px;
+  min-height: 15px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.fillet-legend {
+  font-size: 10px;
+  color: var(--fg2);
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.legend-ok   { color: #ffdd44; }
+.legend-skip { color: #555570; }
+.legend-bad  { color: #ff4444; }
+
 /* ── Footer ────────────────────────────────────────────────────────────────── */
 #footer {
   height: var(--footer-h);

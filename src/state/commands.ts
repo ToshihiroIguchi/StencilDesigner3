@@ -169,7 +169,7 @@ export class DifferenceCommand implements Command {
   }
 }
 
-// ─── Fillet ──────────────────────────────────────────────────────────────────
+// ─── Fillet (single vertex) ───────────────────────────────────────────────────
 
 export class FilletCommand implements Command {
   private originalShape: Polygon;
@@ -197,6 +197,25 @@ export class FilletCommand implements Command {
       ...state,
       shapes: state.shapes.map((s) => (s.id === this.newShape.id ? this.originalShape : s)),
     };
+  }
+}
+
+// ─── Fillet All Corners ───────────────────────────────────────────────────────
+
+export class FilletAllCommand implements Command {
+  constructor(
+    private readonly before: Polygon[],
+    private readonly after: Polygon[],
+  ) {}
+
+  do(state: AppState): AppState {
+    const map = new Map(this.after.map((s) => [s.id, s]));
+    return { ...state, shapes: state.shapes.map((s) => map.get(s.id) ?? s) };
+  }
+
+  undo(state: AppState): AppState {
+    const map = new Map(this.before.map((s) => [s.id, s]));
+    return { ...state, shapes: state.shapes.map((s) => map.get(s.id) ?? s) };
   }
 }
 

@@ -16,6 +16,9 @@ const COLORS = {
   shapeSelected: '#ff9f4a',
   shapeFillSelected: 'rgba(255,159,74,0.25)',
   vertex: '#ffdd44',
+  vertexSkip: '#555570',
+  vertexBad: '#ff4444',
+  vertexHover: '#ffffff',
   snapIndicator: '#00ff88',
   draftShape: 'rgba(100,200,100,0.7)',
   draftFill: 'rgba(100,200,100,0.1)',
@@ -24,9 +27,11 @@ const COLORS = {
 const RULER_SIZE = 24; // pixels
 
 export interface DraftShape {
-  type: 'rect' | 'circle';
+  type: 'rect' | 'circle' | 'fillet-preview';
   points: { x: number; y: number }[]; // world coordinates
 }
+
+export type FilletVertexStatus = 'ok' | 'skip' | 'bad' | 'hover';
 
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
@@ -55,7 +60,14 @@ export class CanvasRenderer {
   get width(): number { return this.canvas.width; }
   get height(): number { return this.canvas.height; }
 
-  render(state: AppState, draft?: DraftShape, snapPt?: { x: number; y: number }, showAllVertices = false, rubberBand?: { start: { x: number; y: number }; end: { x: number; y: number } }): void {
+  render(
+    state: AppState,
+    draft?: DraftShape,
+    snapPt?: { x: number; y: number },
+    showAllVertices = false,
+    rubberBand?: { start: { x: number; y: number }; end: { x: number; y: number } },
+    filletStatuses?: Map<string, FilletVertexStatus>,
+  ): void {
     const ctx = this.ctx;
     const vt: ViewTransform = { zoom: state.zoom, panX: state.panX, panY: state.panY };
     const c = this.isDark ? COLORS : { ...COLORS, background: COLORS.backgroundLight, grid: COLORS.gridLight, ruler: COLORS.rulerLight, rulerText: COLORS.rulerTextLight };
@@ -76,7 +88,7 @@ export class CanvasRenderer {
     // Shapes
     const selIds = selectedIds(state.selection);
     for (const shape of state.shapes) {
-      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices);
+      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses);
     }
 
     // Draft (preview while drawing)
@@ -137,7 +149,13 @@ export class CanvasRenderer {
     ctx.stroke();
   }
 
-  private drawPolygon(poly: Polygon, selected: boolean, vt: ViewTransform, showAllVertices = false): void {
+  private drawPolygon(
+    poly: Polygon,
+    selected: boolean,
+    vt: ViewTransform,
+    showAllVertices = false,
+    filletStatuses?: Map<string, FilletVertexStatus>,
+  ): void {
     const ctx = this.ctx;
     const strokeColor = selected ? COLORS.shapeSelected : COLORS.shape;
     const fillColor = selected ? COLORS.shapeFillSelected : COLORS.shapeFill;
@@ -167,14 +185,27 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
-    // Vertices: always show when fillet tool active, otherwise only when selected
+    // Vertices
     if (selected || showAllVertices) {
-      ctx.fillStyle = COLORS.vertex;
       const rings = [poly.outer, ...poly.holes];
-      for (const ring of rings) {
-        for (const p of ring) {
+      for (let ri = 0; ri < rings.length; ri++) {
+        const ring = rings[ri];
+        const hi = ri === 0 ? -1 : ri - 1; // -1 = outer, 0+ = holes
+        for (let vi = 0; vi < ring.length; vi++) {
+          const p = ring[vi];
           const cp = worldToCanvas(p.x, p.y, vt);
-          ctx.fillRect(cp.x - 3, cp.y - 3, 6, 6);
+
+          let color = COLORS.vertex;
+          let half = 3;
+          if (filletStatuses) {
+            const st = filletStatuses.get(`${poly.id}_${hi}_${vi}`);
+            if (st === 'hover')      { color = COLORS.vertexHover; half = 5; }
+            else if (st === 'bad')   { color = COLORS.vertexBad; }
+            else if (st === 'skip')  { color = COLORS.vertexSkip; }
+          }
+
+          ctx.fillStyle = color;
+          ctx.fillRect(cp.x - half, cp.y - half, half * 2, half * 2);
         }
       }
     }
@@ -221,6 +252,17 @@ export class CanvasRenderer {
       const r = Math.sqrt(dx * dx + dy * dy);
       ctx.beginPath();
       ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (draft.type === 'fillet-preview' && pts.length >= 3) {
+      ctx.beginPath();
+      const first = worldToCanvas(pts[0].x, pts[0].y, vt);
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < pts.length; i++) {
+        const cp = worldToCanvas(pts[i].x, pts[i].y, vt);
+        ctx.lineTo(cp.x, cp.y);
+      }
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
     }

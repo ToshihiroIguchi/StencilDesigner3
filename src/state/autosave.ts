@@ -2,6 +2,23 @@ import type { AppState } from '../types';
 import localforage from 'localforage';
 
 const STORE_KEY = 'stencil_designer_autosave';
+const PREFS_KEY = 'stencil_designer_prefs';
+
+export interface AppPrefs {
+  filletRadius: number;
+}
+
+const DEFAULT_PREFS: AppPrefs = { filletRadius: 500 };
+
+export async function savePrefs(prefs: Partial<AppPrefs>): Promise<void> {
+  const existing = await loadPrefs();
+  await localforage.setItem(PREFS_KEY, { ...existing, ...prefs });
+}
+
+export async function loadPrefs(): Promise<AppPrefs> {
+  const stored = await localforage.getItem<Partial<AppPrefs>>(PREFS_KEY);
+  return { ...DEFAULT_PREFS, ...(stored ?? {}) };
+}
 const SAVE_INTERVAL_MS = 5000;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;

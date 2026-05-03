@@ -8,7 +8,7 @@ import { CircleTool } from '../tools/circle';
 import { FilletTool } from '../tools/fillet';
 import { findSnapPoint } from '../core/selection';
 import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand } from '../state/commands';
-import { loadState, saveState, startAutosave, clearState, markDirty } from '../state/autosave';
+import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
 import { importDxf } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
@@ -27,6 +27,7 @@ export class App {
   private stopAutosave: (() => void) | null = null;
   private animFrame: number | null = null;
   private pendingRender = false;
+  private filletRadius = 500;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -42,12 +43,13 @@ export class App {
   }
 
   async init(): Promise<void> {
-    // Restore saved state
+    // Restore saved state and preferences
     try {
-      const saved = await loadState();
-      if (saved) {
-        this.history.loadState(saved);
-      }
+      const [saved, prefs] = await Promise.all([loadState(), loadPrefs()]);
+      if (saved) this.history.loadState(saved);
+      this.filletRadius = prefs.filletRadius;
+      const rInput = document.getElementById('fillet-r') as HTMLInputElement | null;
+      if (rInput) rInput.value = String(this.filletRadius);
     } catch {
       // Ignore load errors
     }
@@ -88,12 +90,16 @@ export class App {
     const rubberBand = this.activeTool instanceof SelectTool
       ? (this.activeTool.getRubberBand() ?? undefined)
       : undefined;
+    const filletStatuses = this.activeTool instanceof FilletTool
+      ? this.activeTool.getVertexStatuses()
+      : undefined;
     this.renderer.render(
       state,
       this.activeTool.getDraft() ?? undefined,
       this.activeTool.getSnapPoint() ?? undefined,
       this.activeTool.showsAllVertices(),
       rubberBand,
+      filletStatuses,
     );
     this.updateFooter(state);
     this.updateRightPanel(state);
@@ -129,6 +135,23 @@ export class App {
     document.getElementById('btn-clear')?.addEventListener('click', () => this.hardReset());
     document.getElementById('btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
+
+    // Fillet panel
+    const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
+    filletRInput?.addEventListener('input', () => {
+      const r = parseInt(filletRInput.value, 10);
+      if (isNaN(r) || r <= 0) return;
+      this.filletRadius = r;
+      savePrefs({ filletRadius: r }).catch(() => {});
+      if (this.activeTool instanceof FilletTool) {
+        this.activeTool.setRadius(r, this.history.state);
+      }
+    });
+    document.getElementById('btn-fillet-all')?.addEventListener('click', () => {
+      if (this.activeTool instanceof FilletTool) {
+        this.activeTool.applyToAllCorners(this.history.state);
+      }
+    });
 
     // File input
     const fileInput = document.getElementById('dxf-file-input') as HTMLInputElement | null;
@@ -249,7 +272,7 @@ export class App {
       case 'select': case 'move': this.activeTool = new SelectTool(toolCtx); break;
       case 'rect': this.activeTool = new RectTool(toolCtx); break;
       case 'circle': this.activeTool = new CircleTool(toolCtx); break;
-      case 'fillet': this.activeTool = new FilletTool(toolCtx); break;
+      case 'fillet': this.activeTool = new FilletTool(toolCtx, this.filletRadius); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
 
@@ -392,6 +415,21 @@ export class App {
   }
 
   private updateRightPanel(state: AppState): void {
+    // Show/hide fillet panel and sync its state
+    const filletPanel = document.getElementById('fillet-panel');
+    const isFilletActive = this.activeTool instanceof FilletTool;
+    if (filletPanel) filletPanel.style.display = isFilletActive ? '' : 'none';
+    if (isFilletActive) {
+      const ft = this.activeTool as FilletTool;
+      const rInput = document.getElementById('fillet-r') as HTMLInputElement | null;
+      if (rInput) {
+        const cur = parseInt(rInput.value, 10);
+        if (cur !== ft.getRadius()) rInput.value = String(ft.getRadius());
+      }
+      const statusEl = document.getElementById('fillet-status');
+      if (statusEl) statusEl.textContent = ft.getStatusMessage();
+    }
+
     const sel = state.selection;
     const infoEl = document.getElementById('selection-info');
     if (!infoEl) return;
