@@ -1,7 +1,7 @@
 # StencilDesigner3 Project Guidelines
 
 ## Project Overview
-A browser-based 2D CAD editor for stencil/screen-printing mask design.
+A browser-based 2D CAD editor for screen-printing mask design.
 Static web app (SPA, pure front-end) with DXF I/O. No backend required.
 
 ## Tech Stack
