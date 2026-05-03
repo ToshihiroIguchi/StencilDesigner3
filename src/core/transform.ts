@@ -1,6 +1,6 @@
-import type { AppState, Selection, Polygon } from '../types';
-import { normalizeAll } from '../normalize';
-import { translatePolygon } from './geometry';
+import type { AppState, Selection, Polygon, Point } from '../types';
+import { normalize, normalizeAll } from '../normalize';
+import { polygonBbox, translatePolygon } from './geometry';
 
 /** Find a polygon by ID in state. */
 export function findShape(state: AppState, id: string): Polygon | undefined {
@@ -64,6 +64,31 @@ export function arrayCopyShapes(
   }
 
   return normalizeAll([...shapes, ...copies]);
+}
+
+/**
+ * Resize a polygon to a new bounding box, scaling all points proportionally.
+ * Holes are scaled relative to the same bbox origin.
+ */
+export function resizePolygon(
+  poly: Polygon,
+  newMinX: number,
+  newMinY: number,
+  newW: number,
+  newH: number,
+): Polygon {
+  const bb = polygonBbox(poly);
+  const oldW = bb.maxX - bb.minX;
+  const oldH = bb.maxY - bb.minY;
+  const scalePoint = (p: Point): Point => ({
+    x: oldW === 0 ? newMinX : Math.round(newMinX + (p.x - bb.minX) * newW / oldW),
+    y: oldH === 0 ? newMinY : Math.round(newMinY + (p.y - bb.minY) * newH / oldH),
+  });
+  return normalize({
+    ...poly,
+    outer: poly.outer.map(scalePoint),
+    holes: poly.holes.map((h) => h.map(scalePoint)),
+  });
 }
 
 /** Add a new polygon to the state shapes. */

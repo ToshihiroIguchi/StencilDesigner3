@@ -219,6 +219,21 @@ export class FilletAllCommand implements Command {
   }
 }
 
+// ─── Resize ──────────────────────────────────────────────────────────────────
+
+export class ResizeCommand implements Command {
+  constructor(
+    private readonly before: Polygon,
+    private readonly after: Polygon,
+  ) {}
+  do(state: AppState): AppState {
+    return { ...state, shapes: state.shapes.map((s) => s.id === this.before.id ? this.after : s) };
+  }
+  undo(state: AppState): AppState {
+    return { ...state, shapes: state.shapes.map((s) => s.id === this.after.id ? this.before : s) };
+  }
+}
+
 // ─── Set Tool ────────────────────────────────────────────────────────────────
 
 export class SetSelectionCommand implements Command {

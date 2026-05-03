@@ -143,6 +143,13 @@
     <div class="panel-section">
       <div class="panel-title">Selection</div>
       <div id="selection-info"><p class="muted">No selection</p></div>
+      <!-- Numeric position/size editing — visible when exactly 1 shape is selected -->
+      <div id="shape-props" style="display:none">
+        <div class="props-row"><span class="props-key">X</span><input id="prop-x" type="number" step="1"><span class="props-unit">µm</span></div>
+        <div class="props-row"><span class="props-key">Y</span><input id="prop-y" type="number" step="1"><span class="props-unit">µm</span></div>
+        <div class="props-row"><span class="props-key">W</span><input id="prop-w" type="number" min="1" step="1"><span class="props-unit">µm</span></div>
+        <div class="props-row"><span class="props-key">H</span><input id="prop-h" type="number" min="1" step="1"><span class="props-unit">µm</span></div>
+      </div>
     </div>
     <div class="panel-section">
       <div class="panel-title">DRC</div>

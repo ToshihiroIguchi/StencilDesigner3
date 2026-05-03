@@ -7,11 +7,12 @@ import { RectTool } from '../tools/rect';
 import { CircleTool } from '../tools/circle';
 import { FilletTool } from '../tools/fillet';
 import { findSnapPoint } from '../core/selection';
-import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand } from '../state/commands';
+import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand } from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
 import { importDxf } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
+import { resizePolygon } from '../core/transform';
 
 type AnyTool = SelectTool | RectTool | CircleTool | FilletTool;
 
@@ -152,6 +153,52 @@ export class App {
         this.activeTool.applyToAllCorners(this.history.state);
       }
     });
+
+    // Numeric properties panel
+    const propX = document.getElementById('prop-x') as HTMLInputElement | null;
+    const propY = document.getElementById('prop-y') as HTMLInputElement | null;
+    const propW = document.getElementById('prop-w') as HTMLInputElement | null;
+    const propH = document.getElementById('prop-h') as HTMLInputElement | null;
+
+    const applyPropXY = () => {
+      const state = this.history.state;
+      if (!propX || !propY) return;
+      const ids = new Set(state.selection.map((s) => s.shapeId));
+      const shapes = state.shapes.filter((s) => ids.has(s.id));
+      if (shapes.length !== 1) return;
+      const bb = polygonBbox(shapes[0]);
+      const newX = parseInt(propX.value, 10);
+      const newY = parseInt(propY.value, 10);
+      if (isNaN(newX) || isNaN(newY)) return;
+      const dx = newX - bb.minX;
+      const dy = newY - bb.minY;
+      if (dx === 0 && dy === 0) return;
+      this.history.execute(new MoveCommand(state.selection, dx, dy));
+      markDirty();
+      this.requestRender();
+    };
+
+    const applyPropWH = () => {
+      const state = this.history.state;
+      if (!propW || !propH) return;
+      const ids = new Set(state.selection.map((s) => s.shapeId));
+      const shapes = state.shapes.filter((s) => ids.has(s.id));
+      if (shapes.length !== 1) return;
+      const bb = polygonBbox(shapes[0]);
+      const newW = parseInt(propW.value, 10);
+      const newH = parseInt(propH.value, 10);
+      if (isNaN(newW) || isNaN(newH) || newW < 1 || newH < 1) return;
+      if (newW === bb.maxX - bb.minX && newH === bb.maxY - bb.minY) return;
+      const resized = resizePolygon(shapes[0], bb.minX, bb.minY, newW, newH);
+      this.history.execute(new ResizeCommand(shapes[0], resized));
+      markDirty();
+      this.requestRender();
+    };
+
+    propX?.addEventListener('change', applyPropXY);
+    propY?.addEventListener('change', applyPropXY);
+    propW?.addEventListener('change', applyPropWH);
+    propH?.addEventListener('change', applyPropWH);
 
     // File input
     const fileInput = document.getElementById('dxf-file-input') as HTMLInputElement | null;
@@ -432,10 +479,12 @@ export class App {
 
     const sel = state.selection;
     const infoEl = document.getElementById('selection-info');
+    const propsEl = document.getElementById('shape-props');
     if (!infoEl) return;
 
     if (sel.length === 0) {
       infoEl.innerHTML = '<p class="muted">No selection</p>';
+      if (propsEl) propsEl.style.display = 'none';
       return;
     }
 
@@ -460,6 +509,25 @@ export class App {
     }
 
     infoEl.innerHTML = html;
+
+    // Show numeric inputs for single-shape selection
+    if (propsEl) {
+      if (shapes.length === 1) {
+        propsEl.style.display = '';
+        const bb = polygonBbox(shapes[0]);
+        const px = document.getElementById('prop-x') as HTMLInputElement | null;
+        const py = document.getElementById('prop-y') as HTMLInputElement | null;
+        const pw = document.getElementById('prop-w') as HTMLInputElement | null;
+        const ph = document.getElementById('prop-h') as HTMLInputElement | null;
+        // Don't overwrite inputs that the user is currently editing
+        if (px && document.activeElement !== px) px.value = String(bb.minX);
+        if (py && document.activeElement !== py) py.value = String(bb.minY);
+        if (pw && document.activeElement !== pw) pw.value = String(bb.maxX - bb.minX);
+        if (ph && document.activeElement !== ph) ph.value = String(bb.maxY - bb.minY);
+      } else {
+        propsEl.style.display = 'none';
+      }
+    }
   }
 
   private updateUndoButtons(): void {
