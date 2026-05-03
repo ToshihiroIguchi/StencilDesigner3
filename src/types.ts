@@ -55,8 +55,10 @@ export interface Command {
 
 export interface DrcError {
   shapeId: string;
+  shapeId2?: string;   // second shape for spacing/overlap errors
   message: string;
   severity: 'error' | 'warning';
+  loc?: Point;         // approximate world-coordinate location of the violation
 }
 
 // Viewport transform helpers (read-only view, not stored in state)

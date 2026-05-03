@@ -1,4 +1,4 @@
-import type { AppState, Polygon, Ring, ViewTransform } from '../types';
+import type { AppState, DrcError, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
 import { selectedIds } from '../core/transform';
 
@@ -22,6 +22,8 @@ const COLORS = {
   snapIndicator: '#00ff88',
   draftShape: 'rgba(100,200,100,0.7)',
   draftFill: 'rgba(100,200,100,0.1)',
+  drcError: '#f38ba8',
+  drcErrorFill: 'rgba(243,139,168,0.12)',
 };
 
 const RULER_SIZE = 24; // pixels
@@ -67,6 +69,7 @@ export class CanvasRenderer {
     showAllVertices = false,
     rubberBand?: { start: { x: number; y: number }; end: { x: number; y: number } },
     filletStatuses?: Map<string, FilletVertexStatus>,
+    drcErrors?: DrcError[],
   ): void {
     const ctx = this.ctx;
     const vt: ViewTransform = { zoom: state.zoom, panX: state.panX, panY: state.panY };
@@ -87,8 +90,18 @@ export class CanvasRenderer {
 
     // Shapes
     const selIds = selectedIds(state.selection);
+    const drcErrorIds = new Set(
+      drcErrors?.flatMap((e) => e.shapeId2 ? [e.shapeId, e.shapeId2] : [e.shapeId]) ?? [],
+    );
     for (const shape of state.shapes) {
-      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses);
+      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses, drcErrorIds.has(shape.id));
+    }
+
+    // DRC violation markers
+    if (drcErrors) {
+      for (const e of drcErrors) {
+        if (e.loc) this.drawDrcMarker(e.loc, vt);
+      }
     }
 
     // Draft (preview while drawing)
@@ -155,6 +168,7 @@ export class CanvasRenderer {
     vt: ViewTransform,
     showAllVertices = false,
     filletStatuses?: Map<string, FilletVertexStatus>,
+    drcError = false,
   ): void {
     const ctx = this.ctx;
     const strokeColor = selected ? COLORS.shapeSelected : COLORS.shape;
@@ -183,6 +197,21 @@ export class CanvasRenderer {
       ctx.beginPath();
       this.tracePath(hole, vt);
       ctx.stroke();
+    }
+
+    // DRC error overlay
+    if (drcError) {
+      ctx.save();
+      ctx.strokeStyle = COLORS.drcError;
+      ctx.fillStyle = COLORS.drcErrorFill;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      this.tracePath(poly.outer, vt);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
     }
 
     // Vertices
@@ -268,6 +297,23 @@ export class CanvasRenderer {
     }
 
     ctx.setLineDash([]);
+  }
+
+  private drawDrcMarker(worldPt: Point, vt: ViewTransform): void {
+    const cp = worldToCanvas(worldPt.x, worldPt.y, vt);
+    const ctx = this.ctx;
+    const r = 6;
+    ctx.save();
+    ctx.strokeStyle = COLORS.drcError;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cp.x - r, cp.y - r); ctx.lineTo(cp.x + r, cp.y + r);
+    ctx.moveTo(cp.x + r, cp.y - r); ctx.lineTo(cp.x - r, cp.y + r);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawRubberBand(start: { x: number; y: number }, end: { x: number; y: number }): void {

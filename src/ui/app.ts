@@ -14,6 +14,7 @@ import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
 import { resizePolygon } from '../core/transform';
 import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
+import type { DrcError } from '../types';
 
 type AnyTool = SelectTool | RectTool | CircleTool | FilletTool;
 
@@ -31,6 +32,7 @@ export class App {
   private pendingRender = false;
   private filletRadius = 500;
   private drcConfig: DrcConfig = { ...DEFAULT_DRC_CONFIG };
+  private drcErrors: DrcError[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -90,6 +92,7 @@ export class App {
 
   private doRender(): void {
     const state = this.history.state;
+    this.drcErrors = runDrc(state.shapes, this.drcConfig);
     const rubberBand = this.activeTool instanceof SelectTool
       ? (this.activeTool.getRubberBand() ?? undefined)
       : undefined;
@@ -103,6 +106,7 @@ export class App {
       this.activeTool.showsAllVertices(),
       rubberBand,
       filletStatuses,
+      this.drcErrors,
     );
     this.updateFooter(state);
     this.updateRightPanel(state);
@@ -424,6 +428,13 @@ export class App {
     }
   }
 
+  private panToWorld(wx: number, wy: number): void {
+    const state = this.history.state;
+    state.panX = Math.round(this.canvas.width / 2 - wx * state.zoom);
+    state.panY = Math.round(this.canvas.height / 2 - wy * state.zoom);
+    this.requestRender();
+  }
+
   exportDxf(): void {
     const state = this.history.state;
     downloadDxf(state.shapes);
@@ -491,18 +502,29 @@ export class App {
       if (statusEl) statusEl.textContent = ft.getStatusMessage();
     }
 
-    // DRC results (always runs, independent of selection)
+    // DRC results (already computed in doRender, just display)
     const drcListEl = document.getElementById('drc-list');
     if (drcListEl) {
-      const errors = runDrc(state.shapes, this.drcConfig);
+      const errors = this.drcErrors;
       if (errors.length === 0) {
         drcListEl.innerHTML = '<p class="muted">No errors</p>';
+        drcListEl.onclick = null;
       } else {
-        const lines = errors.map((e) =>
-          `<p class="${e.severity === 'error' ? 'drc-error' : 'drc-warning'}">${e.message}</p>`
-        );
+        const lines = errors.map((e, i) => {
+          const cls = e.severity === 'error' ? 'drc-error' : 'drc-warning';
+          const locAttr = e.loc ? ` data-idx="${i}"` : '';
+          const cursor = e.loc ? ' style="cursor:pointer"' : '';
+          return `<p class="${cls}"${locAttr}${cursor}>${e.message}</p>`;
+        });
         if (errors.length >= 20) lines.push('<p class="muted">… (truncated at 20)</p>');
         drcListEl.innerHTML = lines.join('');
+        drcListEl.onclick = (ev) => {
+          const target = (ev.target as HTMLElement).closest('[data-idx]') as HTMLElement | null;
+          if (!target) return;
+          const idx = parseInt(target.dataset.idx ?? '', 10);
+          const loc = errors[idx]?.loc;
+          if (loc) this.panToWorld(loc.x, loc.y);
+        };
       }
     }
 
