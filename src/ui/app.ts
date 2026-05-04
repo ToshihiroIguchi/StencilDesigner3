@@ -68,6 +68,11 @@ export class App {
       this.filletRadius = prefs.filletRadius;
       const rInput = document.getElementById('fillet-r') as HTMLInputElement | null;
       if (rInput) rInput.value = String(this.filletRadius);
+      this.drcConfig = { minApertureUm: prefs.drcMinApertureUm, minSpacingUm: prefs.drcMinSpacingUm };
+      const aInput = document.getElementById('drc-min-aperture') as HTMLInputElement | null;
+      const sInput = document.getElementById('drc-min-spacing') as HTMLInputElement | null;
+      if (aInput) aInput.value = String(this.drcConfig.minApertureUm);
+      if (sInput) sInput.value = String(this.drcConfig.minSpacingUm);
     } catch {
       // Ignore load errors
     }
@@ -227,11 +232,19 @@ export class App {
     const drcSpacingInput = document.getElementById('drc-min-spacing') as HTMLInputElement | null;
     drcApertureInput?.addEventListener('change', () => {
       const v = parseInt(drcApertureInput.value, 10);
-      if (!isNaN(v) && v > 0) { this.drcConfig = { ...this.drcConfig, minApertureUm: v }; this.requestRender(); }
+      if (!isNaN(v) && v > 0) {
+        this.drcConfig = { ...this.drcConfig, minApertureUm: v };
+        savePrefs({ drcMinApertureUm: v }).catch(() => {});
+        this.requestRender();
+      }
     });
     drcSpacingInput?.addEventListener('change', () => {
       const v = parseInt(drcSpacingInput.value, 10);
-      if (!isNaN(v) && v >= 0) { this.drcConfig = { ...this.drcConfig, minSpacingUm: v }; this.requestRender(); }
+      if (!isNaN(v) && v >= 0) {
+        this.drcConfig = { ...this.drcConfig, minSpacingUm: v };
+        savePrefs({ drcMinSpacingUm: v }).catch(() => {});
+        this.requestRender();
+      }
     });
 
     // File input

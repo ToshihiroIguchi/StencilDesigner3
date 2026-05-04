@@ -7,8 +7,8 @@ export interface DrcConfig {
 }
 
 export const DEFAULT_DRC_CONFIG: DrcConfig = {
-  minApertureUm: 200,
-  minSpacingUm: 150,
+  minApertureUm: 30,
+  minSpacingUm: 30,
 };
 
 type Bbox = ReturnType<typeof polygonBbox>;

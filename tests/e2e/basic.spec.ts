@@ -1060,6 +1060,137 @@ test.describe('22. Polygon tool', () => {
     });
     expect(outerLen).toBe(5);
   });
+
+  test('22-10 footer shows vertex count while drawing', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    await expect(page.locator('#footer-w')).toHaveText('3 pts');
+  });
+
+  test('22-11 footer shows Enter/close hint while drawing', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await expect(page.locator('#footer-h')).toContainText('Enter');
+  });
+
+  test('22-12 draft.willClose true when hovering near first vertex', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    // Hover over the first vertex position
+    await page.mouse.move(box.x + 300, box.y + 150);
+    const willClose = await page.evaluate(() => {
+      const tool = (window as any).__app?.activeTool;
+      return tool?.getDraft?.()?.willClose ?? false;
+    });
+    expect(willClose).toBe(true);
+  });
+
+  test('22-13 clicking near first vertex commits polygon', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    // Move then click on first vertex to trigger willClose commit
+    await page.mouse.move(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+  });
+
+  test('22-14 double-click commits polygon', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    // A rectangle-like shape via 3 clicks + dblclick
+    await page.mouse.click(box.x + 350, box.y + 150); // world(600,200)
+    await page.mouse.click(box.x + 550, box.y + 150); // world(1000,200)
+    await page.mouse.click(box.x + 550, box.y + 350); // world(1000,600)
+    // dblclick adds 4th vertex then commits
+    await page.mouse.dblclick(box.x + 350, box.y + 350);    // world(600,600)
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+    const outerLen = await page.evaluate(() => {
+      const s = (window as any).__app?.history?.state?.shapes?.[0];
+      return s?.outer?.length ?? -1;
+    });
+    expect(outerLen).toBe(4);
+  });
+
+  test('22-15 self-intersecting polygon is rejected on commit', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    // Bowtie: A(350,150) B(450,350) C(450,150) D(350,350) — A-B crosses C-D
+    await page.mouse.click(box.x + 350, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 450, box.y + 150);
+    await page.mouse.click(box.x + 350, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(0);
+  });
+
+  test('22-16 Shift constrains angle to 15-degree multiples', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    // First vertex at world(600,400)
+    await page.mouse.click(box.x + 350, box.y + 250);
+    // With Shift, move to canvas(650,350): grid-snapped world=(1200,600)
+    // angle from (600,400) to (1200,600) ≈ 18.4° → snaps to 15°
+    // hover y should be ≠ 600 (angle-adjusted)
+    await page.keyboard.down('Shift');
+    await page.mouse.move(box.x + 650, box.y + 350);
+    const hoverY = await page.evaluate(() => {
+      const tool = (window as any).__app?.activeTool;
+      const pts = tool?.getDraft?.()?.points;
+      return pts && pts.length > 0 ? pts[pts.length - 1].y : null;
+    });
+    await page.keyboard.up('Shift');
+    expect(hoverY).not.toBeNull();
+    expect(hoverY).not.toBe(600); // angle snap changed it from grid-snapped 600
+  });
+
+  test('22-17 polygon can be selected after creation', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+    // Switch to select and click inside the triangle
+    await page.click('[data-tool="select"]');
+    await page.mouse.click(box.x + 300, box.y + 283);
+    await page.waitForTimeout(50);
+    expect(await selectedCount(page)).toBeGreaterThan(0);
+  });
+
+  test('22-18 can draw multiple polygons sequentially', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    // First triangle
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+    // Second triangle — tool should still be active
+    await page.mouse.click(box.x + 600, box.y + 150);
+    await page.mouse.click(box.x + 750, box.y + 350);
+    await page.mouse.click(box.x + 500, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(2);
+  });
 });
 
 // ── 21. No console errors (baseline) ──────────────────────────────────────
