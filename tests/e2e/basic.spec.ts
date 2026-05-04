@@ -843,10 +843,99 @@ test.describe('19. Autosave and restore', () => {
   });
 });
 
-// ── 20. No console errors (baseline) ──────────────────────────────────────
+// ── 20. Fit-to-content / zoom reset / auto-grid ────────────────────────────
 
-test.describe('20. Console error check', () => {
-  test('20-1 no JS errors on load', async ({ page }) => {
+test.describe('20. Fit to content and zoom reset', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(() => (window as any).__app?.hardReset?.().catch(() => {}));
+    await page.waitForTimeout(200);
+  });
+
+  test('20-1 Fit button exists and is visible', async ({ page }) => {
+    await expect(page.locator('#btn-fit')).toBeVisible();
+  });
+
+  test('20-2 Fit button centers shapes (zoom changes)', async ({ page }) => {
+    const box = await canvasBox(page);
+    // Draw a shape far from center so fit changes the zoom/pan
+    await drawRect(page, box.x + 50, box.y + 50, box.x + 100, box.y + 100);
+
+    const zoomBefore = await page.locator('#footer-zoom').textContent();
+    await page.click('#btn-fit');
+    await page.waitForTimeout(100);
+    const zoomAfter = await page.locator('#footer-zoom').textContent();
+    // Zoom should have changed to fit the content
+    expect(zoomAfter).not.toBe('');
+    // Zoom value should be a valid percentage
+    expect(parseInt(zoomAfter ?? '0', 10)).toBeGreaterThan(0);
+    // Before and after should differ because fit zooms in to small shape
+    expect(zoomBefore).not.toBe(zoomAfter);
+  });
+
+  test('20-3 Home key triggers fit-to-content', async ({ page }) => {
+    const box = await canvasBox(page);
+    await drawRect(page, box.x + 50, box.y + 50, box.x + 80, box.y + 80);
+
+    const zoomBefore = await page.locator('#footer-zoom').textContent();
+    await page.keyboard.press('Home');
+    await page.waitForTimeout(100);
+    const zoomAfter = await page.locator('#footer-zoom').textContent();
+    expect(zoomBefore).not.toBe(zoomAfter);
+  });
+
+  test('20-4 Fit with no shapes resets to 50%', async ({ page }) => {
+    // No shapes — fit should reset to default
+    await page.click('#btn-fit');
+    await page.waitForTimeout(100);
+    const zoom = await page.locator('#footer-zoom').textContent();
+    expect(zoom).toMatch(/50%/);
+  });
+
+  test('20-5 clicking zoom display resets to 100%', async ({ page }) => {
+    const box = await canvasBox(page);
+    // Zoom in first
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    for (let i = 0; i < 5; i++) {
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(20);
+    }
+    const zoomBefore = await page.locator('#footer-zoom').textContent();
+    expect(parseInt(zoomBefore ?? '0', 10)).toBeGreaterThan(50);
+
+    // Click zoom display to reset
+    await page.click('#footer-zoom');
+    await page.waitForTimeout(100);
+    const zoomAfter = await page.locator('#footer-zoom').textContent();
+    expect(zoomAfter).toMatch(/100%/);
+  });
+
+  test('20-6 auto-grid changes with zoom level', async ({ page }) => {
+    const box = await canvasBox(page);
+    const gridBefore = await page.locator('#footer-grid').textContent();
+
+    // Zoom in significantly
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    for (let i = 0; i < 8; i++) {
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(20);
+    }
+    await page.waitForTimeout(100);
+    const gridAfter = await page.locator('#footer-grid').textContent();
+    expect(gridBefore).not.toBe(gridAfter);
+  });
+
+  test('20-7 footer-grid shows µm unit', async ({ page }) => {
+    const grid = await page.locator('#footer-grid').textContent();
+    expect(grid).toMatch(/µm/);
+  });
+});
+
+// ── 21. No console errors (baseline) ──────────────────────────────────────
+
+test.describe('21. Console error check', () => {
+  test('21-1 no JS errors on load', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/');
@@ -855,7 +944,7 @@ test.describe('20. Console error check', () => {
     expect(errors).toHaveLength(0);
   });
 
-  test('20-2 Clipper is available without CDN', async ({ page }) => {
+  test('21-2 Clipper is available without CDN', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     const clipperAvailable = await page.evaluate(() => {
@@ -870,7 +959,7 @@ test.describe('20. Console error check', () => {
     expect(clipperAvailable).toBe(true);
   });
 
-  test('20-3 no NaN in coordinates after draw', async ({ page }) => {
+  test('21-3 no NaN in coordinates after draw', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     const box = await canvasBox(page);
