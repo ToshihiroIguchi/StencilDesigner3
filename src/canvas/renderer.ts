@@ -29,8 +29,9 @@ const COLORS = {
 const RULER_SIZE = 24; // pixels
 
 export interface DraftShape {
-  type: 'rect' | 'circle' | 'fillet-preview';
+  type: 'rect' | 'circle' | 'fillet-preview' | 'polygon';
   points: { x: number; y: number }[]; // world coordinates
+  selfIntersects?: boolean; // polygon only: highlight invalid state
 }
 
 export type FilletVertexStatus = 'ok' | 'skip' | 'bad' | 'hover';
@@ -294,6 +295,46 @@ export class CanvasRenderer {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+    } else if (draft.type === 'polygon' && pts.length >= 1) {
+      const invalid = draft.selfIntersects === true;
+      const strokeColor = invalid ? COLORS.drcError : COLORS.draftShape;
+      const fillColor = invalid ? 'rgba(243,139,168,0.1)' : COLORS.draftFill;
+      ctx.strokeStyle = strokeColor;
+      ctx.fillStyle = fillColor;
+
+      // Draw committed edges as solid lines
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      const fp = worldToCanvas(pts[0].x, pts[0].y, vt);
+      ctx.moveTo(fp.x, fp.y);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const cp = worldToCanvas(pts[i].x, pts[i].y, vt);
+        ctx.lineTo(cp.x, cp.y);
+      }
+      ctx.stroke();
+
+      // Draw pending edge (last committed → hover) as dashed line
+      if (pts.length >= 2) {
+        ctx.setLineDash([4, 4]);
+        const prev = worldToCanvas(pts[pts.length - 2].x, pts[pts.length - 2].y, vt);
+        const cur  = worldToCanvas(pts[pts.length - 1].x, pts[pts.length - 1].y, vt);
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(cur.x, cur.y);
+        ctx.stroke();
+      }
+
+      // Draw vertex dots for committed vertices (all but the trailing hover point)
+      ctx.setLineDash([]);
+      ctx.fillStyle = strokeColor;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const cp = worldToCanvas(pts[i].x, pts[i].y, vt);
+        const isFirst = i === 0;
+        const r = isFirst ? 5 : 3;
+        ctx.beginPath();
+        ctx.arc(cp.x, cp.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     ctx.setLineDash([]);

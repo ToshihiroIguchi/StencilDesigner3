@@ -932,6 +932,136 @@ test.describe('20. Fit to content and zoom reset', () => {
   });
 });
 
+// ── 22. Polygon tool ───────────────────────────────────────────────────────
+
+test.describe('22. Polygon tool', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(() => (window as any).__app?.hardReset?.().catch(() => {}));
+    await page.waitForTimeout(200);
+  });
+
+  test('22-1 Polygon button exists and activates', async ({ page }) => {
+    await expect(page.locator('[data-tool="polygon"]')).toBeVisible();
+    await page.click('[data-tool="polygon"]');
+    await expect(page.locator('[data-tool="polygon"]')).toHaveClass(/active/);
+  });
+
+  test('22-2 keyboard shortcut P activates Polygon tool', async ({ page }) => {
+    await page.keyboard.press('p');
+    await expect(page.locator('[data-tool="polygon"]')).toHaveClass(/active/);
+  });
+
+  test('22-3 triangle via 3 clicks + Enter creates one shape', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    // Click 3 vertices
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+  });
+
+  test('22-4 polygon has integer coordinates only', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+
+    const allIntegers = await page.evaluate(() => {
+      const shapes = (window as any).__app?.history?.state?.shapes;
+      if (!shapes || shapes.length === 0) return false;
+      return shapes[0].outer.every((p: any) => Number.isInteger(p.x) && Number.isInteger(p.y));
+    });
+    expect(allIntegers).toBe(true);
+  });
+
+  test('22-5 Escape cancels drawing', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(0);
+  });
+
+  test('22-6 Backspace removes last vertex (Enter after pop still works)', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    // Click 4 vertices, then Backspace to remove last, then Enter to commit triangle
+    await page.mouse.click(box.x + 300, box.y + 100);
+    await page.mouse.click(box.x + 500, box.y + 350);
+    await page.mouse.click(box.x + 200, box.y + 400);
+    await page.mouse.click(box.x + 100, box.y + 200); // extra vertex
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+    // Should have 3-vertex outer ring (the extra vertex was removed)
+    const outerLen = await page.evaluate(() => {
+      const s = (window as any).__app?.history?.state?.shapes?.[0];
+      return s?.outer?.length ?? -1;
+    });
+    expect(outerLen).toBe(3);
+  });
+
+  test('22-7 undo removes polygon', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(0);
+  });
+
+  test('22-8 polygon has no holes', async ({ page }) => {
+    const box = await canvasBox(page);
+    await page.click('[data-tool="polygon"]');
+    await page.mouse.click(box.x + 300, box.y + 150);
+    await page.mouse.click(box.x + 450, box.y + 350);
+    await page.mouse.click(box.x + 150, box.y + 350);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    const holes = await page.evaluate(() => {
+      const s = (window as any).__app?.history?.state?.shapes?.[0];
+      return s?.holes?.length ?? -1;
+    });
+    expect(holes).toBe(0);
+  });
+
+  test('22-9 pentagon via 5 clicks + Enter', async ({ page }) => {
+    const box = await canvasBox(page);
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const r = 100;
+    await page.click('[data-tool="polygon"]');
+    for (let i = 0; i < 5; i++) {
+      const angle = (2 * Math.PI * i) / 5 - Math.PI / 2;
+      await page.mouse.click(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+    }
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    expect(await shapeCount(page)).toBe(1);
+    const outerLen = await page.evaluate(() => {
+      const s = (window as any).__app?.history?.state?.shapes?.[0];
+      return s?.outer?.length ?? -1;
+    });
+    expect(outerLen).toBe(5);
+  });
+});
+
 // ── 21. No console errors (baseline) ──────────────────────────────────────
 
 test.describe('21. Console error check', () => {

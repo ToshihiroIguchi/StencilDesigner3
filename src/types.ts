@@ -19,6 +19,7 @@ export type ToolType =
   | 'select'
   | 'rect'
   | 'circle'
+  | 'polygon'
   | 'text'
   | 'move'
   | 'copy'

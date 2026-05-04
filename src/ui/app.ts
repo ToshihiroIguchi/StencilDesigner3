@@ -6,6 +6,7 @@ import { SelectTool } from '../tools/select';
 import { RectTool } from '../tools/rect';
 import { CircleTool } from '../tools/circle';
 import { FilletTool } from '../tools/fillet';
+import { PolygonTool } from '../tools/polygon';
 import { findSnapPoint } from '../core/selection';
 import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand } from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
@@ -16,7 +17,7 @@ import { resizePolygon } from '../core/transform';
 import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -131,6 +132,7 @@ export class App {
     this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
     this.canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.canvas.addEventListener('dblclick', (e) => this.onDblClick(e));
 
     document.addEventListener('keydown', (e) => this.onKeyDown(e));
 
@@ -296,6 +298,13 @@ export class App {
     this.activeTool.onMouseUp(worldPt, canvasPt, e.shiftKey, this.history.state);
   }
 
+  private onDblClick(_e: MouseEvent): void {
+    if (!(this.activeTool instanceof PolygonTool)) return;
+    // Double-click fires mousedown twice before dblclick; the second mousedown already
+    // added a duplicate vertex — remove it, then commit with what we have.
+    (this.activeTool as PolygonTool).commitFromDblClick(this.history.state);
+  }
+
   private setZoom(newZoom: number, anchorCanvasX?: number, anchorCanvasY?: number): void {
     const state = this.history.state;
     const z = Math.max(0.01, Math.min(50, newZoom));
@@ -330,11 +339,17 @@ export class App {
       if (e.key === 'v' || e.key === 'V') { this.setTool('select'); return; }
       if (e.key === 'r' || e.key === 'R') { this.setTool('rect'); return; }
       if (e.key === 'c' || e.key === 'C') { this.setTool('circle'); return; }
+      if (e.key === 'p' || e.key === 'P') { this.setTool('polygon'); return; }
       if (e.key === 'f' || e.key === 'F') { this.setTool('fillet'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (!inInput) this.deleteSelected();
+      // PolygonTool in progress consumes Backspace to pop the last vertex
+      if (!inInput && this.activeTool instanceof PolygonTool && this.activeTool.isDrawing()) {
+        // handled by onKeyDown below
+      } else if (!inInput) {
+        this.deleteSelected();
+      }
     }
     if (e.key === 'Escape') this.activeTool.cancel();
     this.activeTool.onKeyDown(e.key, this.history.state);
@@ -356,6 +371,7 @@ export class App {
       case 'select': case 'move': this.activeTool = new SelectTool(toolCtx); break;
       case 'rect': this.activeTool = new RectTool(toolCtx); break;
       case 'circle': this.activeTool = new CircleTool(toolCtx); break;
+      case 'polygon': this.activeTool = new PolygonTool(toolCtx); break;
       case 'fillet': this.activeTool = new FilletTool(toolCtx, this.filletRadius); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
