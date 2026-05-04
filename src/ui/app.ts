@@ -537,24 +537,33 @@ export class App {
   }
 
   private updateFooter(state: AppState): void {
-    const sel = state.selection;
-    let w = 0, h = 0, a = 0;
-    if (sel.length > 0) {
-      const ids = new Set(sel.map((s) => s.shapeId));
-      for (const shape of state.shapes) {
-        if (!ids.has(shape.id)) continue;
-        const bb = polygonBbox(shape);
-        w = Math.max(w, bb.maxX - bb.minX);
-        h = Math.max(h, bb.maxY - bb.minY);
-        a += polygonArea(shape);
-      }
-    }
-
     const el = (id: string) => document.getElementById(id);
     const f = (v: number) => v.toLocaleString();
-    if (el('footer-w')) el('footer-w')!.textContent = f(w);
-    if (el('footer-h')) el('footer-h')!.textContent = f(h);
-    if (el('footer-area')) el('footer-area')!.textContent = f(Math.round(a));
+
+    // While polygon tool is drawing, show hints in the W/H/Area slots
+    if (this.activeTool instanceof PolygonTool && this.activeTool.isDrawing()) {
+      const n = (this.activeTool as PolygonTool).vertexCount();
+      if (el('footer-w')) el('footer-w')!.textContent = `${n} pts`;
+      if (el('footer-h')) el('footer-h')!.textContent = 'Enter/click①';
+      if (el('footer-area')) el('footer-area')!.textContent = '⌫ undo  Esc cancel';
+    } else {
+      const sel = state.selection;
+      let w = 0, h = 0, a = 0;
+      if (sel.length > 0) {
+        const ids = new Set(sel.map((s) => s.shapeId));
+        for (const shape of state.shapes) {
+          if (!ids.has(shape.id)) continue;
+          const bb = polygonBbox(shape);
+          w = Math.max(w, bb.maxX - bb.minX);
+          h = Math.max(h, bb.maxY - bb.minY);
+          a += polygonArea(shape);
+        }
+      }
+      if (el('footer-w')) el('footer-w')!.textContent = f(w);
+      if (el('footer-h')) el('footer-h')!.textContent = f(h);
+      if (el('footer-area')) el('footer-area')!.textContent = f(Math.round(a));
+    }
+
     if (el('footer-grid')) el('footer-grid')!.textContent = `${state.gridSize}µm`;
     if (el('footer-snap')) el('footer-snap')!.textContent = state.snapEnabled ? 'ON' : 'OFF';
     if (el('footer-zoom')) el('footer-zoom')!.textContent = `${(state.zoom * 100).toFixed(0)}%`;

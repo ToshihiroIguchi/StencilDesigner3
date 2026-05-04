@@ -21,6 +21,7 @@ export class PolygonTool extends BaseTool {
   showsAllVertices(): boolean { return false; }
 
   isDrawing(): boolean { return this.vertices.length > 0; }
+  vertexCount(): number { return this.vertices.length; }
 
   onMouseDown(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void {
     const snapped = this.ctx.getSnapPoint(worldPt);
@@ -140,6 +141,7 @@ export class PolygonTool extends BaseTool {
       type: 'polygon',
       points: pts,
       selfIntersects: this.hasSelfIntersect,
+      willClose: this.willClose,
     };
     this.snapPoint = this.hoverPt;
     this.ctx.requestRender();

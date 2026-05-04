@@ -32,6 +32,7 @@ export interface DraftShape {
   type: 'rect' | 'circle' | 'fillet-preview' | 'polygon';
   points: { x: number; y: number }[]; // world coordinates
   selfIntersects?: boolean; // polygon only: highlight invalid state
+  willClose?: boolean;     // polygon only: hover near first vertex
 }
 
 export type FilletVertexStatus = 'ok' | 'skip' | 'bad' | 'hover';
@@ -326,14 +327,24 @@ export class CanvasRenderer {
 
       // Draw vertex dots for committed vertices (all but the trailing hover point)
       ctx.setLineDash([]);
-      ctx.fillStyle = strokeColor;
       for (let i = 0; i < pts.length - 1; i++) {
         const cp = worldToCanvas(pts[i].x, pts[i].y, vt);
         const isFirst = i === 0;
-        const r = isFirst ? 5 : 3;
+        const closing = isFirst && draft.willClose === true;
+        ctx.fillStyle = closing ? '#ffffff' : strokeColor;
+        const r = (isFirst || closing) ? 5 : 3;
         ctx.beginPath();
         ctx.arc(cp.x, cp.y, r, 0, Math.PI * 2);
         ctx.fill();
+        // White ring around first vertex when close-snap is active
+        if (closing) {
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(cp.x, cp.y, 8, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = strokeColor;
+        }
       }
     }
 
