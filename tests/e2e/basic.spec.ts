@@ -293,51 +293,6 @@ test.describe('5. Rectangle tool', () => {
   });
 });
 
-// ── 6. Line tool ───────────────────────────────────────────────────────────
-
-test.describe('6. Line tool', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-  });
-
-  test('6-1 Line button highlights', async ({ page }) => {
-    await page.click('[data-tool="line"]');
-    await expect(page.locator('[data-tool="line"]')).toHaveClass(/active/);
-  });
-
-  test('6-2 drawing a line adds one shape', async ({ page }) => {
-    const box = await canvasBox(page);
-    await page.click('[data-tool="line"]');
-    await page.mouse.move(box.x + 100, box.y + 150);
-    await page.mouse.down();
-    await page.mouse.move(box.x + 400, box.y + 150);
-    await page.mouse.up();
-    expect(await shapeCount(page)).toBe(1);
-  });
-
-  test('6-3 Shift constrains to horizontal', async ({ page }) => {
-    const box = await canvasBox(page);
-    await page.click('[data-tool="line"]');
-    await page.keyboard.down('Shift');
-    await page.mouse.move(box.x + 100, box.y + 150);
-    await page.mouse.down();
-    await page.mouse.move(box.x + 400, box.y + 200); // diagonal input
-    await page.mouse.up();
-    await page.keyboard.up('Shift');
-
-    const isHorizontal = await page.evaluate(() => {
-      const shapes = (window as any).__app?.history?.state?.shapes;
-      if (!shapes || shapes.length === 0) return false;
-      const s = shapes[shapes.length - 1];
-      const ys = s.outer.map((p: any) => p.y);
-      const minY = Math.min(...ys), maxY = Math.max(...ys);
-      return (maxY - minY) <= 200; // 100µm half-width means max span = 200µm
-    });
-    expect(isHorizontal).toBe(true);
-  });
-});
-
 // ── 7. Circle tool ─────────────────────────────────────────────────────────
 
 test.describe('7. Circle tool', () => {

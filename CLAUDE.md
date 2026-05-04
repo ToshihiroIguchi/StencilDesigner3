@@ -55,7 +55,6 @@ src/
     base.ts         — BaseTool abstract class
     select.ts       — Selection and move via drag
     rect.ts         — Rectangle drawing
-    line.ts         — Line drawing (as thin rectangle)
     circle.ts       — Circle drawing (N-gon approximation)
   dxf/
     importer.ts     — DXF text → Polygon[] pipeline

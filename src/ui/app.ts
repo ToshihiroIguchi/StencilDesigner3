@@ -18,6 +18,17 @@ import type { DrcError } from '../types';
 
 type AnyTool = SelectTool | RectTool | CircleTool | FilletTool;
 
+function computeNiceGridSize(zoom: number): number {
+  const targetPx = 60;
+  const exp = Math.floor(Math.log10(targetPx / zoom));
+  const base = Math.pow(10, exp);
+  for (const n of [1, 2, 5, 10]) {
+    const s = n * base;
+    if (s * zoom >= targetPx) return Math.max(1, Math.round(s));
+  }
+  return Math.max(1, Math.round(10 * base));
+}
+
 export class App {
   private history: History;
   private renderer: CanvasRenderer;
@@ -52,6 +63,7 @@ export class App {
     try {
       const [saved, prefs] = await Promise.all([loadState(), loadPrefs()]);
       if (saved) this.history.loadState(saved);
+      this.history.state.gridSize = computeNiceGridSize(this.history.state.zoom);
       this.filletRadius = prefs.filletRadius;
       const rInput = document.getElementById('fillet-r') as HTMLInputElement | null;
       if (rInput) rInput.value = String(this.filletRadius);
@@ -142,6 +154,8 @@ export class App {
     document.getElementById('btn-clear')?.addEventListener('click', () => this.hardReset());
     document.getElementById('btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
+    document.getElementById('btn-fit')?.addEventListener('click', () => this.fitToContent());
+    document.getElementById('footer-zoom')?.addEventListener('click', () => this.resetZoom());
 
     // Fillet panel
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
@@ -282,21 +296,25 @@ export class App {
     this.activeTool.onMouseUp(worldPt, canvasPt, e.shiftKey, this.history.state);
   }
 
+  private setZoom(newZoom: number, anchorCanvasX?: number, anchorCanvasY?: number): void {
+    const state = this.history.state;
+    const z = Math.max(0.01, Math.min(50, newZoom));
+    if (anchorCanvasX !== undefined && anchorCanvasY !== undefined) {
+      state.panX = anchorCanvasX - (anchorCanvasX - state.panX) * (z / state.zoom);
+      state.panY = anchorCanvasY - (anchorCanvasY - state.panY) * (z / state.zoom);
+    }
+    state.zoom = z;
+    state.gridSize = computeNiceGridSize(z);
+  }
+
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
     const state = this.history.state;
     const rect = this.canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const newZoom = Math.max(0.01, Math.min(50, state.zoom * factor));
-
-    // Zoom around cursor position
-    state.panX = mx - (mx - state.panX) * (newZoom / state.zoom);
-    state.panY = my - (my - state.panY) * (newZoom / state.zoom);
-    state.zoom = newZoom;
-
+    this.setZoom(state.zoom * factor, mx, my);
     this.requestRender();
   }
 
@@ -313,6 +331,7 @@ export class App {
       if (e.key === 'r' || e.key === 'R') { this.setTool('rect'); return; }
       if (e.key === 'c' || e.key === 'C') { this.setTool('circle'); return; }
       if (e.key === 'f' || e.key === 'F') { this.setTool('fillet'); return; }
+      if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (!inInput) this.deleteSelected();
@@ -432,6 +451,45 @@ export class App {
     const state = this.history.state;
     state.panX = Math.round(this.canvas.width / 2 - wx * state.zoom);
     state.panY = Math.round(this.canvas.height / 2 - wy * state.zoom);
+    this.requestRender();
+  }
+
+  fitToContent(): void {
+    const state = this.history.state;
+    const RULER = 24;
+    const viewW = this.canvas.width - RULER;
+    const viewH = this.canvas.height - RULER;
+
+    if (state.shapes.length === 0) {
+      this.setZoom(0.5);
+      state.panX = Math.round(RULER + viewW / 2);
+      state.panY = Math.round(RULER + viewH / 2);
+      this.requestRender();
+      return;
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const s of state.shapes) {
+      const bb = polygonBbox(s);
+      if (bb.minX < minX) minX = bb.minX;
+      if (bb.minY < minY) minY = bb.minY;
+      if (bb.maxX > maxX) maxX = bb.maxX;
+      if (bb.maxY > maxY) maxY = bb.maxY;
+    }
+
+    const contentW = maxX - minX || 1;
+    const contentH = maxY - minY || 1;
+    const z = Math.min(viewW / (contentW * 1.2), viewH / (contentH * 1.2), 50);
+    this.setZoom(z);
+    state.panX = Math.round(RULER + viewW / 2 - ((minX + maxX) / 2) * z);
+    state.panY = Math.round(RULER + viewH / 2 - ((minY + maxY) / 2) * z);
+    this.requestRender();
+  }
+
+  private resetZoom(): void {
+    const cx = this.canvas.width / 2;
+    const cy = this.canvas.height / 2;
+    this.setZoom(1, cx, cy);
     this.requestRender();
   }
 

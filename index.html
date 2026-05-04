@@ -37,6 +37,14 @@
 
   <div class="separator"></div>
 
+  <!-- View controls -->
+  <button id="btn-fit" class="hdr-btn" title="Fit all shapes in view (Home)">
+    <svg class="icon" viewBox="0 0 24 24"><path d="M3 3h7v2H5v5H3zm11 0h7v7h-2V5h-5zm7 11v7h-7v-2h5v-5zM3 21v-7h2v5h5v2z"/></svg>
+    Fit
+  </button>
+
+  <div class="separator"></div>
+
   <!-- Snap / Theme / Clear -->
   <button id="btn-snap" class="hdr-btn active" title="Toggle snap">
     <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -184,7 +192,7 @@
   <span class="footer-item"><span class="footer-key">Area:</span><span class="footer-val" id="footer-area">—</span></span>
   <span class="footer-item"><span class="footer-key">Grid:</span><span class="footer-val" id="footer-grid">1000µm</span></span>
   <span class="footer-item"><span class="footer-key">Snap:</span><span class="footer-val" id="footer-snap">ON</span></span>
-  <span class="footer-item"><span class="footer-key">Zoom:</span><span class="footer-val" id="footer-zoom">50%</span></span>
+  <span class="footer-item"><span class="footer-key">Zoom:</span><span class="footer-val" id="footer-zoom" title="Click to reset zoom to 100%" style="cursor:pointer">50%</span></span>
 </footer>
 
 <script type="module" src="/src/main.ts"></script>
