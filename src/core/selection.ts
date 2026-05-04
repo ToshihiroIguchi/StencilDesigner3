@@ -89,14 +89,12 @@ export function findSnapPoint(
     }
   }
 
-  // Grid snap (only if nothing better found)
+  // Grid snap: always round to nearest grid when no vertex/midpoint is closer
   if (bestDist === snapRadius) {
-    const gx = Math.round(worldPt.x / gridSize) * gridSize;
-    const gy = Math.round(worldPt.y / gridSize) * gridSize;
-    const gridPt = { x: gx, y: gy };
-    if (dist(worldPt, gridPt) < snapRadius) {
-      best = gridPt;
-    }
+    best = {
+      x: Math.round(worldPt.x / gridSize) * gridSize,
+      y: Math.round(worldPt.y / gridSize) * gridSize,
+    };
   }
 
   return best;
