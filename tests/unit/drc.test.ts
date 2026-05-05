@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Polygon } from '../../src/types';
-import { runDrc, DEFAULT_DRC_CONFIG } from '../../src/core/drc';
+import { runDrc } from '../../src/core/drc';
 
 function rect(x1: number, y1: number, x2: number, y2: number, id = 'r'): Polygon {
   return {
@@ -25,7 +25,8 @@ function lShape(id = 'l'): Polygon {
   };
 }
 
-const cfg = DEFAULT_DRC_CONFIG; // minApertureUm=200, minSpacingUm=150
+// Explicit thresholds so tests are independent of DEFAULT_DRC_CONFIG changes
+const cfg = { minApertureUm: 200, minSpacingUm: 150 };
 
 describe('DRC aperture check', () => {
   it('passes for a rectangle larger than min aperture', () => {
