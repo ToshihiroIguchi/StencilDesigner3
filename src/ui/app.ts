@@ -1,4 +1,4 @@
-import type { AppState, Point, ToolType } from '../types';
+import type { AppState, Point, Selection, ToolType } from '../types';
 import { createDefaultState, canvasToWorld } from '../types';
 import { History } from '../state/history';
 import { CanvasRenderer } from '../canvas/renderer';
@@ -7,7 +7,7 @@ import { RectTool } from '../tools/rect';
 import { CircleTool } from '../tools/circle';
 import { FilletTool } from '../tools/fillet';
 import { PolygonTool } from '../tools/polygon';
-import { findSnapPoint } from '../core/selection';
+import { findSnapPoint, hitTest } from '../core/selection';
 import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand } from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
 import { importDxf } from '../dxf/importer';
@@ -45,6 +45,8 @@ export class App {
   private filletRadius = 500;
   private drcConfig: DrcConfig = { ...DEFAULT_DRC_CONFIG };
   private drcErrors: DrcError[] = [];
+  private diffStep: 0 | 1 | 2 = 0;
+  private diffBaseId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -125,6 +127,7 @@ export class App {
       rubberBand,
       filletStatuses,
       this.drcErrors,
+      this.diffStep === 2 ? (this.diffBaseId ?? undefined) : undefined,
     );
     this.updateFooter(state);
     this.updateRightPanel(state);
@@ -274,6 +277,7 @@ export class App {
     }
 
     const { canvasPt, worldPt } = this.getCanvasPt(e);
+    if (this.diffStep > 0) { this.handleDiffClick(canvasPt); return; }
     this.activeTool.onMouseDown(worldPt, canvasPt, e.shiftKey, this.history.state);
   }
 
@@ -290,7 +294,7 @@ export class App {
     }
 
     const { canvasPt, worldPt } = this.getCanvasPt(e);
-    this.activeTool.onMouseMove(worldPt, canvasPt, e.shiftKey, this.history.state);
+    if (this.diffStep === 0) this.activeTool.onMouseMove(worldPt, canvasPt, e.shiftKey, this.history.state);
 
     // Update cursor position in footer
     const cursorX = document.getElementById('footer-cx');
@@ -308,7 +312,7 @@ export class App {
     }
 
     const { canvasPt, worldPt } = this.getCanvasPt(e);
-    this.activeTool.onMouseUp(worldPt, canvasPt, e.shiftKey, this.history.state);
+    if (this.diffStep === 0) this.activeTool.onMouseUp(worldPt, canvasPt, e.shiftKey, this.history.state);
   }
 
   private onDblClick(_e: MouseEvent): void {
@@ -364,11 +368,12 @@ export class App {
         this.deleteSelected();
       }
     }
-    if (e.key === 'Escape') this.activeTool.cancel();
+    if (e.key === 'Escape') { this.cancelDiffMode(); this.activeTool.cancel(); }
     this.activeTool.onKeyDown(e.key, this.history.state);
   }
 
   setTool(tool: ToolType): void {
+    this.cancelDiffMode();
     this.activeTool.cancel();
     const toolCtx = {
       history: this.history,
@@ -425,12 +430,44 @@ export class App {
   }
 
   doDifference(): void {
-    const state = this.history.state;
-    const sel = state.selection;
-    if (sel.length !== 2) { alert('Select exactly 2 shapes for Difference (first = subject, second = cutter)'); return; }
-    this.history.execute(new DifferenceCommand(sel[0], sel[1]));
-    markDirty();
+    this.cancelDiffMode();
+    this.diffStep = 1;
+    this.history.state.selection = [];
+    this.canvas.style.cursor = 'crosshair';
+    document.getElementById('btn-difference')?.classList.add('active');
     this.requestRender();
+  }
+
+  private cancelDiffMode(): void {
+    if (this.diffStep === 0) return;
+    this.diffStep = 0;
+    this.diffBaseId = null;
+    this.canvas.style.cursor = '';
+    document.getElementById('btn-difference')?.classList.remove('active');
+    this.requestRender();
+  }
+
+  private handleDiffClick(canvasPt: Point): void {
+    const state = this.history.state;
+    const hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
+    if (!hit || hit.type !== 'polygon') return;
+
+    if (this.diffStep === 1) {
+      this.diffBaseId = hit.shapeId;
+      this.diffStep = 2;
+      this.requestRender();
+    } else if (this.diffStep === 2 && this.diffBaseId !== null) {
+      if (hit.shapeId === this.diffBaseId) return;
+      const baseSel: Selection = { type: 'polygon', shapeId: this.diffBaseId, index: -1, holeIndex: -1 };
+      const cutSel: Selection = { type: 'polygon', shapeId: hit.shapeId, index: -1, holeIndex: -1 };
+      this.history.execute(new DifferenceCommand(baseSel, cutSel));
+      markDirty();
+      this.diffStep = 0;
+      this.diffBaseId = null;
+      this.canvas.style.cursor = '';
+      document.getElementById('btn-difference')?.classList.remove('active');
+      this.requestRender();
+    }
   }
 
   doCopy(): void {
@@ -529,6 +566,7 @@ export class App {
 
   async hardReset(): Promise<void> {
     if (!confirm('Clear all shapes and history?')) return;
+    this.cancelDiffMode();
     await clearState();
     this.history.loadState(createDefaultState());
     this.requestRender();
@@ -553,8 +591,12 @@ export class App {
     const el = (id: string) => document.getElementById(id);
     const f = (v: number) => v.toLocaleString();
 
-    // While polygon tool is drawing, show hints in the W/H/Area slots
-    if (this.activeTool instanceof PolygonTool && this.activeTool.isDrawing()) {
+    if (this.diffStep > 0) {
+      const hint = this.diffStep === 1 ? 'Click BASE (keeps)' : 'Click CUT (removes)';
+      if (el('footer-w')) el('footer-w')!.textContent = 'Diff:';
+      if (el('footer-h')) el('footer-h')!.textContent = hint;
+      if (el('footer-area')) el('footer-area')!.textContent = 'Esc cancel';
+    } else if (this.activeTool instanceof PolygonTool && this.activeTool.isDrawing()) {
       const n = (this.activeTool as PolygonTool).vertexCount();
       if (el('footer-w')) el('footer-w')!.textContent = `${n} pts`;
       if (el('footer-h')) el('footer-h')!.textContent = 'Enter/click①';

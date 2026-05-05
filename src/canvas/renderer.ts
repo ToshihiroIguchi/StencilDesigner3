@@ -72,6 +72,7 @@ export class CanvasRenderer {
     rubberBand?: { start: { x: number; y: number }; end: { x: number; y: number } },
     filletStatuses?: Map<string, FilletVertexStatus>,
     drcErrors?: DrcError[],
+    diffBaseId?: string,
   ): void {
     const ctx = this.ctx;
     const vt: ViewTransform = { zoom: state.zoom, panX: state.panX, panY: state.panY };
@@ -97,6 +98,12 @@ export class CanvasRenderer {
     );
     for (const shape of state.shapes) {
       this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses, drcErrorIds.has(shape.id));
+    }
+
+    // Diff BASE label (step 2: user has picked BASE, now picking CUT)
+    if (diffBaseId) {
+      const baseShape = state.shapes.find((s) => s.id === diffBaseId);
+      if (baseShape) this.drawDiffLabel(baseShape, 'BASE', vt);
     }
 
     // DRC violation markers
@@ -349,6 +356,30 @@ export class CanvasRenderer {
     }
 
     ctx.setLineDash([]);
+  }
+
+  private drawDiffLabel(shape: Polygon, label: string, vt: ViewTransform): void {
+    if (shape.outer.length === 0) return;
+    const ctx = this.ctx;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of shape.outer) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const cp = worldToCanvas((minX + maxX) / 2, (minY + maxY) / 2, vt);
+    ctx.save();
+    ctx.font = 'bold 11px monospace';
+    const tw = ctx.measureText(label).width;
+    const padX = 6, padY = 4;
+    ctx.fillStyle = 'rgba(74,158,255,0.85)';
+    ctx.fillRect(cp.x - tw / 2 - padX, cp.y - 8 - padY, tw + padX * 2, 16 + padY * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cp.x, cp.y);
+    ctx.restore();
   }
 
   private drawDrcMarker(worldPt: Point, vt: ViewTransform): void {
