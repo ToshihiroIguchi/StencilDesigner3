@@ -633,9 +633,11 @@ test.describe('14. Boolean Difference', () => {
 
   test('14-1 difference leaves 1 shape with a hole', async ({ page }) => {
     const box = await canvasBox(page);
-    await selectShape(page, box.x + 100, box.y + 100);
-    await selectShape(page, box.x + 250, box.y + 200, true);
+    // 2-step diff: click Diff button → click BASE → click CUT
     await page.click('#btn-difference');
+    await page.mouse.click(box.x + 100, box.y + 100); // BASE: outer rect only
+    await page.waitForTimeout(100);
+    await page.mouse.click(box.x + 250, box.y + 200); // CUT: inner rect (drawn on top)
     await page.waitForTimeout(300);
     expect(await shapeCount(page)).toBe(1);
 
@@ -648,9 +650,10 @@ test.describe('14. Boolean Difference', () => {
 
   test('14-2 undo restores original two shapes', async ({ page }) => {
     const box = await canvasBox(page);
-    await selectShape(page, box.x + 100, box.y + 100);
-    await selectShape(page, box.x + 250, box.y + 200, true);
     await page.click('#btn-difference');
+    await page.mouse.click(box.x + 100, box.y + 100); // BASE
+    await page.waitForTimeout(100);
+    await page.mouse.click(box.x + 250, box.y + 200); // CUT
     await page.waitForTimeout(300);
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(100);
@@ -878,9 +881,11 @@ test.describe('20. Fit to content and zoom reset', () => {
     const box = await canvasBox(page);
     await drawRect(page, box.x + 50, box.y + 50, box.x + 80, box.y + 80);
 
+    // Click canvas to ensure keyboard events reach the document handler in all browsers
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     const zoomBefore = await page.locator('#footer-zoom').textContent();
     await page.keyboard.press('Home');
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(200);
     const zoomAfter = await page.locator('#footer-zoom').textContent();
     expect(zoomBefore).not.toBe(zoomAfter);
   });
@@ -1050,6 +1055,7 @@ test.describe('22. Polygon tool', () => {
     for (let i = 0; i < 5; i++) {
       const angle = (2 * Math.PI * i) / 5 - Math.PI / 2;
       await page.mouse.click(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+      await page.waitForTimeout(80); // prevent consecutive clicks from being interpreted as dblclick
     }
     await page.keyboard.press('Enter');
     await page.waitForTimeout(100);
