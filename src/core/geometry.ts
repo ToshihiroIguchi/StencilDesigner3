@@ -197,9 +197,56 @@ export function polygonEdgeDistance(a: Polygon, b: Polygon): { dist: number; loc
   };
 }
 
+/** Nearest point on segment s1→s2 to point p (float arithmetic for internal use). */
+function nearestOnSegmentF(
+  px: number, py: number, s1x: number, s1y: number, s2x: number, s2y: number,
+): [number, number] {
+  const dx = s2x - s1x, dy = s2y - s1y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return [s1x, s1y];
+  const t = Math.max(0, Math.min(1, ((px - s1x) * dx + (py - s1y) * dy) / lenSq));
+  return [s1x + t * dx, s1y + t * dy];
+}
+
+/**
+ * Returns true if the direction connecting the closest points of the two segments
+ * is nearly parallel to either segment. This indicates the segments lie on the same
+ * convex boundary (e.g. a fillet arc approaching a straight edge tangentially) rather
+ * than facing each other across a genuine interior passage.
+ */
+function connectingDirNearlyParallel(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+  const candidates: Array<[number, number, number, number]> = [
+    [a1.x, a1.y, ...nearestOnSegmentF(a1.x, a1.y, b1.x, b1.y, b2.x, b2.y)],
+    [a2.x, a2.y, ...nearestOnSegmentF(a2.x, a2.y, b1.x, b1.y, b2.x, b2.y)],
+    [...nearestOnSegmentF(b1.x, b1.y, a1.x, a1.y, a2.x, a2.y), b1.x, b1.y],
+    [...nearestOnSegmentF(b2.x, b2.y, a1.x, a1.y, a2.x, a2.y), b2.x, b2.y],
+  ];
+  let minDsq = Infinity, px = 0, py = 0, qx = 0, qy = 0;
+  for (const [ax, ay, bx, by] of candidates) {
+    const d = (ax - bx) ** 2 + (ay - by) ** 2;
+    if (d < minDsq) { minDsq = d; px = ax; py = ay; qx = bx; qy = by; }
+  }
+  const dx = qx - px, dy = qy - py;
+  const dLen = Math.sqrt(dx * dx + dy * dy);
+  if (dLen < 0.5) return false;
+
+  const dax = a2.x - a1.x, day = a2.y - a1.y;
+  const dbx = b2.x - b1.x, dby = b2.y - b1.y;
+  const daLen = Math.sqrt(dax * dax + day * day);
+  const dbLen = Math.sqrt(dbx * dbx + dby * dby);
+  if (daLen < 0.5 || dbLen < 0.5) return false;
+
+  const cosA = Math.abs(dax * dx + day * dy) / (daLen * dLen);
+  const cosB = Math.abs(dbx * dx + dby * dy) / (dbLen * dLen);
+  return cosA > 0.7 || cosB > 0.7;
+}
+
 /**
  * Narrowest passage width of a polygon (min distance between non-adjacent edges).
  * Approximates the minimum inscribed width; catches thin arms in L-shapes etc.
+ * Segment pairs whose connecting direction is nearly parallel to either segment are
+ * skipped — they represent convex-arc artefacts (e.g. fillet tangent points), not
+ * genuine narrow passages.
  */
 export function polygonNarrowestPassage(poly: Polygon): { width: number; loc: Point } {
   const ring = poly.outer;
@@ -214,6 +261,7 @@ export function polygonNarrowestPassage(poly: Polygon): { width: number; loc: Po
       const b1 = ring[j], b2 = ring[(j + 1) % n];
       const dsq = segmentMinDistanceSq(a1, a2, b1, b2);
       if (dsq < minSq) {
+        if (connectingDirNearlyParallel(a1, a2, b1, b2)) continue;
         minSq = dsq;
         bestLoc = {
           x: Math.round((a1.x + a2.x + b1.x + b2.x) / 4),
