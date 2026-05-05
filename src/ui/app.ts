@@ -93,10 +93,12 @@ export class App {
   private getSnapPoint(worldPt: Point): Point {
     const state = this.history.state;
     if (!state.snapEnabled) return worldPt;
+    const subGs = state.gridSize / 5;
+    const effectiveGrid = subGs * state.zoom >= 8 ? subGs : state.gridSize;
     return findSnapPoint(
       worldPt,
       state.shapes,
-      state.gridSize,
+      effectiveGrid,
       state.snapRadius / state.zoom
     );
   }

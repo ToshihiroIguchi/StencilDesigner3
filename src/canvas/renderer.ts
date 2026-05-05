@@ -141,7 +141,6 @@ export class CanvasRenderer {
 
   private drawGrid(state: AppState, vt: ViewTransform): void {
     const ctx = this.ctx;
-    const gridColor = this.isDark ? COLORS.grid : COLORS.gridLight;
     const gs = state.gridSize; // µm
 
     const worldLeft = (RULER_SIZE - vt.panX) / vt.zoom;
@@ -149,6 +148,34 @@ export class CanvasRenderer {
     const worldRight = (this.width - vt.panX) / vt.zoom;
     const worldBottom = (this.height - vt.panY) / vt.zoom;
 
+    // Sub-grid lines (gridSize / 5), only when ≥ 8px apart
+    const subGs = gs / 5;
+    if (subGs * vt.zoom >= 8) {
+      const subColor = this.isDark ? 'rgba(100,100,120,0.10)' : 'rgba(150,150,160,0.15)';
+      ctx.strokeStyle = subColor;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      const subXi = Math.floor(worldLeft / subGs);
+      for (let i = subXi; i * subGs <= worldRight; i++) {
+        if (i % 5 === 0) continue;
+        const cx = i * subGs * vt.zoom + vt.panX;
+        if (cx < RULER_SIZE) continue;
+        ctx.moveTo(cx, RULER_SIZE);
+        ctx.lineTo(cx, this.height);
+      }
+      const subYi = Math.floor(worldTop / subGs);
+      for (let j = subYi; j * subGs <= worldBottom; j++) {
+        if (j % 5 === 0) continue;
+        const cy = j * subGs * vt.zoom + vt.panY;
+        if (cy < RULER_SIZE) continue;
+        ctx.moveTo(RULER_SIZE, cy);
+        ctx.lineTo(this.width, cy);
+      }
+      ctx.stroke();
+    }
+
+    // Major grid lines
+    const gridColor = this.isDark ? COLORS.grid : COLORS.gridLight;
     const startX = Math.floor(worldLeft / gs) * gs;
     const startY = Math.floor(worldTop / gs) * gs;
 
@@ -420,7 +447,6 @@ export class CanvasRenderer {
     const ctx = this.ctx;
     const bg = this.isDark ? COLORS.ruler : COLORS.rulerLight;
     const textColor = this.isDark ? COLORS.rulerText : COLORS.rulerTextLight;
-    const lineColor = textColor;
 
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, RULER_SIZE, this.height);
@@ -430,9 +456,7 @@ export class CanvasRenderer {
     ctx.fillStyle = this.isDark ? '#333344' : '#d0d0e0';
     ctx.fillRect(0, 0, RULER_SIZE, RULER_SIZE);
 
-    ctx.font = '9px monospace';
-    ctx.fillStyle = textColor;
-    ctx.strokeStyle = lineColor;
+    ctx.strokeStyle = textColor;
     ctx.lineWidth = 0.5;
 
     const worldLeft = (RULER_SIZE - vt.panX) / vt.zoom;
@@ -440,7 +464,7 @@ export class CanvasRenderer {
     const worldTop = (RULER_SIZE - vt.panY) / vt.zoom;
     const worldBottom = (this.height - vt.panY) / vt.zoom;
 
-    // Determine tick step: aim for ~60-80px per tick
+    // Major tick step: aim for ~70px per major tick
     const targetPx = 70;
     const rawStep = targetPx / vt.zoom;
     const exp = Math.floor(Math.log10(rawStep));
@@ -451,32 +475,61 @@ export class CanvasRenderer {
       if (s * vt.zoom >= targetPx) { step = s; break; }
     }
 
-    // Horizontal ruler
-    for (let wx = Math.floor(worldLeft / step) * step; wx <= worldRight; wx += step) {
+    // Minor ticks: step / 5, only when ≥ 8px apart
+    const subDiv = 5;
+    const subStep = step / subDiv;
+    const showMinor = subStep * vt.zoom >= 8;
+
+    const formatLabel = (w: number) =>
+      w >= 1000 ? `${(w / 1000).toFixed(w % 1000 === 0 ? 0 : 1)}mm` : `${w}µ`;
+
+    // Horizontal ruler (top)
+    ctx.font = '9px monospace';
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    const hStartI = Math.floor(worldLeft / subStep);
+    for (let i = hStartI; i * subStep <= worldRight; i++) {
+      const wx = i * subStep;
       const cx = wx * vt.zoom + vt.panX;
       if (cx < RULER_SIZE) continue;
+      const isMajor = i % subDiv === 0;
+      if (!isMajor && !showMinor) continue;
+      const tickH = isMajor ? 6 : 3;
       ctx.beginPath();
-      ctx.moveTo(cx, RULER_SIZE - 6);
+      ctx.moveTo(cx, RULER_SIZE - tickH);
       ctx.lineTo(cx, RULER_SIZE);
       ctx.stroke();
-      const label = wx >= 1000 ? `${(wx / 1000).toFixed(wx % 1000 === 0 ? 0 : 1)}mm` : `${wx}µ`;
-      ctx.fillText(label, cx + 2, RULER_SIZE - 8);
+      if (isMajor) ctx.fillText(formatLabel(wx), cx + 2, RULER_SIZE - 8);
     }
 
-    // Vertical ruler
-    ctx.save();
-    ctx.translate(RULER_SIZE, 0);
-    ctx.rotate(Math.PI / 2);
-    for (let wy = Math.floor(worldTop / step) * step; wy <= worldBottom; wy += step) {
+    // Vertical ruler (left) — tick marks + per-label rotation
+    // After translate(tx, ty) + rotate(-PI/2): local(rx,ry) → screen(tx+ry, ty-rx)
+    // Using textAlign='center', textBaseline='middle' at translate(RULER_SIZE/2, cy):
+    //   label center → screen (RULER_SIZE/2, cy); text runs vertically ±width/2 around cy
+    const vStartI = Math.floor(worldTop / subStep);
+    for (let i = vStartI; i * subStep <= worldBottom; i++) {
+      const wy = i * subStep;
       const cy = wy * vt.zoom + vt.panY;
       if (cy < RULER_SIZE) continue;
+      const isMajor = i % subDiv === 0;
+      if (!isMajor && !showMinor) continue;
+      const tickW = isMajor ? 6 : 3;
       ctx.beginPath();
-      ctx.moveTo(cy - this.height, RULER_SIZE - 6);
-      ctx.lineTo(cy - this.height, RULER_SIZE);
+      ctx.moveTo(RULER_SIZE - tickW, cy);
+      ctx.lineTo(RULER_SIZE, cy);
       ctx.stroke();
-      const label = wy >= 1000 ? `${(wy / 1000).toFixed(wy % 1000 === 0 ? 0 : 1)}mm` : `${wy}µ`;
-      ctx.fillText(label, cy - this.height + 2, RULER_SIZE - 8);
+      if (isMajor) {
+        ctx.save();
+        ctx.font = '8px monospace';
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.translate(RULER_SIZE / 2, cy);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(formatLabel(wy), 0, 0);
+        ctx.restore();
+      }
     }
-    ctx.restore();
   }
 }
