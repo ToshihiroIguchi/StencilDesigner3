@@ -27,7 +27,9 @@ export type ToolType =
   | 'array'
   | 'union'
   | 'difference'
-  | 'fillet';
+  | 'fillet'
+  | 'measure'
+  | 'dimension';
 
 export interface Selection {
   type: 'vertex' | 'edge' | 'polygon';
@@ -50,6 +52,27 @@ export interface Layer {
   isAperture: boolean; // true=DRC target+DXF export target (app-specific, not written to DXF)
 }
 
+export interface Annotation {
+  id: string;
+  kind: 'leader';
+  anchor: Point;   // arrow tip (the point being annotated)
+  textPos: Point;  // where the text label sits
+  text: string;
+  layer: string;
+}
+
+export interface Dimension {
+  id: string;
+  kind: 'linear-h' | 'linear-v';
+  p1: Point;
+  p2: Point;
+  /** World coordinate of the dimension line.
+   *  linear-h: Y coordinate of the horizontal dim line.
+   *  linear-v: X coordinate of the vertical dim line. */
+  offset: number;
+  layer: string;
+}
+
 export interface AppState {
   shapes: Polygon[];
   activeTool: ToolType;
@@ -62,6 +85,8 @@ export interface AppState {
   snapRadius: number; // pixels
   layers: Layer[];
   activeLayerName: string;
+  annotations: Annotation[];
+  dimensions: Dimension[];
   schemaVersion: number;
 }
 
@@ -120,6 +145,8 @@ export function createDefaultState(): AppState {
     snapRadius: 8, // pixels
     layers: defaultLayers(),
     activeLayerName: '0',
+    annotations: [],
+    dimensions: [],
     schemaVersion: 2,
   };
 }

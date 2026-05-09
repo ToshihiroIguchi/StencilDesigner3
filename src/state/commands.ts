@@ -1,4 +1,4 @@
-import type { AppState, Command, Selection, Polygon, Ring, Layer } from '../types';
+import type { AppState, Command, Selection, Polygon, Ring, Layer, Annotation, Dimension } from '../types';
 import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
 import { normalize, normalizeAll } from '../normalize';
@@ -334,6 +334,56 @@ export class UpdateLayerStyleCommand implements Command {
       ...state,
       layers: state.layers.map((l) => (l.name === this.layerName ? before : l)),
     };
+  }
+}
+
+// ─── Annotations ─────────────────────────────────────────────────────────────
+
+export class AddAnnotationCommand implements Command {
+  constructor(private ann: Annotation) {}
+  do(state: AppState): AppState {
+    return { ...state, annotations: [...state.annotations, this.ann] };
+  }
+  undo(state: AppState): AppState {
+    return { ...state, annotations: state.annotations.filter((a) => a.id !== this.ann.id) };
+  }
+}
+
+export class DeleteAnnotationCommand implements Command {
+  private saved: Annotation | null = null;
+  constructor(private id: string) {}
+  do(state: AppState): AppState {
+    this.saved = state.annotations.find((a) => a.id === this.id) ?? null;
+    return { ...state, annotations: state.annotations.filter((a) => a.id !== this.id) };
+  }
+  undo(state: AppState): AppState {
+    if (!this.saved) return state;
+    return { ...state, annotations: [...state.annotations, this.saved] };
+  }
+}
+
+// ─── Dimensions ───────────────────────────────────────────────────────────────
+
+export class AddDimensionCommand implements Command {
+  constructor(private dim: Dimension) {}
+  do(state: AppState): AppState {
+    return { ...state, dimensions: [...state.dimensions, this.dim] };
+  }
+  undo(state: AppState): AppState {
+    return { ...state, dimensions: state.dimensions.filter((d) => d.id !== this.dim.id) };
+  }
+}
+
+export class DeleteDimensionCommand implements Command {
+  private saved: Dimension | null = null;
+  constructor(private id: string) {}
+  do(state: AppState): AppState {
+    this.saved = state.dimensions.find((d) => d.id === this.id) ?? null;
+    return { ...state, dimensions: state.dimensions.filter((d) => d.id !== this.id) };
+  }
+  undo(state: AppState): AppState {
+    if (!this.saved) return state;
+    return { ...state, dimensions: [...state.dimensions, this.saved] };
   }
 }
 

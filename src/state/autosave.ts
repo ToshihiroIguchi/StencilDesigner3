@@ -57,16 +57,28 @@ export async function loadState(): Promise<AppState | null> {
 function migrateState(s: Partial<AppState>): AppState {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const v = (s as any).schemaVersion ?? 1;
-  if (v >= 2) return s as AppState;
-  // v1→v2: layer system added, assign all shapes to layer '0'
+  let state: Partial<AppState> = s;
+
+  if (v < 2) {
+    // v1→v2: layer system added
+    state = {
+      ...createDefaultState(),
+      ...state,
+      layers: defaultLayers(),
+      activeLayerName: '0',
+      schemaVersion: 2,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      shapes: ((state.shapes as any[]) ?? []).map((p: any) => ({ ...p, layer: '0' })),
+    };
+  }
+
+  // Inject new fields added after v2 if missing (annotations, dimensions)
   return {
-    ...createDefaultState(),
-    ...s,
-    layers: defaultLayers(),
-    activeLayerName: '0',
-    schemaVersion: 2,
+    ...(state as AppState),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    shapes: ((s.shapes as any[]) ?? []).map((p: any) => ({ ...p, layer: '0' })),
+    annotations: (state as any).annotations ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dimensions: (state as any).dimensions ?? [],
   };
 }
 

@@ -1,4 +1,4 @@
-import type { Point, Polygon, Selection, ViewTransform } from '../types';
+import type { Annotation, Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
 import { canvasToWorld } from '../types';
 import { pointInRing } from '../normalize';
 import { distSqPointToSegment, midpoint, dist } from './geometry';
@@ -98,6 +98,60 @@ export function findSnapPoint(
   }
 
   return best;
+}
+
+// ─── Annotation hit test ──────────────────────────────────────────────────────
+
+export interface AnnotationHit {
+  id: string;
+  part: 'anchor' | 'textPos' | 'body';
+}
+
+export function hitTestAnnotation(
+  px: number, py: number,
+  annotations: Annotation[],
+  vt: ViewTransform,
+  snapRadius: number,
+): AnnotationHit | null {
+  const wp = canvasToWorld(px, py, vt);
+  const r = snapRadius / vt.zoom;
+  for (let i = annotations.length - 1; i >= 0; i--) {
+    const ann = annotations[i];
+    if (dist(wp, ann.anchor) <= r) return { id: ann.id, part: 'anchor' };
+    if (dist(wp, ann.textPos) <= r) return { id: ann.id, part: 'textPos' };
+    if (Math.sqrt(distSqPointToSegment(wp, ann.anchor, ann.textPos)) <= r)
+      return { id: ann.id, part: 'body' };
+  }
+  return null;
+}
+
+// ─── Dimension hit test ───────────────────────────────────────────────────────
+
+export interface DimHit {
+  id: string;
+  part: 'p1' | 'p2' | 'dimLine';
+}
+
+export function hitTestDimension(
+  px: number, py: number,
+  dimensions: Dimension[],
+  vt: ViewTransform,
+  snapRadius: number,
+): DimHit | null {
+  const wp = canvasToWorld(px, py, vt);
+  const r = snapRadius / vt.zoom;
+  for (let i = dimensions.length - 1; i >= 0; i--) {
+    const dim = dimensions[i];
+    if (dist(wp, dim.p1) <= r) return { id: dim.id, part: 'p1' };
+    if (dist(wp, dim.p2) <= r) return { id: dim.id, part: 'p2' };
+    const ds = dim.kind === 'linear-h'
+      ? { x: dim.p1.x, y: dim.offset } : { x: dim.offset, y: dim.p1.y };
+    const de = dim.kind === 'linear-h'
+      ? { x: dim.p2.x, y: dim.offset } : { x: dim.offset, y: dim.p2.y };
+    if (Math.sqrt(distSqPointToSegment(wp, ds, de)) <= r)
+      return { id: dim.id, part: 'dimLine' };
+  }
+  return null;
 }
 
 /** Get all shapes that are fully within the rubber-band selection box. */

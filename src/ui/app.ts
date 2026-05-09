@@ -1,5 +1,5 @@
 import type { AppState, Layer, Point, Selection, ToolType } from '../types';
-import { createDefaultState, canvasToWorld, defaultLayers } from '../types';
+import { createDefaultState, canvasToWorld } from '../types';
 import { History } from '../state/history';
 import { CanvasRenderer } from '../canvas/renderer';
 import { SelectTool } from '../tools/select';
@@ -7,12 +7,16 @@ import { RectTool } from '../tools/rect';
 import { CircleTool } from '../tools/circle';
 import { FilletTool } from '../tools/fillet';
 import { PolygonTool } from '../tools/polygon';
-import { findSnapPoint, hitTest } from '../core/selection';
+import { MeasureTool } from '../tools/measure';
+import { TextTool } from '../tools/text';
+import { DimensionTool } from '../tools/dimension';
+import { findSnapPoint, hitTest, hitTestAnnotation, hitTestDimension } from '../core/selection';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
   ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand,
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
   UpdateLayerStyleCommand, MoveShapesToLayerCommand,
+  DeleteAnnotationCommand, DeleteDimensionCommand,
 } from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
 import { importDxf, type ImportResult } from '../dxf/importer';
@@ -21,8 +25,9 @@ import { polygonArea, polygonBbox } from '../core/geometry';
 import { resizePolygon } from '../core/transform';
 import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
+import { fmtMm } from '../core/format';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | TextTool | DimensionTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -52,6 +57,8 @@ export class App {
   private drcErrors: DrcError[] = [];
   private diffStep: 0 | 1 | 2 = 0;
   private diffBaseId: string | null = null;
+  private selectedAnnotationId: string | null = null;
+  private selectedDimId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -140,6 +147,16 @@ export class App {
       filletStatuses,
       this.drcErrors,
       this.diffStep === 2 ? (this.diffBaseId ?? undefined) : undefined,
+      {
+        measureOverlay: this.activeTool instanceof MeasureTool
+          ? (this.activeTool.getMeasureOverlay() ?? undefined) : undefined,
+        annDraft: this.activeTool instanceof TextTool
+          ? (this.activeTool.getAnnDraft() ?? undefined) : undefined,
+        dimDraft: this.activeTool instanceof DimensionTool
+          ? (this.activeTool.getDimDraft() ?? undefined) : undefined,
+        selectedAnnotationId: this.selectedAnnotationId,
+        selectedDimId: this.selectedDimId,
+      },
     );
     this.updateFooter(state);
     this.updateRightPanel(state);
@@ -294,6 +311,31 @@ export class App {
 
     const { canvasPt, worldPt } = this.getCanvasPt(e);
     if (this.diffStep > 0) { this.handleDiffClick(canvasPt); return; }
+
+    // When select tool is active, check annotation/dim hits before polygons
+    if (this.activeTool instanceof SelectTool) {
+      const state = this.history.state;
+      const annHit = hitTestAnnotation(canvasPt.x, canvasPt.y, state.annotations, state, state.snapRadius);
+      if (annHit) {
+        this.selectedAnnotationId = annHit.id;
+        this.selectedDimId = null;
+        state.selection = [];
+        this.requestRender();
+        return;
+      }
+      const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, state.dimensions, state, state.snapRadius);
+      if (dimHit) {
+        this.selectedDimId = dimHit.id;
+        this.selectedAnnotationId = null;
+        state.selection = [];
+        this.requestRender();
+        return;
+      }
+      // No annotation/dim hit — clear their selections
+      this.selectedAnnotationId = null;
+      this.selectedDimId = null;
+    }
+
     this.activeTool.onMouseDown(worldPt, canvasPt, e.shiftKey, this.history.state);
   }
 
@@ -374,6 +416,9 @@ export class App {
       if (e.key === 'c' || e.key === 'C') { this.setTool('circle'); return; }
       if (e.key === 'p' || e.key === 'P') { this.setTool('polygon'); return; }
       if (e.key === 'f' || e.key === 'F') { this.setTool('fillet'); return; }
+      if (e.key === 'm' || e.key === 'M') { this.setTool('measure'); return; }
+      if (e.key === 't' || e.key === 'T') { this.setTool('text'); return; }
+      if (e.key === 'd' || e.key === 'D') { this.setTool('dimension'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -407,6 +452,9 @@ export class App {
       case 'circle': this.activeTool = new CircleTool(toolCtx); break;
       case 'polygon': this.activeTool = new PolygonTool(toolCtx); break;
       case 'fillet': this.activeTool = new FilletTool(toolCtx, this.filletRadius); break;
+      case 'measure': this.activeTool = new MeasureTool(toolCtx); break;
+      case 'text': this.activeTool = new TextTool(toolCtx); break;
+      case 'dimension': this.activeTool = new DimensionTool(toolCtx); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
 
@@ -429,6 +477,22 @@ export class App {
   }
 
   deleteSelected(): void {
+    if (this.selectedAnnotationId !== null) {
+      const id = this.selectedAnnotationId;
+      this.selectedAnnotationId = null;
+      this.history.execute(new DeleteAnnotationCommand(id));
+      markDirty();
+      this.requestRender();
+      return;
+    }
+    if (this.selectedDimId !== null) {
+      const id = this.selectedDimId;
+      this.selectedDimId = null;
+      this.history.execute(new DeleteDimensionCommand(id));
+      markDirty();
+      this.requestRender();
+      return;
+    }
     const state = this.history.state;
     if (state.selection.length === 0) return;
     this.history.execute(new DeleteCommand(state.selection));
@@ -622,7 +686,7 @@ export class App {
     const viewW = this.canvas.width - RULER;
     const viewH = this.canvas.height - RULER;
 
-    if (state.shapes.length === 0) {
+    if (state.shapes.length === 0 && state.annotations.length === 0 && state.dimensions.length === 0) {
       this.setZoom(0.5);
       state.panX = Math.round(RULER + viewW / 2);
       state.panY = Math.round(RULER + viewH / 2);
@@ -631,12 +695,22 @@ export class App {
     }
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const expandBbox = (x: number, y: number) => {
+      if (x < minX) minX = x; if (y < minY) minY = y;
+      if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+    };
     for (const s of state.shapes) {
       const bb = polygonBbox(s);
-      if (bb.minX < minX) minX = bb.minX;
-      if (bb.minY < minY) minY = bb.minY;
-      if (bb.maxX > maxX) maxX = bb.maxX;
-      if (bb.maxY > maxY) maxY = bb.maxY;
+      expandBbox(bb.minX, bb.minY);
+      expandBbox(bb.maxX, bb.maxY);
+    }
+    for (const a of state.annotations) {
+      expandBbox(a.anchor.x, a.anchor.y);
+      expandBbox(a.textPos.x, a.textPos.y);
+    }
+    for (const d of state.dimensions) {
+      expandBbox(d.p1.x, d.p1.y);
+      expandBbox(d.p2.x, d.p2.y);
     }
 
     const contentW = maxX - minX || 1;
@@ -663,6 +737,8 @@ export class App {
   async hardReset(): Promise<void> {
     if (!confirm('Clear all shapes and history?')) return;
     this.cancelDiffMode();
+    this.selectedAnnotationId = null;
+    this.selectedDimId = null;
     await clearState();
     this.history.loadState(createDefaultState());
     this.requestRender();
@@ -873,6 +949,26 @@ export class App {
       if (el('footer-w')) el('footer-w')!.textContent = 'Diff:';
       if (el('footer-h')) el('footer-h')!.textContent = hint;
       if (el('footer-area')) el('footer-area')!.textContent = 'Esc cancel';
+    } else if (this.activeTool instanceof MeasureTool) {
+      const ov = this.activeTool.getMeasureOverlay();
+      if (ov) {
+        const dx = Math.abs(ov.p2.x - ov.p1.x);
+        const dy = Math.abs(ov.p2.y - ov.p1.y);
+        const d = Math.round(Math.sqrt(dx * dx + dy * dy));
+        if (el('footer-w')) el('footer-w')!.textContent = `dx:${fmtMm(dx)}`;
+        if (el('footer-h')) el('footer-h')!.textContent = `dy:${fmtMm(dy)}`;
+        if (el('footer-area')) el('footer-area')!.textContent = `d:${fmtMm(d)}`;
+      } else {
+        if (el('footer-w')) el('footer-w')!.textContent = 'Click p1';
+        if (el('footer-h')) el('footer-h')!.textContent = '—';
+        if (el('footer-area')) el('footer-area')!.textContent = 'Esc clear';
+      }
+    } else if (this.activeTool instanceof DimensionTool) {
+      const steps = ['Click p1', 'Click p2', 'Click offset'];
+      const step = this.activeTool.getStep() === 'p1' ? 0 : this.activeTool.getStep() === 'p2' ? 1 : 2;
+      if (el('footer-w')) el('footer-w')!.textContent = 'Dim:';
+      if (el('footer-h')) el('footer-h')!.textContent = steps[step];
+      if (el('footer-area')) el('footer-area')!.textContent = 'Esc cancel';
     } else if (this.activeTool instanceof PolygonTool && this.activeTool.isDrawing()) {
       const n = (this.activeTool as PolygonTool).vertexCount();
       if (el('footer-w')) el('footer-w')!.textContent = `${n} pts`;
@@ -950,6 +1046,31 @@ export class App {
     const infoEl = document.getElementById('selection-info');
     const propsEl = document.getElementById('shape-props');
     if (!infoEl) return;
+
+    // Annotation selected
+    if (this.selectedAnnotationId !== null) {
+      const ann = state.annotations.find((a) => a.id === this.selectedAnnotationId);
+      if (ann) {
+        infoEl.innerHTML = `<div class="shape-info"><span>Annotation</span><span>${ann.text}</span></div>
+          <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del to delete</p>`;
+        if (propsEl) propsEl.style.display = 'none';
+        return;
+      }
+    }
+
+    // Dimension selected
+    if (this.selectedDimId !== null) {
+      const dim = state.dimensions.find((d) => d.id === this.selectedDimId);
+      if (dim) {
+        const val = dim.kind === 'linear-h'
+          ? fmtMm(Math.abs(dim.p2.x - dim.p1.x))
+          : fmtMm(Math.abs(dim.p2.y - dim.p1.y));
+        infoEl.innerHTML = `<div class="shape-info"><span>Dimension</span><span>${dim.kind === 'linear-h' ? 'H' : 'V'}: ${val}</span></div>
+          <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del to delete</p>`;
+        if (propsEl) propsEl.style.display = 'none';
+        return;
+      }
+    }
 
     if (sel.length === 0) {
       infoEl.innerHTML = '<p class="muted">No selection</p>';
