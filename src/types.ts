@@ -117,7 +117,7 @@ export function defaultLayers(): Layer[] {
   return [
     { name: '0',          color: '#4a9eff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true,  isAperture: true  },
     { name: 'OUTLINE',    color: '#888888', linetype: 'DASHED',     lineweight: -1, visible: true, locked: false, plot: true,  isAperture: false },
-    { name: 'DIMENSIONS', color: '#3399ff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: false, isAperture: false },
+    { name: 'DIMENSIONS', color: '#888888', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: false, isAperture: false },
   ];
 }
 

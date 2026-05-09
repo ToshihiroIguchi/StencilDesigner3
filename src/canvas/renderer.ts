@@ -572,7 +572,7 @@ export class CanvasRenderer {
     for (const dim of dimensions) {
       const layer = layerMap.get(dim.layer);
       if (layer && !layer.visible) continue;
-      const color = selectedId === dim.id ? COLORS.shapeSelected : (layer?.color ?? '#3399ff');
+      const color = selectedId === dim.id ? COLORS.shapeSelected : (layer?.color ?? '#888888');
       this.drawOneDimension(dim, color, vt);
     }
   }
@@ -584,7 +584,7 @@ export class CanvasRenderer {
     ctx.save();
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 0.8;
     ctx.setLineDash([]);
 
     if (dim.kind === 'linear-h') {

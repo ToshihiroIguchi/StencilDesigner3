@@ -79,9 +79,9 @@ function migrateState(s: Partial<AppState>): AppState {
     dimensions: (state as any).dimensions ?? [],
   };
 
-  // Enforce DIMENSIONS layer invariants: never aperture, never active
+  // Enforce DIMENSIONS layer invariants: never aperture, gray color
   finalState.layers = finalState.layers.map((l) =>
-    l.name === 'DIMENSIONS' ? { ...l, isAperture: false, plot: false } : l
+    l.name === 'DIMENSIONS' ? { ...l, isAperture: false, plot: false, color: '#888888' } : l
   );
   if (finalState.activeLayerName === 'DIMENSIONS') {
     const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);
