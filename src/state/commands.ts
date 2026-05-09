@@ -1,4 +1,4 @@
-import type { AppState, Command, Selection, Polygon, Ring } from '../types';
+import type { AppState, Command, Selection, Polygon, Ring, Layer } from '../types';
 import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
 import { normalize, normalizeAll } from '../normalize';
@@ -243,5 +243,113 @@ export class SetSelectionCommand implements Command {
   }
   undo(state: AppState): AppState {
     return { ...state, selection: this.prevSel };
+  }
+}
+
+// ─── Add Layer ───────────────────────────────────────────────────────────────
+export class AddLayerCommand implements Command {
+  constructor(private layer: Layer) {}
+  do(state: AppState): AppState {
+    if (state.layers.some((l) => l.name === this.layer.name)) return state;
+    return { ...state, layers: [...state.layers, this.layer] };
+  }
+  undo(state: AppState): AppState {
+    return { ...state, layers: state.layers.filter((l) => l.name !== this.layer.name) };
+  }
+}
+
+// ─── Delete Layer ─────────────────────────────────────────────────────────────
+export class DeleteLayerCommand implements Command {
+  private savedLayer: Layer | null = null;
+  private affectedShapes: Polygon[] = [];
+  constructor(private layerName: string, private mode: 'move' | 'delete', private moveTo?: string) {}
+  do(state: AppState): AppState {
+    if (state.layers.length <= 1) return state;
+    this.savedLayer = state.layers.find((l) => l.name === this.layerName) ?? null;
+    if (!this.savedLayer) return state;
+    this.affectedShapes = state.shapes.filter((s) => s.layer === this.layerName);
+    const newLayers = state.layers.filter((l) => l.name !== this.layerName);
+    const newShapes =
+      this.mode === 'move' && this.moveTo
+        ? state.shapes.map((s) => (s.layer === this.layerName ? { ...s, layer: this.moveTo! } : s))
+        : state.shapes.filter((s) => s.layer !== this.layerName);
+    const newActive =
+      state.activeLayerName === this.layerName ? newLayers[0].name : state.activeLayerName;
+    return { ...state, layers: newLayers, shapes: newShapes, activeLayerName: newActive, selection: [] };
+  }
+  undo(state: AppState): AppState {
+    if (!this.savedLayer) return state;
+    const saved = this.savedLayer;
+    const ids = new Set(this.affectedShapes.map((s) => s.id));
+    let restoredShapes: Polygon[];
+    if (this.mode === 'move' && this.moveTo) {
+      restoredShapes = state.shapes.map((s) => (ids.has(s.id) ? { ...s, layer: this.layerName } : s));
+    } else {
+      restoredShapes = normalizeAll([...state.shapes, ...this.affectedShapes]);
+    }
+    return { ...state, layers: [...state.layers, saved], shapes: restoredShapes };
+  }
+}
+
+// ─── Rename Layer ─────────────────────────────────────────────────────────────
+export class RenameLayerCommand implements Command {
+  constructor(private oldName: string, private newName: string) {}
+  do(state: AppState): AppState {
+    if (state.layers.some((l) => l.name === this.newName)) return state;
+    return {
+      ...state,
+      layers: state.layers.map((l) => (l.name === this.oldName ? { ...l, name: this.newName } : l)),
+      shapes: state.shapes.map((s) => (s.layer === this.oldName ? { ...s, layer: this.newName } : s)),
+      activeLayerName: state.activeLayerName === this.oldName ? this.newName : state.activeLayerName,
+    };
+  }
+  undo(state: AppState): AppState {
+    return {
+      ...state,
+      layers: state.layers.map((l) => (l.name === this.newName ? { ...l, name: this.oldName } : l)),
+      shapes: state.shapes.map((s) => (s.layer === this.newName ? { ...s, layer: this.oldName } : s)),
+      activeLayerName: state.activeLayerName === this.newName ? this.oldName : state.activeLayerName,
+    };
+  }
+}
+
+// ─── Update Layer Style ───────────────────────────────────────────────────────
+type LayerStylePatch = Partial<Pick<Layer, 'color' | 'linetype' | 'lineweight' | 'plot' | 'isAperture'>>;
+export class UpdateLayerStyleCommand implements Command {
+  private before: Layer | null = null;
+  constructor(private layerName: string, private patch: LayerStylePatch) {}
+  do(state: AppState): AppState {
+    const layer = state.layers.find((l) => l.name === this.layerName);
+    if (!layer) return state;
+    this.before = { ...layer };
+    return {
+      ...state,
+      layers: state.layers.map((l) => (l.name === this.layerName ? { ...l, ...this.patch } : l)),
+    };
+  }
+  undo(state: AppState): AppState {
+    if (!this.before) return state;
+    const before = this.before;
+    return {
+      ...state,
+      layers: state.layers.map((l) => (l.name === this.layerName ? before : l)),
+    };
+  }
+}
+
+// ─── Move Shapes To Layer ─────────────────────────────────────────────────────
+export class MoveShapesToLayerCommand implements Command {
+  private originals: Map<string, string> = new Map();
+  constructor(private selection: Selection[], private targetLayer: string) {}
+  do(state: AppState): AppState {
+    const ids = new Set(this.selection.map((s) => s.shapeId));
+    this.originals = new Map(
+      state.shapes.filter((s) => ids.has(s.id)).map((s) => [s.id, s.layer])
+    );
+    return { ...state, shapes: state.shapes.map((s) => (ids.has(s.id) ? { ...s, layer: this.targetLayer } : s)) };
+  }
+  undo(state: AppState): AppState {
+    const map = this.originals;
+    return { ...state, shapes: state.shapes.map((s) => (map.has(s.id) ? { ...s, layer: map.get(s.id)! } : s)) };
   }
 }

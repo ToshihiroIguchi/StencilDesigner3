@@ -1,6 +1,24 @@
-import type { AppState, DrcError, Point, Polygon, Ring, ViewTransform } from '../types';
+import type { AppState, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
 import { selectedIds } from '../core/transform';
+
+function linetypeToDash(lt: string): number[] {
+  switch (lt) {
+    case 'DASHED':  return [8, 4];
+    case 'HIDDEN':  return [4, 4];
+    case 'CENTER':  return [12, 4, 4, 4];
+    case 'PHANTOM': return [12, 4, 4, 4, 4, 4];
+    case 'DASHDOT': return [10, 4, 2, 4];
+    default: return [];
+  }
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 const COLORS = {
   background: '#1e1e2e',
@@ -96,8 +114,11 @@ export class CanvasRenderer {
     const drcErrorIds = new Set(
       drcErrors?.flatMap((e) => e.shapeId2 ? [e.shapeId, e.shapeId2] : [e.shapeId]) ?? [],
     );
+    const layerMap = new Map(state.layers.map((l) => [l.name, l]));
     for (const shape of state.shapes) {
-      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses, drcErrorIds.has(shape.id));
+      const layer = layerMap.get(shape.layer);
+      if (layer && !layer.visible) continue;
+      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses, drcErrorIds.has(shape.id), layer);
     }
 
     // Diff BASE label (step 2: user has picked BASE, now picking CUT)
@@ -205,11 +226,18 @@ export class CanvasRenderer {
     showAllVertices = false,
     filletStatuses?: Map<string, FilletVertexStatus>,
     drcError = false,
+    layer?: Layer,
   ): void {
     const ctx = this.ctx;
-    const strokeColor = selected ? COLORS.shapeSelected : COLORS.shape;
-    const fillColor = selected ? COLORS.shapeFillSelected : COLORS.shapeFill;
+    const strokeColor = selected ? COLORS.shapeSelected : (layer?.color ?? COLORS.shape);
+    const fillColor = hexToRgba(strokeColor, selected ? 0.25 : 0.15);
     ctx.lineWidth = 1;
+
+    // Locked layers render at half opacity
+    ctx.globalAlpha = layer?.locked ? 0.5 : 1.0;
+
+    // Apply linetype dash pattern
+    ctx.setLineDash(layer ? linetypeToDash(layer.linetype) : []);
 
     // Fill with even-odd rule for holes
     ctx.fillStyle = fillColor;
@@ -234,6 +262,8 @@ export class CanvasRenderer {
       this.tracePath(hole, vt);
       ctx.stroke();
     }
+
+    ctx.setLineDash([]);
 
     // DRC error overlay
     if (drcError) {
@@ -274,6 +304,8 @@ export class CanvasRenderer {
         }
       }
     }
+
+    ctx.globalAlpha = 1.0;
   }
 
   private tracePath(ring: Ring, vt: ViewTransform): void {

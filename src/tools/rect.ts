@@ -38,7 +38,7 @@ export class RectTool extends BaseTool {
     this.ctx.requestRender();
   }
 
-  onMouseUp(worldPt: Point, _canvasPt: Point, shift: boolean, _state: AppState): void {
+  onMouseUp(worldPt: Point, _canvasPt: Point, shift: boolean, state: AppState): void {
     if (!this.startPt) return;
     const snapped = this.ctx.getSnapPoint(worldPt);
 
@@ -56,7 +56,7 @@ export class RectTool extends BaseTool {
 
     if (Math.abs(dx) >= 1 && Math.abs(dy) >= 1) {
       try {
-        const poly = rectToPolygon(this.startPt.x, this.startPt.y, x2, y2);
+        const poly = rectToPolygon(this.startPt.x, this.startPt.y, x2, y2, state.activeLayerName);
         this.ctx.history.execute(new AddShapeCommand(poly));
         markDirty();
       } catch {

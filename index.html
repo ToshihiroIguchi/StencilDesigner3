@@ -182,13 +182,49 @@
       </div>
       <div id="drc-list"><p class="muted">No errors</p></div>
     </div>
-    <div class="panel-section">
-      <div class="panel-title">Layers</div>
-      <p style="color:var(--fg2);font-size:11px;">Single layer (0)</p>
+    <div class="panel-section" id="layer-panel">
+      <div class="panel-title" style="display:flex;align-items:center">
+        Layers
+        <button id="btn-layer-add" class="mini-btn" title="Add layer">+</button>
+      </div>
+      <div id="layer-list"></div>
+      <button id="btn-layer-move-shapes" class="hdr-btn" style="width:100%;margin-top:6px;font-size:11px">
+        Move selected to active layer
+      </button>
     </div>
   </aside>
 
 </main>
+
+<!-- Delete Layer Modal -->
+<div id="layer-delete-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">Delete Layer</div>
+    <p id="layer-delete-msg"></p>
+    <div class="props-row" style="margin-top:8px">
+      <label style="font-size:12px">Move shapes to:</label>
+      <select id="layer-delete-target" style="flex:1;margin-left:8px;background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:3px 5px;border-radius:3px"></select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button id="layer-delete-cancel" class="hdr-btn">Cancel</button>
+      <button id="layer-delete-move" class="hdr-btn">Move &amp; Delete Layer</button>
+      <button id="layer-delete-destroy" class="hdr-btn" style="color:var(--danger)">Delete with Shapes</button>
+    </div>
+  </div>
+</div>
+
+<!-- DXF Import Modal -->
+<div id="dxf-import-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">Import DXF</div>
+    <p style="font-size:12px;margin-bottom:8px">Check the layers to treat as apertures (DRC-checked and included in DXF export):</p>
+    <div id="dxf-import-layers" style="max-height:200px;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button id="dxf-import-cancel" class="hdr-btn">Cancel</button>
+      <button id="dxf-import-ok" class="hdr-btn">Import</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Footer ───────────────────────────────────────────────────────────────── -->
 <footer id="footer">

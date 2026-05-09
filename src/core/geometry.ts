@@ -3,7 +3,7 @@ import { newId } from '../types';
 import { normalize, bbox, area } from '../normalize';
 
 /** Approximate a circle as a polygon with N sides (default 64). */
-export function circleToPolygon(cx: number, cy: number, r: number, sides = 64): Polygon {
+export function circleToPolygon(cx: number, cy: number, r: number, sides = 64, layer = '0'): Polygon {
   const outer: Ring = [];
   for (let i = 0; i < sides; i++) {
     const angle = (2 * Math.PI * i) / sides;
@@ -12,11 +12,11 @@ export function circleToPolygon(cx: number, cy: number, r: number, sides = 64): 
       y: Math.round(cy + r * Math.sin(angle)),
     });
   }
-  return normalize({ id: newId(), outer, holes: [], layer: '0' });
+  return normalize({ id: newId(), outer, holes: [], layer });
 }
 
 /** Create a rectangle polygon from two corner points. */
-export function rectToPolygon(x1: number, y1: number, x2: number, y2: number): Polygon {
+export function rectToPolygon(x1: number, y1: number, x2: number, y2: number, layer = '0'): Polygon {
   const minX = Math.min(x1, x2);
   const minY = Math.min(y1, y2);
   const maxX = Math.max(x1, x2);
@@ -27,7 +27,7 @@ export function rectToPolygon(x1: number, y1: number, x2: number, y2: number): P
     { x: maxX, y: maxY },
     { x: minX, y: maxY },
   ];
-  return normalize({ id: newId(), outer, holes: [], layer: '0' });
+  return normalize({ id: newId(), outer, holes: [], layer });
 }
 
 /** Get polygon bounding box. */

@@ -1,5 +1,5 @@
-import type { AppState, Point, Selection, ToolType } from '../types';
-import { createDefaultState, canvasToWorld } from '../types';
+import type { AppState, Layer, Point, Selection, ToolType } from '../types';
+import { createDefaultState, canvasToWorld, defaultLayers } from '../types';
 import { History } from '../state/history';
 import { CanvasRenderer } from '../canvas/renderer';
 import { SelectTool } from '../tools/select';
@@ -8,9 +8,14 @@ import { CircleTool } from '../tools/circle';
 import { FilletTool } from '../tools/fillet';
 import { PolygonTool } from '../tools/polygon';
 import { findSnapPoint, hitTest } from '../core/selection';
-import { AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand, ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand } from '../state/commands';
+import {
+  AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
+  ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand,
+  AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
+  UpdateLayerStyleCommand, MoveShapesToLayerCommand,
+} from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
-import { importDxf } from '../dxf/importer';
+import { importDxf, type ImportResult } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
 import { resizePolygon } from '../core/transform';
@@ -93,11 +98,16 @@ export class App {
   private getSnapPoint(worldPt: Point): Point {
     const state = this.history.state;
     if (!state.snapEnabled) return worldPt;
+    const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+    const interactiveShapes = state.shapes.filter((s) => {
+      const l = layerMap.get(s.layer);
+      return l && l.visible;
+    });
     const subGs = state.gridSize / 5;
     const effectiveGrid = subGs * state.zoom >= 8 ? subGs : state.gridSize;
     return findSnapPoint(
       worldPt,
-      state.shapes,
+      interactiveShapes,
       effectiveGrid,
       state.snapRadius / state.zoom
     );
@@ -114,7 +124,7 @@ export class App {
 
   private doRender(): void {
     const state = this.history.state;
-    this.drcErrors = runDrc(state.shapes, this.drcConfig);
+    this.drcErrors = runDrc(state.shapes, state.layers, this.drcConfig);
     const rubberBand = this.activeTool instanceof SelectTool
       ? (this.activeTool.getRubberBand() ?? undefined)
       : undefined;
@@ -168,6 +178,10 @@ export class App {
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
     document.getElementById('btn-fit')?.addEventListener('click', () => this.fitToContent());
     document.getElementById('footer-zoom')?.addEventListener('click', () => this.resetZoom());
+
+    // Layer panel buttons
+    document.getElementById('btn-layer-add')?.addEventListener('click', () => this.addLayer());
+    document.getElementById('btn-layer-move-shapes')?.addEventListener('click', () => this.moveSelectedToActiveLayer());
 
     // Fillet panel
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
@@ -451,7 +465,12 @@ export class App {
 
   private handleDiffClick(canvasPt: Point): void {
     const state = this.history.state;
-    const hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
+    const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+    const interactiveShapes = state.shapes.filter((s) => {
+      const l = layerMap.get(s.layer);
+      return l && l.visible && !l.locked;
+    });
+    const hit = hitTest(canvasPt.x, canvasPt.y, interactiveShapes, state, state.snapRadius);
     if (!hit || hit.type !== 'polygon') return;
 
     if (this.diffStep === 1) {
@@ -504,15 +523,90 @@ export class App {
   private async loadDxfFile(file: File): Promise<void> {
     const text = await file.text();
     try {
-      const polygons = await importDxf(text);
-      for (const poly of polygons) {
-        this.history.execute(new AddShapeCommand(poly));
-      }
-      markDirty();
-      this.requestRender();
+      const result = await importDxf(text);
+      await this.showImportDialog(result);
     } catch (e) {
       alert(`DXF import failed: ${e}`);
     }
+  }
+
+  private async showImportDialog(result: ImportResult): Promise<void> {
+    const modal = document.getElementById('dxf-import-modal') as HTMLElement;
+    const layersDiv = document.getElementById('dxf-import-layers') as HTMLElement;
+    const okBtn = document.getElementById('dxf-import-ok') as HTMLButtonElement;
+    const cancelBtn = document.getElementById('dxf-import-cancel') as HTMLButtonElement;
+
+    // Build layer list with checkboxes
+    layersDiv.innerHTML = '';
+    for (const layer of result.layers) {
+      const label = document.createElement('label');
+      label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = layer.name;
+      const swatch = document.createElement('span');
+      swatch.style.cssText = `display:inline-block;width:12px;height:12px;background:${layer.color};border:1px solid #555`;
+      const shapeCount = result.polygons.filter((p) => p.layer === layer.name).length;
+      label.appendChild(cb);
+      label.appendChild(swatch);
+      label.appendChild(document.createTextNode(` ${layer.name} (${shapeCount} shapes)`));
+      layersDiv.appendChild(label);
+    }
+
+    // Show ignored entity counts if any
+    const ignored = Object.entries(result.ignoredCounts);
+    if (ignored.length > 0) {
+      const note = document.createElement('p');
+      note.style.cssText = 'font-size:11px;color:var(--fg2);margin-top:8px';
+      note.textContent = 'Ignored: ' + ignored.map(([t, c]) => `${c} ${t}`).join(', ');
+      layersDiv.appendChild(note);
+    }
+
+    modal.style.display = '';
+
+    return new Promise<void>((resolve) => {
+      const cleanup = () => {
+        modal.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+      };
+
+      const onOk = () => {
+        cleanup();
+        const checkedNames = new Set(
+          [...layersDiv.querySelectorAll('input[type=checkbox]:checked')].map(
+            (el) => (el as HTMLInputElement).value
+          )
+        );
+
+        // Merge with existing layers: only add new layer names
+        const state = this.history.state;
+        const existingNames = new Set(state.layers.map((l) => l.name));
+
+        for (const layer of result.layers) {
+          if (!existingNames.has(layer.name)) {
+            const newLayer: Layer = { ...layer, isAperture: checkedNames.has(layer.name) };
+            this.history.execute(new AddLayerCommand(newLayer));
+          }
+          // Preserve existing layer settings (including isAperture)
+        }
+
+        for (const poly of result.polygons) {
+          this.history.execute(new AddShapeCommand(poly));
+        }
+        markDirty();
+        this.requestRender();
+        resolve();
+      };
+
+      const onCancel = () => {
+        cleanup();
+        resolve();
+      };
+
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+    });
   }
 
   private panToWorld(wx: number, wy: number): void {
@@ -563,7 +657,7 @@ export class App {
 
   exportDxf(): void {
     const state = this.history.state;
-    downloadDxf(state.shapes);
+    downloadDxf(state.shapes, state.layers);
   }
 
   async hardReset(): Promise<void> {
@@ -588,6 +682,187 @@ export class App {
     if (btn) btn.classList.toggle('active', state.snapEnabled);
     this.requestRender();
   }
+
+  // ─── Layer panel ────────────────────────────────────────────────────────────
+
+  private renderLayerPanel(state: AppState): void {
+    const listEl = document.getElementById('layer-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    for (const layer of state.layers) {
+      const isActive = layer.name === state.activeLayerName;
+      const row = document.createElement('div');
+      row.className = 'layer-row' + (isActive ? ' is-active' : '') + (layer.isAperture ? ' is-aperture' : '');
+      row.dataset.layer = layer.name;
+
+      row.innerHTML = `
+        <span class="lyr-active" title="Set active">${isActive ? '●' : '○'}</span>
+        <input type="color" class="lyr-color" value="${layer.color}" title="Layer color">
+        <span class="lyr-name" title="${layer.name}">${layer.name}</span>
+        <button class="lyr-btn lyr-vis" title="Visibility (V/H)">${layer.visible ? 'V' : 'H'}</button>
+        <button class="lyr-btn lyr-lock" title="Lock (U/L)">${layer.locked ? 'L' : 'U'}</button>
+        <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}" title="Aperture layer">A</button>
+        <button class="lyr-btn lyr-del" title="Delete layer">×</button>
+      `;
+
+      row.querySelector('.lyr-active')?.addEventListener('click', () => this.setActiveLayer(layer.name));
+      row.querySelector('.lyr-name')?.addEventListener('dblclick', () => this.renameLayer(layer.name));
+      row.querySelector('.lyr-name')?.addEventListener('click', () => this.setActiveLayer(layer.name));
+
+      const colorInput = row.querySelector('.lyr-color') as HTMLInputElement;
+      colorInput.addEventListener('change', () => {
+        this.history.execute(new UpdateLayerStyleCommand(layer.name, { color: colorInput.value }));
+        markDirty();
+        this.requestRender();
+      });
+
+      row.querySelector('.lyr-vis')?.addEventListener('click', () => {
+        this.toggleLayerVisible(layer.name);
+      });
+      row.querySelector('.lyr-lock')?.addEventListener('click', () => {
+        this.toggleLayerLocked(layer.name);
+      });
+      row.querySelector('.lyr-apt')?.addEventListener('click', () => {
+        this.history.execute(new UpdateLayerStyleCommand(layer.name, { isAperture: !layer.isAperture }));
+        markDirty();
+        this.requestRender();
+      });
+      row.querySelector('.lyr-del')?.addEventListener('click', () => {
+        this.deleteLayer(layer.name);
+      });
+
+      listEl.appendChild(row);
+    }
+  }
+
+  private setActiveLayer(name: string): void {
+    const state = this.history.state;
+    const layer = state.layers.find((l) => l.name === name);
+    if (!layer) return;
+    state.activeLayerName = name;
+    // Active layer must be visible and unlocked
+    if (!layer.visible) {
+      state.layers = state.layers.map((l) => l.name === name ? { ...l, visible: true } : l);
+    }
+    if (layer.locked) {
+      state.layers = state.layers.map((l) => l.name === name ? { ...l, locked: false } : l);
+    }
+    this.requestRender();
+  }
+
+  private toggleLayerVisible(name: string): void {
+    const state = this.history.state;
+    if (name === state.activeLayerName) return; // active layer cannot be hidden
+    const layer = state.layers.find((l) => l.name === name);
+    if (!layer) return;
+    const wasVisible = layer.visible;
+    state.layers = state.layers.map((l) => l.name === name ? { ...l, visible: !l.visible } : l);
+    // Clear selection of shapes on a layer that just became hidden
+    if (wasVisible) {
+      const hiddenIds = new Set(state.shapes.filter((s) => s.layer === name).map((s) => s.id));
+      state.selection = state.selection.filter((s) => !hiddenIds.has(s.shapeId));
+    }
+    this.requestRender();
+  }
+
+  private toggleLayerLocked(name: string): void {
+    const state = this.history.state;
+    if (name === state.activeLayerName) return; // active layer cannot be locked
+    state.layers = state.layers.map((l) => l.name === name ? { ...l, locked: !l.locked } : l);
+    this.requestRender();
+  }
+
+  private addLayer(): void {
+    const name = prompt('New layer name:');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    const state = this.history.state;
+    if (state.layers.some((l) => l.name === trimmed)) {
+      alert(`Layer "${trimmed}" already exists.`);
+      return;
+    }
+    this.history.execute(new AddLayerCommand({
+      name: trimmed, color: '#ffffff', linetype: 'CONTINUOUS',
+      lineweight: -1, visible: true, locked: false, plot: true, isAperture: false,
+    }));
+    markDirty();
+    this.requestRender();
+  }
+
+  private renameLayer(name: string): void {
+    const newName = prompt('Rename layer:', name);
+    if (!newName || !newName.trim() || newName.trim() === name) return;
+    const trimmed = newName.trim();
+    const state = this.history.state;
+    if (state.layers.some((l) => l.name === trimmed)) {
+      alert(`Layer "${trimmed}" already exists.`);
+      return;
+    }
+    this.history.execute(new RenameLayerCommand(name, trimmed));
+    markDirty();
+    this.requestRender();
+  }
+
+  private deleteLayer(name: string): void {
+    const state = this.history.state;
+    if (state.layers.length <= 1) {
+      alert('Cannot delete the last layer.');
+      return;
+    }
+    const shapeCount = state.shapes.filter((s) => s.layer === name).length;
+    if (shapeCount === 0) {
+      if (!confirm(`Delete layer "${name}"?`)) return;
+      this.history.execute(new DeleteLayerCommand(name, 'delete'));
+      markDirty();
+      this.requestRender();
+      return;
+    }
+    // Show delete modal for non-empty layers
+    const modal = document.getElementById('layer-delete-modal') as HTMLElement;
+    const msg = document.getElementById('layer-delete-msg') as HTMLElement;
+    const targetSel = document.getElementById('layer-delete-target') as HTMLSelectElement;
+    const btnMove = document.getElementById('layer-delete-move') as HTMLButtonElement;
+    const btnDel = document.getElementById('layer-delete-destroy') as HTMLButtonElement;
+    const btnCancel = document.getElementById('layer-delete-cancel') as HTMLButtonElement;
+
+    msg.textContent = `Layer "${name}" has ${shapeCount} shape(s).`;
+    targetSel.innerHTML = state.layers
+      .filter((l) => l.name !== name)
+      .map((l) => `<option value="${l.name}">${l.name}</option>`)
+      .join('');
+
+    modal.style.display = '';
+    const close = () => { modal.style.display = 'none'; };
+
+    const onMove = () => {
+      close();
+      const target = targetSel.value;
+      this.history.execute(new DeleteLayerCommand(name, 'move', target));
+      markDirty();
+      this.requestRender();
+    };
+    const onDel = () => {
+      if (!confirm(`Delete layer "${name}" and its ${shapeCount} shape(s)?`)) return;
+      close();
+      this.history.execute(new DeleteLayerCommand(name, 'delete'));
+      markDirty();
+      this.requestRender();
+    };
+
+    btnMove.onclick = onMove;
+    btnDel.onclick = onDel;
+    btnCancel.onclick = close;
+  }
+
+  private moveSelectedToActiveLayer(): void {
+    const state = this.history.state;
+    if (state.selection.length === 0) return;
+    this.history.execute(new MoveShapesToLayerCommand(state.selection, state.activeLayerName));
+    markDirty();
+    this.requestRender();
+  }
+
+  // ─── Right panel ────────────────────────────────────────────────────────────
 
   private updateFooter(state: AppState): void {
     const el = (id: string) => document.getElementById(id);
@@ -668,6 +943,9 @@ export class App {
       }
     }
 
+    // Layer panel
+    this.renderLayerPanel(state);
+
     const sel = state.selection;
     const infoEl = document.getElementById('selection-info');
     const propsEl = document.getElementById('shape-props');
@@ -719,7 +997,6 @@ export class App {
         propsEl.style.display = 'none';
       }
     }
-
   }
 
   private updateUndoButtons(): void {

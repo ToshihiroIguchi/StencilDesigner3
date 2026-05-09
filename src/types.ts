@@ -37,6 +37,19 @@ export interface Selection {
   holeIndex: number; // -1 = outer ring
 }
 
+export type LineType = 'CONTINUOUS' | 'DASHED' | 'HIDDEN' | 'CENTER' | 'PHANTOM' | 'DASHDOT';
+
+export interface Layer {
+  name: string;        // unique key, DXF group code 8
+  color: string;       // CSS color "#RRGGBB"
+  linetype: LineType;
+  lineweight: number;  // 0.01mm units, -1=default
+  visible: boolean;
+  locked: boolean;
+  plot: boolean;       // DXF export flag
+  isAperture: boolean; // true=DRC target+DXF export target (app-specific, not written to DXF)
+}
+
 export interface AppState {
   shapes: Polygon[];
   activeTool: ToolType;
@@ -47,6 +60,9 @@ export interface AppState {
   snapEnabled: boolean;
   gridSize: number; // µm
   snapRadius: number; // pixels
+  layers: Layer[];
+  activeLayerName: string;
+  schemaVersion: number;
 }
 
 export interface Command {
@@ -83,6 +99,14 @@ export function worldToCanvas(wx: number, wy: number, vt: ViewTransform): Point 
   };
 }
 
+export function defaultLayers(): Layer[] {
+  return [
+    { name: '0',          color: '#4a9eff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true,  isAperture: true  },
+    { name: 'OUTLINE',    color: '#888888', linetype: 'DASHED',     lineweight: -1, visible: true, locked: false, plot: true,  isAperture: false },
+    { name: 'DIMENSIONS', color: '#3399ff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: false, isAperture: false },
+  ];
+}
+
 export function createDefaultState(): AppState {
   return {
     shapes: [],
@@ -94,6 +118,9 @@ export function createDefaultState(): AppState {
     snapEnabled: true,
     gridSize: 1000, // 1mm grid
     snapRadius: 8, // pixels
+    layers: defaultLayers(),
+    activeLayerName: '0',
+    schemaVersion: 2,
   };
 }
 

@@ -1,4 +1,5 @@
 import type { AppState } from '../types';
+import { createDefaultState, defaultLayers } from '../types';
 import localforage from 'localforage';
 
 const STORE_KEY = 'stencil_designer_autosave';
@@ -46,9 +47,27 @@ export async function saveState(state: AppState): Promise<void> {
   isDirty = false;
 }
 
-/** Load previously saved state, or null if nothing saved. */
+/** Load previously saved state, or null if nothing saved. Migrates from older schemas. */
 export async function loadState(): Promise<AppState | null> {
-  return localforage.getItem<AppState>(STORE_KEY);
+  const raw = await localforage.getItem<unknown>(STORE_KEY);
+  if (!raw) return null;
+  return migrateState(raw as Partial<AppState>);
+}
+
+function migrateState(s: Partial<AppState>): AppState {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const v = (s as any).schemaVersion ?? 1;
+  if (v >= 2) return s as AppState;
+  // v1→v2: layer system added, assign all shapes to layer '0'
+  return {
+    ...createDefaultState(),
+    ...s,
+    layers: defaultLayers(),
+    activeLayerName: '0',
+    schemaVersion: 2,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    shapes: ((s.shapes as any[]) ?? []).map((p: any) => ({ ...p, layer: '0' })),
+  };
 }
 
 /** Clear saved state. */

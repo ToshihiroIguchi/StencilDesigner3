@@ -99,7 +99,7 @@ export class PolygonTool extends BaseTool {
     super.cancel();
   }
 
-  private commit(_state: AppState): void {
+  private commit(state: AppState): void {
     if (this.vertices.length < 3) return;
     // Final validation uses committed vertices only — independent of hover state
     if (hasSelfIntersection(this.vertices)) return;
@@ -108,7 +108,7 @@ export class PolygonTool extends BaseTool {
         id: newId(),
         outer: this.vertices.map((p) => ({ ...p })),
         holes: [],
-        layer: '0',
+        layer: state.activeLayerName,
       });
       this.ctx.history.execute(new AddShapeCommand(poly));
       markDirty();
