@@ -73,11 +73,22 @@ function migrateState(s: Partial<AppState>): AppState {
   }
 
   // Inject new fields added after v2 if missing
-  return {
+  const finalState = {
     ...(state as AppState),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     dimensions: (state as any).dimensions ?? [],
   };
+
+  // Enforce DIMENSIONS layer invariants: never aperture, never active
+  finalState.layers = finalState.layers.map((l) =>
+    l.name === 'DIMENSIONS' ? { ...l, isAperture: false, plot: false } : l
+  );
+  if (finalState.activeLayerName === 'DIMENSIONS') {
+    const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);
+    if (fallback) finalState.activeLayerName = fallback.name;
+  }
+
+  return finalState;
 }
 
 /** Clear saved state. */

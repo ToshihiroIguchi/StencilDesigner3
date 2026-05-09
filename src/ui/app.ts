@@ -747,7 +747,7 @@ export class App {
         <span class="lyr-name" title="${layer.name}">${layer.name}</span>
         <button class="lyr-btn lyr-vis${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be hidden' : 'Visibility (V/H)'}">${layer.visible ? 'V' : 'H'}</button>
         <button class="lyr-btn lyr-lock${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be locked' : 'Lock (U/L)'}">${layer.locked ? 'L' : 'U'}</button>
-        <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}" title="Aperture layer">A</button>
+        <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}${layer.name === 'DIMENSIONS' ? ' lyr-btn-disabled' : ''}" title="${layer.name === 'DIMENSIONS' ? 'DIMENSIONS layer is never an aperture' : 'Aperture layer'}">A</button>
         <button class="lyr-btn lyr-del" title="Delete layer">×</button>
       `;
 
