@@ -72,11 +72,9 @@ function migrateState(s: Partial<AppState>): AppState {
     };
   }
 
-  // Inject new fields added after v2 if missing (annotations, dimensions)
+  // Inject new fields added after v2 if missing
   return {
     ...(state as AppState),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    annotations: (state as any).annotations ?? [],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     dimensions: (state as any).dimensions ?? [],
   };

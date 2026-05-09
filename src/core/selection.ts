@@ -1,4 +1,4 @@
-import type { Annotation, Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
+import type { Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
 import { canvasToWorld } from '../types';
 import { pointInRing } from '../normalize';
 import { distSqPointToSegment, midpoint, dist } from './geometry';
@@ -101,29 +101,6 @@ export function findSnapPoint(
 }
 
 // ─── Annotation hit test ──────────────────────────────────────────────────────
-
-export interface AnnotationHit {
-  id: string;
-  part: 'anchor' | 'textPos' | 'body';
-}
-
-export function hitTestAnnotation(
-  px: number, py: number,
-  annotations: Annotation[],
-  vt: ViewTransform,
-  snapRadius: number,
-): AnnotationHit | null {
-  const wp = canvasToWorld(px, py, vt);
-  const r = snapRadius / vt.zoom;
-  for (let i = annotations.length - 1; i >= 0; i--) {
-    const ann = annotations[i];
-    if (dist(wp, ann.anchor) <= r) return { id: ann.id, part: 'anchor' };
-    if (dist(wp, ann.textPos) <= r) return { id: ann.id, part: 'textPos' };
-    if (Math.sqrt(distSqPointToSegment(wp, ann.anchor, ann.textPos)) <= r)
-      return { id: ann.id, part: 'body' };
-  }
-  return null;
-}
 
 // ─── Dimension hit test ───────────────────────────────────────────────────────
 

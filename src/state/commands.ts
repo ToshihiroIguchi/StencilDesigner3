@@ -1,4 +1,5 @@
-import type { AppState, Command, Selection, Polygon, Ring, Layer, Annotation, Dimension } from '../types';
+import type { AppState, Command, Selection, Polygon, Ring, Layer, Dimension } from '../types';
+import { defaultLayers } from '../types';
 import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
 import { normalize, normalizeAll } from '../normalize';
@@ -337,37 +338,18 @@ export class UpdateLayerStyleCommand implements Command {
   }
 }
 
-// ─── Annotations ─────────────────────────────────────────────────────────────
-
-export class AddAnnotationCommand implements Command {
-  constructor(private ann: Annotation) {}
-  do(state: AppState): AppState {
-    return { ...state, annotations: [...state.annotations, this.ann] };
-  }
-  undo(state: AppState): AppState {
-    return { ...state, annotations: state.annotations.filter((a) => a.id !== this.ann.id) };
-  }
-}
-
-export class DeleteAnnotationCommand implements Command {
-  private saved: Annotation | null = null;
-  constructor(private id: string) {}
-  do(state: AppState): AppState {
-    this.saved = state.annotations.find((a) => a.id === this.id) ?? null;
-    return { ...state, annotations: state.annotations.filter((a) => a.id !== this.id) };
-  }
-  undo(state: AppState): AppState {
-    if (!this.saved) return state;
-    return { ...state, annotations: [...state.annotations, this.saved] };
-  }
-}
-
 // ─── Dimensions ───────────────────────────────────────────────────────────────
+
+const DIM_LAYER_TEMPLATE = defaultLayers().find((l) => l.name === 'DIMENSIONS')!;
 
 export class AddDimensionCommand implements Command {
   constructor(private dim: Dimension) {}
   do(state: AppState): AppState {
-    return { ...state, dimensions: [...state.dimensions, this.dim] };
+    // Auto-create DIMENSIONS layer if missing (not undone on undo — intentional)
+    const layers = state.layers.some((l) => l.name === 'DIMENSIONS')
+      ? state.layers
+      : [...state.layers, { ...DIM_LAYER_TEMPLATE }];
+    return { ...state, layers, dimensions: [...state.dimensions, this.dim] };
   }
   undo(state: AppState): AppState {
     return { ...state, dimensions: state.dimensions.filter((d) => d.id !== this.dim.id) };

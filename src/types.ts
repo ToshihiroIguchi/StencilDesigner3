@@ -20,7 +20,6 @@ export type ToolType =
   | 'rect'
   | 'circle'
   | 'polygon'
-  | 'text'
   | 'move'
   | 'copy'
   | 'delete'
@@ -52,15 +51,6 @@ export interface Layer {
   isAperture: boolean; // true=DRC target+DXF export target (app-specific, not written to DXF)
 }
 
-export interface Annotation {
-  id: string;
-  kind: 'leader';
-  anchor: Point;   // arrow tip (the point being annotated)
-  textPos: Point;  // where the text label sits
-  text: string;
-  layer: string;
-}
-
 export interface Dimension {
   id: string;
   kind: 'linear-h' | 'linear-v';
@@ -85,7 +75,6 @@ export interface AppState {
   snapRadius: number; // pixels
   layers: Layer[];
   activeLayerName: string;
-  annotations: Annotation[];
   dimensions: Dimension[];
   schemaVersion: number;
 }
@@ -145,7 +134,6 @@ export function createDefaultState(): AppState {
     snapRadius: 8, // pixels
     layers: defaultLayers(),
     activeLayerName: '0',
-    annotations: [],
     dimensions: [],
     schemaVersion: 2,
   };

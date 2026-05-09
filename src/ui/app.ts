@@ -8,15 +8,14 @@ import { CircleTool } from '../tools/circle';
 import { FilletTool } from '../tools/fillet';
 import { PolygonTool } from '../tools/polygon';
 import { MeasureTool } from '../tools/measure';
-import { TextTool } from '../tools/text';
 import { DimensionTool } from '../tools/dimension';
-import { findSnapPoint, hitTest, hitTestAnnotation, hitTestDimension } from '../core/selection';
+import { findSnapPoint, hitTest, hitTestDimension } from '../core/selection';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
   ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand,
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
   UpdateLayerStyleCommand, MoveShapesToLayerCommand,
-  DeleteAnnotationCommand, DeleteDimensionCommand,
+  DeleteDimensionCommand,
 } from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
 import { importDxf, type ImportResult } from '../dxf/importer';
@@ -27,7 +26,7 @@ import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
 import { fmtMm } from '../core/format';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | TextTool | DimensionTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -57,7 +56,6 @@ export class App {
   private drcErrors: DrcError[] = [];
   private diffStep: 0 | 1 | 2 = 0;
   private diffBaseId: string | null = null;
-  private selectedAnnotationId: string | null = null;
   private selectedDimId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -150,11 +148,8 @@ export class App {
       {
         measureOverlay: this.activeTool instanceof MeasureTool
           ? (this.activeTool.getMeasureOverlay() ?? undefined) : undefined,
-        annDraft: this.activeTool instanceof TextTool
-          ? (this.activeTool.getAnnDraft() ?? undefined) : undefined,
         dimDraft: this.activeTool instanceof DimensionTool
           ? (this.activeTool.getDimDraft() ?? undefined) : undefined,
-        selectedAnnotationId: this.selectedAnnotationId,
         selectedDimId: this.selectedDimId,
       },
     );
@@ -312,27 +307,17 @@ export class App {
     const { canvasPt, worldPt } = this.getCanvasPt(e);
     if (this.diffStep > 0) { this.handleDiffClick(canvasPt); return; }
 
-    // When select tool is active, check annotation/dim hits before polygons
+    // When select tool is active, check dim hits before polygons
     if (this.activeTool instanceof SelectTool) {
       const state = this.history.state;
-      const annHit = hitTestAnnotation(canvasPt.x, canvasPt.y, state.annotations, state, state.snapRadius);
-      if (annHit) {
-        this.selectedAnnotationId = annHit.id;
-        this.selectedDimId = null;
-        state.selection = [];
-        this.requestRender();
-        return;
-      }
       const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, state.dimensions, state, state.snapRadius);
       if (dimHit) {
         this.selectedDimId = dimHit.id;
-        this.selectedAnnotationId = null;
         state.selection = [];
         this.requestRender();
         return;
       }
-      // No annotation/dim hit — clear their selections
-      this.selectedAnnotationId = null;
+      // No dim hit — clear dim selection
       this.selectedDimId = null;
     }
 
@@ -417,7 +402,6 @@ export class App {
       if (e.key === 'p' || e.key === 'P') { this.setTool('polygon'); return; }
       if (e.key === 'f' || e.key === 'F') { this.setTool('fillet'); return; }
       if (e.key === 'm' || e.key === 'M') { this.setTool('measure'); return; }
-      if (e.key === 't' || e.key === 'T') { this.setTool('text'); return; }
       if (e.key === 'd' || e.key === 'D') { this.setTool('dimension'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
@@ -453,7 +437,6 @@ export class App {
       case 'polygon': this.activeTool = new PolygonTool(toolCtx); break;
       case 'fillet': this.activeTool = new FilletTool(toolCtx, this.filletRadius); break;
       case 'measure': this.activeTool = new MeasureTool(toolCtx); break;
-      case 'text': this.activeTool = new TextTool(toolCtx); break;
       case 'dimension': this.activeTool = new DimensionTool(toolCtx); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
@@ -477,14 +460,6 @@ export class App {
   }
 
   deleteSelected(): void {
-    if (this.selectedAnnotationId !== null) {
-      const id = this.selectedAnnotationId;
-      this.selectedAnnotationId = null;
-      this.history.execute(new DeleteAnnotationCommand(id));
-      markDirty();
-      this.requestRender();
-      return;
-    }
     if (this.selectedDimId !== null) {
       const id = this.selectedDimId;
       this.selectedDimId = null;
@@ -686,7 +661,7 @@ export class App {
     const viewW = this.canvas.width - RULER;
     const viewH = this.canvas.height - RULER;
 
-    if (state.shapes.length === 0 && state.annotations.length === 0 && state.dimensions.length === 0) {
+    if (state.shapes.length === 0 && state.dimensions.length === 0) {
       this.setZoom(0.5);
       state.panX = Math.round(RULER + viewW / 2);
       state.panY = Math.round(RULER + viewH / 2);
@@ -703,10 +678,6 @@ export class App {
       const bb = polygonBbox(s);
       expandBbox(bb.minX, bb.minY);
       expandBbox(bb.maxX, bb.maxY);
-    }
-    for (const a of state.annotations) {
-      expandBbox(a.anchor.x, a.anchor.y);
-      expandBbox(a.textPos.x, a.textPos.y);
     }
     for (const d of state.dimensions) {
       expandBbox(d.p1.x, d.p1.y);
@@ -737,7 +708,6 @@ export class App {
   async hardReset(): Promise<void> {
     if (!confirm('Clear all shapes and history?')) return;
     this.cancelDiffMode();
-    this.selectedAnnotationId = null;
     this.selectedDimId = null;
     await clearState();
     this.history.loadState(createDefaultState());
@@ -1046,17 +1016,6 @@ export class App {
     const infoEl = document.getElementById('selection-info');
     const propsEl = document.getElementById('shape-props');
     if (!infoEl) return;
-
-    // Annotation selected
-    if (this.selectedAnnotationId !== null) {
-      const ann = state.annotations.find((a) => a.id === this.selectedAnnotationId);
-      if (ann) {
-        infoEl.innerHTML = `<div class="shape-info"><span>Annotation</span><span>${ann.text}</span></div>
-          <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del to delete</p>`;
-        if (propsEl) propsEl.style.display = 'none';
-        return;
-      }
-    }
 
     // Dimension selected
     if (this.selectedDimId !== null) {

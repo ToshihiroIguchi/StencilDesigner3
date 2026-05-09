@@ -1,4 +1,4 @@
-import type { Annotation, AppState, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
+import type { AppState, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
 import { selectedIds } from '../core/transform';
 import { fmtMm, fmtMmBare } from '../core/format';
@@ -59,9 +59,6 @@ export type FilletVertexStatus = 'ok' | 'skip' | 'bad' | 'hover';
 /** Live distance overlay rendered by MeasureTool. */
 export interface MeasureOverlay { p1: Point; p2: Point; }
 
-/** In-progress annotation drawn by TextTool. */
-export interface AnnDraft { anchor: Point; textPos?: Point; }
-
 /** In-progress dimension drawn by DimensionTool. */
 export interface DimDraft {
   p1: Point;
@@ -72,9 +69,7 @@ export interface DimDraft {
 
 export interface RendererExtras {
   measureOverlay?: MeasureOverlay;
-  annDraft?: AnnDraft;
   dimDraft?: DimDraft;
-  selectedAnnotationId?: string | null;
   selectedDimId?: string | null;
 }
 
@@ -173,19 +168,9 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
-    // Annotations
-    if (state.annotations.length > 0) {
-      this.drawAnnotations(state.annotations, layerMap, extras?.selectedAnnotationId ?? null, vt);
-    }
-
     // Dimensions
     if (state.dimensions.length > 0) {
       this.drawDimensions(state.dimensions, layerMap, extras?.selectedDimId ?? null, vt);
-    }
-
-    // In-progress annotation draft
-    if (extras?.annDraft) {
-      this.drawAnnDraft(extras.annDraft, vt);
     }
 
     // In-progress dimension draft
@@ -570,69 +555,6 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
-  // ─── Annotation rendering ──────────────────────────────────────────────────
-
-  private drawAnnotations(
-    annotations: Annotation[],
-    layerMap: Map<string, Layer>,
-    selectedId: string | null,
-    vt: ViewTransform,
-  ): void {
-    for (const ann of annotations) {
-      const layer = layerMap.get(ann.layer);
-      if (layer && !layer.visible) continue;
-      const color = selectedId === ann.id ? COLORS.shapeSelected : (layer?.color ?? '#3399ff');
-      this.drawAnnotation(ann, color, vt);
-    }
-  }
-
-  private drawAnnotation(ann: Annotation, color: string, vt: ViewTransform): void {
-    const ctx = this.ctx;
-    const ca = worldToCanvas(ann.anchor.x, ann.anchor.y, vt);
-    const ct = worldToCanvas(ann.textPos.x, ann.textPos.y, vt);
-    const ARROW = 9;
-    const ANGLE = Math.PI / 6;
-
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 1.2;
-
-    // Leader line
-    ctx.beginPath();
-    ctx.moveTo(ca.x, ca.y);
-    ctx.lineTo(ct.x, ct.y);
-    ctx.stroke();
-
-    // Arrowhead at anchor
-    const ang = Math.atan2(ct.y - ca.y, ct.x - ca.x);
-    ctx.beginPath();
-    ctx.moveTo(ca.x, ca.y);
-    ctx.lineTo(ca.x + ARROW * Math.cos(ang + ANGLE), ca.y + ARROW * Math.sin(ang + ANGLE));
-    ctx.moveTo(ca.x, ca.y);
-    ctx.lineTo(ca.x + ARROW * Math.cos(ang - ANGLE), ca.y + ARROW * Math.sin(ang - ANGLE));
-    ctx.stroke();
-
-    // Dot at textPos
-    ctx.beginPath();
-    ctx.arc(ct.x, ct.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Text label
-    ctx.font = '11px monospace';
-    const tw = ctx.measureText(ann.text).width;
-    const padX = 4, padY = 2;
-    // Background
-    const bgColor = this.isDark ? 'rgba(30,30,46,0.85)' : 'rgba(245,245,240,0.85)';
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(ct.x + 6 - padX, ct.y - 8 - padY, tw + padX * 2, 16 + padY * 2);
-    ctx.fillStyle = color;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(ann.text, ct.x + 6, ct.y);
-    ctx.restore();
-  }
-
   // ─── Dimension rendering ───────────────────────────────────────────────────
 
   private static readonly DIM_ARROW = 8;
@@ -768,27 +690,6 @@ export class CanvasRenderer {
   }
 
   // ─── In-progress drafts ────────────────────────────────────────────────────
-
-  private drawAnnDraft(draft: AnnDraft, vt: ViewTransform): void {
-    if (!draft.textPos) return;
-    const ctx = this.ctx;
-    const ca = worldToCanvas(draft.anchor.x, draft.anchor.y, vt);
-    const ct = worldToCanvas(draft.textPos.x, draft.textPos.y, vt);
-    ctx.save();
-    ctx.strokeStyle = 'rgba(100,200,100,0.7)';
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(ca.x, ca.y);
-    ctx.lineTo(ct.x, ct.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.arc(ca.x, ca.y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(100,200,100,0.7)';
-    ctx.fill();
-    ctx.restore();
-  }
 
   private drawDimDraft(draft: DimDraft, vt: ViewTransform): void {
     const ctx = this.ctx;

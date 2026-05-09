@@ -16,7 +16,7 @@ export class DimensionTool extends BaseTool {
     super(ctx);
   }
 
-  onMouseDown(worldPt: Point, _canvasPt: Point, _shift: boolean, state: AppState): void {
+  onMouseDown(worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {
     const snapped = this.ctx.getSnapPoint(worldPt);
     if (this.step === 'p1') {
       this.p1 = snapped;
@@ -30,8 +30,7 @@ export class DimensionTool extends BaseTool {
     } else if (this.step === 'offset' && this.p1 && this.p2) {
       const kind = this.pickKind(this.p1, this.p2, snapped);
       const offset = kind === 'linear-h' ? snapped.y : snapped.x;
-      const layer = state.layers.some((l) => l.name === 'DIMENSIONS') ? 'DIMENSIONS' : state.activeLayerName;
-      const dim: Dimension = { id: newId(), kind, p1: this.p1, p2: this.p2, offset, layer };
+      const dim: Dimension = { id: newId(), kind, p1: this.p1, p2: this.p2, offset, layer: 'DIMENSIONS' };
       this.ctx.history.execute(new AddDimensionCommand(dim));
       markDirty();
       // Chain: next dimension starts from p2
