@@ -161,10 +161,31 @@ export function polygonsOverlap(a: Polygon, b: Polygon): boolean {
   return false;
 }
 
-function ringCentroid(ring: Ring): Point {
+export function ringCentroid(ring: Ring): Point {
   let sx = 0, sy = 0;
   for (const p of ring) { sx += p.x; sy += p.y; }
   return { x: Math.round(sx / ring.length), y: Math.round(sy / ring.length) };
+}
+
+/**
+ * True if the ring is an approximately regular n-gon with n >= 12 (≈ a circle).
+ *
+ * Tolerance is max(2µm, 2% of avg radius) to handle small circles where integer
+ * rounding from circleToPolygon dominates relative error. Threshold of 12 vertices
+ * avoids false positives on user-drawn octagons; circleToPolygon uses 64 by default.
+ */
+export function isRingCircleLike(ring: Ring): boolean {
+  if (ring.length < 12) return false;
+  const c = ringCentroid(ring);
+  let sum = 0;
+  for (const p of ring) sum += dist(p, c);
+  const avg = sum / ring.length;
+  if (avg < 1) return false;
+  const tol = Math.max(2, avg * 0.02);
+  for (const p of ring) {
+    if (Math.abs(dist(p, c) - avg) > tol) return false;
+  }
+  return true;
 }
 
 /**

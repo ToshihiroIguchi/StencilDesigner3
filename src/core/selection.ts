@@ -1,7 +1,7 @@
 import type { Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
 import { canvasToWorld } from '../types';
 import { pointInRing } from '../normalize';
-import { distSqPointToSegment, midpoint, dist } from './geometry';
+import { distSqPointToSegment, midpoint, dist, isRingCircleLike, ringCentroid } from './geometry';
 
 /**
  * Hit test at canvas coordinates (px, py).
@@ -75,6 +75,12 @@ export function findSnapPoint(
     if (shape.id === excludeShapeId) continue;
     const rings = [shape.outer, ...shape.holes];
     for (const ring of rings) {
+      // Center snap for circular rings (circleToPolygon-style n-gons with n >= 12)
+      if (isRingCircleLike(ring)) {
+        const c = ringCentroid(ring);
+        const d = dist(worldPt, c);
+        if (d < bestDist) { bestDist = d; best = c; }
+      }
       // Endpoints
       for (const p of ring) {
         const d = dist(worldPt, p);

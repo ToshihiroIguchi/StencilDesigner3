@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { rectToPolygon, circleToPolygon, lineToPolygon, translatePolygon, polygonArea, polygonBbox, snapToGrid, dist } from '../../src/core/geometry';
+import { rectToPolygon, circleToPolygon, lineToPolygon, translatePolygon, polygonArea, polygonBbox, snapToGrid, dist, isRingCircleLike, ringCentroid } from '../../src/core/geometry';
 import { area, signedArea2 } from '../../src/normalize';
+import type { Ring } from '../../src/types';
+
+function regularNgon(cx: number, cy: number, r: number, n: number): Ring {
+  const ring: Ring = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i * Math.PI * 2) / n;
+    ring.push({ x: Math.round(cx + r * Math.cos(a)), y: Math.round(cy + r * Math.sin(a)) });
+  }
+  return ring;
+}
 
 describe('rectToPolygon', () => {
   it('creates a rectangle with correct area', () => {
@@ -83,5 +93,60 @@ describe('dist', () => {
   it('calculates Euclidean distance', () => {
     expect(dist({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(5);
     expect(dist({ x: 0, y: 0 }, { x: 0, y: 0 })).toBe(0);
+  });
+});
+
+describe('isRingCircleLike', () => {
+  it('detects a 64-sided circle (default circleToPolygon)', () => {
+    expect(isRingCircleLike(circleToPolygon(0, 0, 1000).outer)).toBe(true);
+  });
+
+  it('detects a small 64-sided circle (radius 50µm) — covers absolute tolerance', () => {
+    expect(isRingCircleLike(circleToPolygon(0, 0, 50).outer)).toBe(true);
+  });
+
+  it('detects a tiny 64-sided circle (radius 30µm) — DRC-scale aperture', () => {
+    expect(isRingCircleLike(circleToPolygon(0, 0, 30).outer)).toBe(true);
+  });
+
+  it('rejects a rectangle (4 vertices)', () => {
+    expect(isRingCircleLike(rectToPolygon(0, 0, 1000, 1000).outer)).toBe(false);
+  });
+
+  it('rejects an octagon (8 vertices, below threshold)', () => {
+    expect(isRingCircleLike(regularNgon(0, 0, 1000, 8))).toBe(false);
+  });
+
+  it('rejects an 11-gon (just below threshold)', () => {
+    expect(isRingCircleLike(regularNgon(0, 0, 1000, 11))).toBe(false);
+  });
+
+  it('accepts a 12-gon (at threshold)', () => {
+    expect(isRingCircleLike(regularNgon(0, 0, 1000, 12))).toBe(true);
+  });
+
+  it('rejects a deformed circle (one vertex moved by 100µm)', () => {
+    const ring = circleToPolygon(0, 0, 1000).outer.map((p, i) =>
+      i === 0 ? { x: p.x + 100, y: p.y } : p
+    );
+    expect(isRingCircleLike(ring)).toBe(false);
+  });
+
+  it('rejects a degenerate ring (all points coincident)', () => {
+    const ring: Ring = Array(20).fill({ x: 0, y: 0 });
+    expect(isRingCircleLike(ring)).toBe(false);
+  });
+});
+
+describe('ringCentroid', () => {
+  it('returns the center of a circle (within 1µm rounding tolerance)', () => {
+    const c = ringCentroid(circleToPolygon(500, 300, 1000).outer);
+    expect(Math.abs(c.x - 500)).toBeLessThanOrEqual(1);
+    expect(Math.abs(c.y - 300)).toBeLessThanOrEqual(1);
+  });
+
+  it('returns the center of a rectangle', () => {
+    const c = ringCentroid(rectToPolygon(0, 0, 1000, 1000).outer);
+    expect(c).toEqual({ x: 500, y: 500 });
   });
 });
