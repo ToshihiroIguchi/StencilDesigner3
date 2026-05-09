@@ -745,8 +745,8 @@ export class App {
         <span class="lyr-active" title="Set active">${isActive ? '●' : '○'}</span>
         <input type="color" class="lyr-color" value="${layer.color}" title="Layer color">
         <span class="lyr-name" title="${layer.name}">${layer.name}</span>
-        <button class="lyr-btn lyr-vis" title="Visibility (V/H)">${layer.visible ? 'V' : 'H'}</button>
-        <button class="lyr-btn lyr-lock" title="Lock (U/L)">${layer.locked ? 'L' : 'U'}</button>
+        <button class="lyr-btn lyr-vis${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be hidden' : 'Visibility (V/H)'}">${layer.visible ? 'V' : 'H'}</button>
+        <button class="lyr-btn lyr-lock${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be locked' : 'Lock (U/L)'}">${layer.locked ? 'L' : 'U'}</button>
         <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}" title="Aperture layer">A</button>
         <button class="lyr-btn lyr-del" title="Delete layer">×</button>
       `;
@@ -1024,7 +1024,7 @@ export class App {
         const val = dim.kind === 'linear-h'
           ? fmtMm(Math.abs(dim.p2.x - dim.p1.x))
           : fmtMm(Math.abs(dim.p2.y - dim.p1.y));
-        infoEl.innerHTML = `<div class="shape-info"><span>Dimension</span><span>${dim.kind === 'linear-h' ? 'H' : 'V'}: ${val}</span></div>
+        infoEl.innerHTML = `<div class="shape-info"><span>Dimension</span><span>${dim.kind === 'linear-h' ? 'H' : 'V'}: ${val}</span><span style="color:var(--fg2)">Layer: ${dim.layer}</span></div>
           <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del to delete</p>`;
         if (propsEl) propsEl.style.display = 'none';
         return;
