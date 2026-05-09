@@ -8,11 +8,11 @@ import {
 import { rectToPolygon } from '../../src/core/geometry';
 
 describe('Layer commands', () => {
-  it('createDefaultState has 3 layers with activeLayerName=0', () => {
+  it('createDefaultState has 4 layers with activeLayerName=0', () => {
     const s = createDefaultState();
-    expect(s.layers).toHaveLength(3);
+    expect(s.layers).toHaveLength(4);
     expect(s.activeLayerName).toBe('0');
-    expect(s.schemaVersion).toBe(2);
+    expect(s.schemaVersion).toBe(3);
   });
 
   it('AddLayerCommand adds and undoes', () => {
@@ -22,10 +22,10 @@ describe('Layer commands', () => {
       lineweight: -1, visible: true, locked: false, plot: true, isAperture: false,
     });
     const s2 = cmd.do(s);
-    expect(s2.layers).toHaveLength(4);
+    expect(s2.layers).toHaveLength(5);
     expect(s2.layers.find((l) => l.name === 'TEST')).toBeDefined();
     const s3 = cmd.undo(s2);
-    expect(s3.layers).toHaveLength(3);
+    expect(s3.layers).toHaveLength(4);
     expect(s3.layers.find((l) => l.name === 'TEST')).toBeUndefined();
   });
 
@@ -33,7 +33,7 @@ describe('Layer commands', () => {
     const s = createDefaultState();
     const cmd = new AddLayerCommand({ name: '0', color: '#ff0000', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: false });
     const s2 = cmd.do(s);
-    expect(s2.layers).toHaveLength(3); // no change
+    expect(s2.layers).toHaveLength(4); // no change
   });
 
   it('DeleteLayerCommand mode=move shifts shapes to target', () => {
@@ -65,7 +65,8 @@ describe('Layer commands', () => {
 
   it('DeleteLayerCommand refuses to delete last layer', () => {
     let s = createDefaultState();
-    // delete OUTLINE and DIMENSIONS first
+    // delete REGMARK, OUTLINE and DIMENSIONS first
+    s = new DeleteLayerCommand('REGMARK', 'delete').do(s);
     s = new DeleteLayerCommand('OUTLINE', 'delete').do(s);
     s = new DeleteLayerCommand('DIMENSIONS', 'delete').do(s);
     expect(s.layers).toHaveLength(1);
@@ -91,7 +92,7 @@ describe('Layer commands', () => {
   it('RenameLayerCommand ignores duplicate name', () => {
     const s = createDefaultState();
     const s2 = new RenameLayerCommand('0', 'OUTLINE').do(s);
-    expect(s2.layers).toHaveLength(3); // no change
+    expect(s2.layers).toHaveLength(4); // no change
     expect(s2.layers.find((l) => l.name === '0')).toBeDefined();
   });
 
@@ -118,12 +119,17 @@ describe('Layer commands', () => {
 });
 
 describe('Schema migration', () => {
-  it('defaultLayers returns 3 layers', () => {
+  it('defaultLayers returns 4 layers including REGMARK', () => {
     const layers = defaultLayers();
-    expect(layers).toHaveLength(3);
+    expect(layers).toHaveLength(4);
     expect(layers[0].name).toBe('0');
     expect(layers[0].isAperture).toBe(true);
-    expect(layers[1].name).toBe('OUTLINE');
-    expect(layers[1].isAperture).toBe(false);
+    expect(layers[1].name).toBe('REGMARK');
+    expect(layers[1].isAperture).toBe(true);
+    expect(layers[1].color).toBe('#ff4444');
+    expect(layers[2].name).toBe('OUTLINE');
+    expect(layers[2].isAperture).toBe(false);
+    expect(layers[3].name).toBe('DIMENSIONS');
+    expect(layers[3].isAperture).toBe(false);
   });
 });

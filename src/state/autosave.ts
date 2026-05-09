@@ -60,7 +60,9 @@ function migrateState(s: Partial<AppState>): AppState {
   let state: Partial<AppState> = s;
 
   if (v < 2) {
-    // v1→v2: layer system added
+    // v1→v2: layer system added.
+    // Note: defaultLayers() returns the current (v3) defaults including REGMARK,
+    // so v1 data already has REGMARK after this step and skips the v2→v3 injection.
     state = {
       ...createDefaultState(),
       ...state,
@@ -69,6 +71,20 @@ function migrateState(s: Partial<AppState>): AppState {
       schemaVersion: 2,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       shapes: ((state.shapes as any[]) ?? []).map((p: any) => ({ ...p, layer: '0' })),
+    };
+  }
+
+  if (v < 3) {
+    // v2→v3: REGMARK layer added. Append only if missing so user-deleted REGMARK
+    // stays deleted after the first v3 save.
+    const REGMARK_TEMPLATE = defaultLayers().find((l) => l.name === 'REGMARK')!;
+    const existingLayers = state.layers ?? defaultLayers();
+    state = {
+      ...state,
+      schemaVersion: 3,
+      layers: existingLayers.some((l) => l.name === 'REGMARK')
+        ? existingLayers
+        : [...existingLayers, REGMARK_TEMPLATE],
     };
   }
 

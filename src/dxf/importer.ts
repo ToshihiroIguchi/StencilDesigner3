@@ -206,15 +206,16 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
   const importedLayers: Layer[] = Object.values(rawLayers).map((rl: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     const colorIndex = Math.abs(rl.colorIndex ?? 7);
     const visible = (rl.colorIndex ?? 7) >= 0 && !rl.frozen;
+    const name: string = rl.name ?? '0';
     return {
-      name: rl.name ?? '0',
+      name,
       color: aciToHex(colorIndex),
       linetype: normalizeLinetype(rl.lineType),
       lineweight: rl.lineweight ?? -1,
       visible,
       locked: !!rl.locked,
       plot: rl.plot !== false,
-      isAperture: false,
+      isAperture: name === 'REGMARK',
     };
   });
 
@@ -224,7 +225,7 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     if (!importedLayers.some((l) => l.name === name)) {
       importedLayers.push({
         name, color: '#ffffff', linetype: 'CONTINUOUS', lineweight: -1,
-        visible: true, locked: false, plot: true, isAperture: false,
+        visible: true, locked: false, plot: true, isAperture: name === 'REGMARK',
       });
     }
   }
