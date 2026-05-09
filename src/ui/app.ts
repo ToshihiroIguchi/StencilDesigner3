@@ -745,9 +745,8 @@ export class App {
         <span class="lyr-active" title="Set active">${isActive ? '●' : '○'}</span>
         <input type="color" class="lyr-color" value="${layer.color}" title="Layer color">
         <span class="lyr-name" title="${layer.name}">${layer.name}</span>
-        <button class="lyr-btn lyr-vis${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be hidden' : 'Visibility (V/H)'}">${layer.visible ? 'V' : 'H'}</button>
-        <button class="lyr-btn lyr-lock${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be locked' : 'Lock (U/L)'}">${layer.locked ? 'L' : 'U'}</button>
-        <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}${layer.name === 'DIMENSIONS' ? ' lyr-btn-disabled' : ''}" title="${layer.name === 'DIMENSIONS' ? 'DIMENSIONS layer is never an aperture' : 'Aperture layer'}">A</button>
+        <button class="lyr-btn lyr-vis${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be hidden' : 'Toggle visibility'}">${layer.visible ? 'V' : 'H'}</button>
+        <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}${layer.name === 'DIMENSIONS' ? ' lyr-btn-disabled' : ''}" title="${layer.name === 'DIMENSIONS' ? 'DIMENSIONS layer is never an aperture' : 'Toggle aperture (DRC + DXF export)'}">A</button>
         <button class="lyr-btn lyr-del" title="Delete layer">×</button>
       `;
 
@@ -764,9 +763,6 @@ export class App {
 
       row.querySelector('.lyr-vis')?.addEventListener('click', () => {
         this.toggleLayerVisible(layer.name);
-      });
-      row.querySelector('.lyr-lock')?.addEventListener('click', () => {
-        this.toggleLayerLocked(layer.name);
       });
       row.querySelector('.lyr-apt')?.addEventListener('click', () => {
         this.history.execute(new UpdateLayerStyleCommand(layer.name, { isAperture: !layer.isAperture }));
@@ -786,12 +782,9 @@ export class App {
     const layer = state.layers.find((l) => l.name === name);
     if (!layer) return;
     state.activeLayerName = name;
-    // Active layer must be visible and unlocked
+    // Active layer must be visible
     if (!layer.visible) {
       state.layers = state.layers.map((l) => l.name === name ? { ...l, visible: true } : l);
-    }
-    if (layer.locked) {
-      state.layers = state.layers.map((l) => l.name === name ? { ...l, locked: false } : l);
     }
     this.requestRender();
   }
@@ -808,13 +801,6 @@ export class App {
       const hiddenIds = new Set(state.shapes.filter((s) => s.layer === name).map((s) => s.id));
       state.selection = state.selection.filter((s) => !hiddenIds.has(s.shapeId));
     }
-    this.requestRender();
-  }
-
-  private toggleLayerLocked(name: string): void {
-    const state = this.history.state;
-    if (name === state.activeLayerName) return; // active layer cannot be locked
-    state.layers = state.layers.map((l) => l.name === name ? { ...l, locked: !l.locked } : l);
     this.requestRender();
   }
 
