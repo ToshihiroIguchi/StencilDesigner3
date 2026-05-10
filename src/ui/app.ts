@@ -486,10 +486,13 @@ export class App {
     this.requestRender();
   }
 
-  doUnion(): void {
+  async doUnion(): Promise<void> {
     const state = this.history.state;
     const sel = state.selection;
-    if (sel.length < 2) { alert('Select at least 2 shapes for Union'); return; }
+    if (sel.length < 2) {
+      await this.showMessageModal({ title: 'Union', message: 'Select at least 2 shapes for Union.' });
+      return;
+    }
     this.history.execute(new UnionCommand(sel));
     markDirty();
     this.requestRender();
@@ -541,27 +544,25 @@ export class App {
     }
   }
 
-  doCopy(): void {
+  async doCopy(): Promise<void> {
     const state = this.history.state;
     if (state.selection.length === 0) return;
-    const offsetDialog = prompt('Copy offset X,Y (µm):', '1000,0');
-    if (!offsetDialog) return;
-    const parts = offsetDialog.split(',').map((s) => parseInt(s.trim(), 10));
-    if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return;
-    this.history.execute(new CopyCommand(state.selection, parts[0], parts[1]));
+    const result = await this.showCopyModal();
+    if (result === null) return;
+    this.history.execute(new CopyCommand(state.selection, result.dx, result.dy));
     markDirty();
     this.requestRender();
   }
 
-  doArray(): void {
+  async doArray(): Promise<void> {
     const state = this.history.state;
-    if (state.selection.length === 0) { alert('Select shapes first'); return; }
-    const input = prompt('Array: nx,ny,pitchX,pitchY (µm)\nExample: 3,4,2000,2000', '3,3,2000,2000');
-    if (!input) return;
-    const parts = input.split(',').map((s) => parseInt(s.trim(), 10));
-    if (parts.length !== 4 || parts.some(isNaN)) { alert('Invalid input'); return; }
-    const [nx, ny, pitchX, pitchY] = parts;
-    this.history.execute(new ArrayCopyCommand(state.selection, nx, ny, pitchX, pitchY));
+    if (state.selection.length === 0) {
+      await this.showMessageModal({ title: 'Array Copy', message: 'Select shapes first.' });
+      return;
+    }
+    const result = await this.showArrayModal();
+    if (result === null) return;
+    this.history.execute(new ArrayCopyCommand(state.selection, result.nx, result.ny, result.pitchX, result.pitchY));
     markDirty();
     this.requestRender();
   }
@@ -576,7 +577,7 @@ export class App {
       const result = await importDxf(text);
       await this.showImportDialog(result);
     } catch (e) {
-      alert(`DXF import failed: ${e}`);
+      await this.showMessageModal({ title: 'Import DXF', message: `DXF import failed: ${e}` });
     }
   }
 
@@ -731,15 +732,166 @@ export class App {
     if (state.shapes.length > 0) {
       const apertureNames = new Set(state.layers.filter((l) => l.isAperture).map((l) => l.name));
       if (!state.shapes.some((s) => apertureNames.has(s.layer))) {
-        alert('No shapes to export. Mark at least one layer as aperture using the "A" button in the Layers panel.');
+        void this.showMessageModal({ title: 'Export', message: 'No shapes to export. Mark at least one layer as aperture using the "A" button in the Layers panel.' });
         return;
       }
     }
     downloadDxf(state.shapes, state.layers);
   }
 
+  private showMessageModal(opts: {
+    title: string; message: string;
+    okText?: string; cancelText?: string; danger?: boolean;
+  }): Promise<boolean> {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('message-modal') as HTMLElement;
+      const titleEl = document.getElementById('message-modal-title') as HTMLElement;
+      const msgEl = document.getElementById('message-modal-msg') as HTMLElement;
+      const okBtn = document.getElementById('message-modal-ok') as HTMLButtonElement;
+      const cancelBtn = document.getElementById('message-modal-cancel') as HTMLButtonElement;
+      titleEl.textContent = opts.title;
+      msgEl.textContent = opts.message;
+      okBtn.textContent = opts.okText ?? 'OK';
+      okBtn.style.color = opts.danger ? 'var(--danger)' : '';
+      if (opts.cancelText) {
+        cancelBtn.textContent = opts.cancelText;
+        cancelBtn.style.display = '';
+      } else {
+        cancelBtn.style.display = 'none';
+      }
+      modal.style.display = '';
+      okBtn.focus();
+      const close = (result: boolean) => {
+        modal.style.display = 'none';
+        cancelBtn.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        modal.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onOk = () => close(true);
+      const onCancel = () => close(false);
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Enter') close(true);
+        if (e.key === 'Escape') close(opts.cancelText ? false : true);
+      };
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      modal.addEventListener('keydown', onKey);
+    });
+  }
+
+  private showCopyModal(): Promise<{ dx: number; dy: number } | null> {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('copy-modal') as HTMLElement;
+      const xInput = document.getElementById('copy-modal-x') as HTMLInputElement;
+      const yInput = document.getElementById('copy-modal-y') as HTMLInputElement;
+      const okBtn = document.getElementById('copy-modal-ok') as HTMLButtonElement;
+      const cancelBtn = document.getElementById('copy-modal-cancel') as HTMLButtonElement;
+      modal.style.display = '';
+      xInput.focus();
+      xInput.select();
+      const close = (result: { dx: number; dy: number } | null) => {
+        modal.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        modal.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onOk = () => {
+        const dx = parseInt(xInput.value, 10);
+        const dy = parseInt(yInput.value, 10);
+        if (isNaN(dx) || isNaN(dy)) return;
+        close({ dx, dy });
+      };
+      const onCancel = () => close(null);
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Enter') onOk();
+        if (e.key === 'Escape') close(null);
+      };
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      modal.addEventListener('keydown', onKey);
+    });
+  }
+
+  private showArrayModal(): Promise<{ nx: number; ny: number; pitchX: number; pitchY: number } | null> {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('array-modal') as HTMLElement;
+      const nxInput = document.getElementById('array-modal-nx') as HTMLInputElement;
+      const nyInput = document.getElementById('array-modal-ny') as HTMLInputElement;
+      const pxInput = document.getElementById('array-modal-px') as HTMLInputElement;
+      const pyInput = document.getElementById('array-modal-py') as HTMLInputElement;
+      const okBtn = document.getElementById('array-modal-ok') as HTMLButtonElement;
+      const cancelBtn = document.getElementById('array-modal-cancel') as HTMLButtonElement;
+      modal.style.display = '';
+      nxInput.focus();
+      nxInput.select();
+      const close = (result: { nx: number; ny: number; pitchX: number; pitchY: number } | null) => {
+        modal.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        modal.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onOk = () => {
+        const nx = parseInt(nxInput.value, 10);
+        const ny = parseInt(nyInput.value, 10);
+        const pitchX = parseInt(pxInput.value, 10);
+        const pitchY = parseInt(pyInput.value, 10);
+        if ([nx, ny, pitchX, pitchY].some(isNaN) || nx < 1 || ny < 1) return;
+        close({ nx, ny, pitchX, pitchY });
+      };
+      const onCancel = () => close(null);
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Enter') onOk();
+        if (e.key === 'Escape') close(null);
+      };
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      modal.addEventListener('keydown', onKey);
+    });
+  }
+
+  private showInputModal(opts: {
+    title: string; label?: string; defaultValue?: string; okText?: string;
+  }): Promise<string | null> {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('input-modal') as HTMLElement;
+      const titleEl = document.getElementById('input-modal-title') as HTMLElement;
+      const labelEl = document.getElementById('input-modal-label') as HTMLElement;
+      const field = document.getElementById('input-modal-field') as HTMLInputElement;
+      const okBtn = document.getElementById('input-modal-ok') as HTMLButtonElement;
+      const cancelBtn = document.getElementById('input-modal-cancel') as HTMLButtonElement;
+      titleEl.textContent = opts.title;
+      labelEl.textContent = opts.label ?? '';
+      labelEl.style.display = opts.label ? '' : 'none';
+      field.value = opts.defaultValue ?? '';
+      okBtn.textContent = opts.okText ?? 'OK';
+      modal.style.display = '';
+      field.focus();
+      field.select();
+      const close = (result: string | null) => {
+        modal.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        field.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onOk = () => close(field.value.trim() || null);
+      const onCancel = () => close(null);
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Enter') close(field.value.trim() || null);
+        if (e.key === 'Escape') close(null);
+      };
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      field.addEventListener('keydown', onKey);
+    });
+  }
+
   async hardReset(): Promise<void> {
-    if (!confirm('Clear all shapes and history?')) return;
+    if (!await this.showMessageModal({ title: 'Clear All', message: 'Clear all shapes and history?', okText: 'Clear', cancelText: 'Cancel', danger: true })) return;
     this.cancelDiffMode();
     this.selectedDimId = null;
     await clearState();
@@ -837,13 +989,13 @@ export class App {
     this.requestRender();
   }
 
-  private addLayer(): void {
-    const name = prompt('New layer name:');
-    if (!name || !name.trim()) return;
+  private async addLayer(): Promise<void> {
+    const name = await this.showInputModal({ title: 'New Layer', label: 'Layer name:' });
+    if (!name) return;
     const trimmed = name.trim();
     const state = this.history.state;
     if (state.layers.some((l) => l.name === trimmed)) {
-      alert(`Layer "${trimmed}" already exists.`);
+      await this.showMessageModal({ title: 'New Layer', message: `Layer "${trimmed}" already exists.` });
       return;
     }
     this.history.execute(new AddLayerCommand({
@@ -854,13 +1006,13 @@ export class App {
     this.requestRender();
   }
 
-  private renameLayer(name: string): void {
-    const newName = prompt('Rename layer:', name);
-    if (!newName || !newName.trim() || newName.trim() === name) return;
+  private async renameLayer(name: string): Promise<void> {
+    const newName = await this.showInputModal({ title: 'Rename Layer', label: 'New name:', defaultValue: name });
+    if (!newName || newName.trim() === name) return;
     const trimmed = newName.trim();
     const state = this.history.state;
     if (state.layers.some((l) => l.name === trimmed)) {
-      alert(`Layer "${trimmed}" already exists.`);
+      await this.showMessageModal({ title: 'Rename Layer', message: `Layer "${trimmed}" already exists.` });
       return;
     }
     this.history.execute(new RenameLayerCommand(name, trimmed));
@@ -868,15 +1020,19 @@ export class App {
     this.requestRender();
   }
 
-  private deleteLayer(name: string): void {
+  private async deleteLayer(name: string): Promise<void> {
     const state = this.history.state;
     if (state.layers.length <= 1) {
-      alert('Cannot delete the last layer.');
+      await this.showMessageModal({ title: 'Delete Layer', message: 'Cannot delete the last layer.' });
       return;
     }
     const shapeCount = state.shapes.filter((s) => s.layer === name).length;
     if (shapeCount === 0) {
-      if (!confirm(`Delete layer "${name}"?`)) return;
+      const ok = await this.showMessageModal({
+        title: 'Delete Layer', message: `Delete layer "${name}"?`,
+        okText: 'Delete', cancelText: 'Cancel', danger: true,
+      });
+      if (!ok) return;
       this.history.execute(new DeleteLayerCommand(name, 'delete'));
       markDirty();
       this.requestRender();
@@ -906,8 +1062,13 @@ export class App {
       markDirty();
       this.requestRender();
     };
-    const onDel = () => {
-      if (!confirm(`Delete layer "${name}" and its ${shapeCount} shape(s)?`)) return;
+    const onDel = async () => {
+      const ok = await this.showMessageModal({
+        title: 'Delete Layer',
+        message: `Delete layer "${name}" and its ${shapeCount} shape(s)?`,
+        okText: 'Delete', cancelText: 'Cancel', danger: true,
+      });
+      if (!ok) return;
       close();
       this.history.execute(new DeleteLayerCommand(name, 'delete'));
       markDirty();

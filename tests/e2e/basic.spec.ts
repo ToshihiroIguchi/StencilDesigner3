@@ -512,8 +512,10 @@ test.describe('11. Copy', () => {
   test('11-1 Copy adds one more shape', async ({ page }) => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 200, box.y + 175);
-    page.on('dialog', (d) => d.accept('1000,0'));
     await page.click('#btn-copy-btn');
+    await page.fill('#copy-modal-x', '1000');
+    await page.fill('#copy-modal-y', '0');
+    await page.click('#copy-modal-ok');
     await page.waitForTimeout(200);
     expect(await shapeCount(page)).toBe(2);
   });
@@ -521,8 +523,10 @@ test.describe('11. Copy', () => {
   test('11-2 undo removes copy', async ({ page }) => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 200, box.y + 175);
-    page.on('dialog', (d) => d.accept('1000,0'));
     await page.click('#btn-copy-btn');
+    await page.fill('#copy-modal-x', '1000');
+    await page.fill('#copy-modal-y', '0');
+    await page.click('#copy-modal-ok');
     await page.waitForTimeout(200);
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(50);
@@ -543,8 +547,12 @@ test.describe('12. Array copy', () => {
   test('12-1 3×3 array creates 9 shapes total', async ({ page }) => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 150, box.y + 150);
-    page.on('dialog', (d) => d.accept('3,3,2000,2000'));
     await page.click('#btn-array');
+    await page.fill('#array-modal-nx', '3');
+    await page.fill('#array-modal-ny', '3');
+    await page.fill('#array-modal-px', '2000');
+    await page.fill('#array-modal-py', '2000');
+    await page.click('#array-modal-ok');
     await page.waitForTimeout(300);
     expect(await shapeCount(page)).toBe(9);
   });
@@ -552,8 +560,12 @@ test.describe('12. Array copy', () => {
   test('12-2 2×1 array creates 2 shapes', async ({ page }) => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 150, box.y + 150);
-    page.on('dialog', (d) => d.accept('2,1,3000,0'));
     await page.click('#btn-array');
+    await page.fill('#array-modal-nx', '2');
+    await page.fill('#array-modal-ny', '1');
+    await page.fill('#array-modal-px', '3000');
+    await page.fill('#array-modal-py', '0');
+    await page.click('#array-modal-ok');
     await page.waitForTimeout(200);
     expect(await shapeCount(page)).toBe(2);
   });
@@ -561,8 +573,12 @@ test.describe('12. Array copy', () => {
   test('12-3 undo removes array copies', async ({ page }) => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 150, box.y + 150);
-    page.on('dialog', (d) => d.accept('3,3,2000,2000'));
     await page.click('#btn-array');
+    await page.fill('#array-modal-nx', '3');
+    await page.fill('#array-modal-ny', '3');
+    await page.fill('#array-modal-px', '2000');
+    await page.fill('#array-modal-py', '2000');
+    await page.click('#array-modal-ok');
     await page.waitForTimeout(300);
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(100);
