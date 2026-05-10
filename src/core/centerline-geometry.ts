@@ -24,13 +24,37 @@ function midpointInt(a: Point, b: Point): Point {
   return { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) };
 }
 
+/**
+ * Ratio by which the centerline extends beyond each endpoint.
+ * 0.1 = 10% of the centerline length on each side, matching AutoCAD LT convention.
+ * Being proportional (not absolute) means it scales naturally with any shape size.
+ */
+const CENTERLINE_EXTENSION_RATIO = 0.1;
+
 function parallelCenterline(e1: [Point, Point], e2: [Point, Point]): { p1: Point; p2: Point } {
   const [a1, a2] = e1;
   // Match endpoints by proximity so the centerline runs a1↔b1 and a2↔b2
   const d00 = sqDist(a1, e2[0]);
   const d01 = sqDist(a1, e2[1]);
   const [b1, b2] = d00 <= d01 ? [e2[0], e2[1]] : [e2[1], e2[0]];
-  return { p1: midpointInt(a1, b1), p2: midpointInt(a2, b2) };
+
+  // Midpoint-to-midpoint centerline (same length as the edges)
+  const m1 = midpointInt(a1, b1);
+  const m2 = midpointInt(a2, b2);
+
+  // Extend both ends by CENTERLINE_EXTENSION_RATIO of the centerline length
+  const dx = m2.x - m1.x;
+  const dy = m2.y - m1.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 0.5) return { p1: m1, p2: m2 };
+
+  const ext = Math.round(len * CENTERLINE_EXTENSION_RATIO);
+  const ux = dx / len;
+  const uy = dy / len;
+  return {
+    p1: { x: Math.round(m1.x - ux * ext), y: Math.round(m1.y - uy * ext) },
+    p2: { x: Math.round(m2.x + ux * ext), y: Math.round(m2.y + uy * ext) },
+  };
 }
 
 function bisectorCenterline(e1: [Point, Point], e2: [Point, Point]): { p1: Point; p2: Point } | null {
@@ -67,8 +91,10 @@ function bisectorCenterline(e1: [Point, Point], e2: [Point, Point]): { p1: Point
   const midDir = { x: (midA.x + midB.x) / 2 - ix, y: (midA.y + midB.y) / 2 - iy };
   if (bx * midDir.x + by * midDir.y < 0) { bx = -bx; by = -by; }
 
-  // Length = mean edge length / 2 (bisector extends from intersection)
-  const halfLen = Math.round((lenA + lenB) / 4);
+  // Half-length = mean edge length / 2, extended by CENTERLINE_EXTENSION_RATIO on each end
+  const baseHalf = Math.round((lenA + lenB) / 4);
+  const ext = Math.round(baseHalf * 2 * CENTERLINE_EXTENSION_RATIO);
+  const halfLen = baseHalf + ext;
   return {
     p1: { x: Math.round(ix - halfLen * bx), y: Math.round(iy - halfLen * by) },
     p2: { x: Math.round(ix + halfLen * bx), y: Math.round(iy + halfLen * by) },
@@ -77,8 +103,8 @@ function bisectorCenterline(e1: [Point, Point], e2: [Point, Point]): { p1: Point
 
 /**
  * Compute the centerline between two edges.
- * - Parallel edges: midpoint-to-midpoint (endpoint-matched by proximity).
- * - Non-parallel: angle bisector through the intersection point.
+ * - Parallel edges: midpoint-to-midpoint, extended by 10% on each end.
+ * - Non-parallel: angle bisector through the intersection point, same extension ratio.
  * Returns null if the geometry is degenerate.
  */
 export function centerlineEndpoints(

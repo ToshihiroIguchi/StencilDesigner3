@@ -1,5 +1,5 @@
 import type { AppState, Command, Selection, Polygon, Ring, Layer, Dimension, DimensionAnchor, Point } from '../types';
-import { defaultLayers } from '../types';
+import { DIMENSIONS_LAYER } from '../types';
 import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
 import { normalize, normalizeAll } from '../normalize';
@@ -438,7 +438,7 @@ export class UpdateLayerStyleCommand implements Command {
 
 // ─── Dimensions ───────────────────────────────────────────────────────────────
 
-const DIM_LAYER_TEMPLATE = defaultLayers().find((l) => l.name === 'DIMENSIONS')!;
+const DIM_LAYER_TEMPLATE = DIMENSIONS_LAYER;
 
 export class AddDimensionCommand implements Command {
   constructor(private dim: Dimension) {}

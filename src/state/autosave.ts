@@ -1,5 +1,5 @@
 import type { AppState, Dimension, DimensionAnchor } from '../types';
-import { createDefaultState, defaultLayers } from '../types';
+import { createDefaultState, defaultLayers, REGMARK_LAYER, DIMENSIONS_LAYER } from '../types';
 import { vertex } from '../core/vertex';
 import localforage from 'localforage';
 
@@ -76,16 +76,14 @@ function migrateState(s: Partial<AppState>): AppState {
   }
 
   if (v < 3) {
-    // v2→v3: REGMARK layer added. Append only if missing so user-deleted REGMARK
-    // stays deleted after the first v3 save.
-    const REGMARK_TEMPLATE = defaultLayers().find((l) => l.name === 'REGMARK')!;
+    // v2→v3: REGMARK layer added.
     const existingLayers = state.layers ?? defaultLayers();
     state = {
       ...state,
       schemaVersion: 3,
       layers: existingLayers.some((l) => l.name === 'REGMARK')
         ? existingLayers
-        : [...existingLayers, REGMARK_TEMPLATE],
+        : [...existingLayers, { ...REGMARK_LAYER }],
     };
   }
 
@@ -126,19 +124,31 @@ function migrateState(s: Partial<AppState>): AppState {
     };
   }
 
-  // Inject new fields added after v2 if missing
+  if (v < 5) {
+    // v4→v5: REGMARK and OUTLINE removed from defaults.
+    // Move any shapes on those layers to '0' so no data is lost.
+    const LEGACY = new Set(['REGMARK', 'OUTLINE']);
+    const newLayers = (state.layers ?? []).filter((l) => !LEGACY.has(l.name));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newShapes = ((state.shapes ?? []) as any[]).map((s: any) =>
+      LEGACY.has(s.layer) ? { ...s, layer: '0' } : s
+    );
+    state = { ...state, schemaVersion: 5, layers: newLayers, shapes: newShapes };
+  }
+
   const finalState = {
     ...(state as AppState),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     dimensions: (state as any).dimensions ?? [],
   };
 
-  // Fill in missing isAperture from defaults (old saves lack this field)
-  const defaultApertureMap: Record<string, boolean> = Object.fromEntries(
-    defaultLayers().map((l) => [l.name, l.isAperture])
-  );
+  // Fill in missing isAperture from defaults (old saves may lack this field).
+  // Include legacy layer names so saves in mid-migration retain correct flags.
+  const defaultApertureMap: Record<string, boolean> = {
+    '0': true, 'REGMARK': true, 'OUTLINE': false, 'DIMENSIONS': false,
+  };
   finalState.layers = finalState.layers.map((l) => {
-    if (l.name === 'DIMENSIONS') return { ...l, isAperture: false, plot: false };
+    if (l.name === 'DIMENSIONS') return { ...DIMENSIONS_LAYER, visible: l.visible, locked: l.locked };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((l as any).isAperture === undefined) {
       return { ...l, isAperture: defaultApertureMap[l.name] ?? false };

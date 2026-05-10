@@ -147,29 +147,47 @@ export function worldToCanvas(wx: number, wy: number, vt: ViewTransform): Point 
 }
 
 export function defaultLayers(): Layer[] {
+  // Only layer '0' is created by default. All other layers (REGMARK, OUTLINE,
+  // DIMENSIONS) are either added on demand or by the user. This keeps the layer
+  // panel uncluttered for new documents.
   return [
-    { name: '0',          color: '#4a9eff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true,  isAperture: true  },
-    { name: 'REGMARK',    color: '#ff4444', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true,  isAperture: true  },
-    { name: 'OUTLINE',    color: '#888888', linetype: 'DASHED',     lineweight: -1, visible: true, locked: false, plot: true,  isAperture: false },
-    { name: 'DIMENSIONS', color: '#aabbdd', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: false, isAperture: false },
+    { name: '0', color: '#4a9eff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: true },
   ];
 }
+
+/** Registration-mark layer definition (not a default — add when needed). */
+export const REGMARK_LAYER: Layer = {
+  name: 'REGMARK', color: '#ff4444', linetype: 'CONTINUOUS',
+  lineweight: -1, visible: true, locked: false, plot: true, isAperture: true,
+};
+
+/** Outline/frame layer definition (not a default — add when needed). */
+export const OUTLINE_LAYER: Layer = {
+  name: 'OUTLINE', color: '#888888', linetype: 'DASHED',
+  lineweight: -1, visible: true, locked: false, plot: true, isAperture: false,
+};
+
+/** Auto-managed DIMENSIONS layer (injected by AddDimensionCommand). */
+export const DIMENSIONS_LAYER: Layer = {
+  name: 'DIMENSIONS', color: '#aabbdd', linetype: 'CONTINUOUS',
+  lineweight: -1, visible: true, locked: false, plot: false, isAperture: false,
+};
 
 export function createDefaultState(): AppState {
   return {
     shapes: [],
     activeTool: 'select',
     selection: [],
-    zoom: 0.5, // 0.5 canvas pixels per µm (1mm = 500px)
+    zoom: 0.5,
     panX: 50,
     panY: 50,
     snapEnabled: true,
-    gridSize: 1000, // 1mm grid
-    snapRadius: 8, // pixels
+    gridSize: 1000,
+    snapRadius: 8,
     layers: defaultLayers(),
     activeLayerName: '0',
     dimensions: [],
-    schemaVersion: 4,
+    schemaVersion: 5,
   };
 }
 
