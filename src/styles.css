@@ -18,7 +18,7 @@
   --success: #a6e3a1;
   --header-h: 44px;
   --toolbar-w: 56px;
-  --right-w: 220px;
+  --right-w: 250px;
   --footer-h: 28px;
   --ruler-size: 24px;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -343,3 +343,38 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Layer Panel ─────────────────────────────────────────────────────────── */
+#layer-list { display: flex; flex-direction: column; gap: 2px; }
+
+.layer-row {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 4px; border-radius: 4px; cursor: pointer;
+  font-size: 11px; border-left: 3px solid transparent;
+}
+.layer-row:hover { background: var(--btn-hover); }
+.layer-row.is-active { background: var(--btn-active); }
+.layer-row.is-aperture { border-left-color: #4a9eff; }
+
+.lyr-active { width: 12px; text-align: center; flex-shrink: 0; cursor: pointer; }
+.lyr-color { width: 18px; height: 18px; border: none; padding: 0; cursor: pointer; border-radius: 2px; flex-shrink: 0; }
+.lyr-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.lyr-btn { padding: 1px 3px; font-size: 10px; background: none; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; color: var(--fg2); flex-shrink: 0; }
+.lyr-btn:hover { background: var(--btn-hover); color: var(--fg); }
+.lyr-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.lyr-del { color: var(--danger); border-color: transparent; }
+.lyr-del:hover { border-color: var(--danger); }
+.lyr-btn-disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+.mini-btn { margin-left: auto; padding: 1px 6px; background: none; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; color: var(--fg2); font-size: 12px; }
+.mini-btn:hover { background: var(--btn-hover); color: var(--fg); }
+
+/* ── Modals ──────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.modal-box {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 20px; min-width: 300px; max-width: 420px;
+}
+.modal-title { font-weight: bold; font-size: 14px; margin-bottom: 12px; }

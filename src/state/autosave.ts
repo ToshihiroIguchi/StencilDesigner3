@@ -1,4 +1,6 @@
-import type { AppState } from '../types';
+import type { AppState, Dimension, DimensionAnchor } from '../types';
+import { createDefaultState, defaultLayers } from '../types';
+import { vertex } from '../core/vertex';
 import localforage from 'localforage';
 
 const STORE_KEY = 'stencil_designer_autosave';
@@ -46,9 +48,101 @@ export async function saveState(state: AppState): Promise<void> {
   isDirty = false;
 }
 
-/** Load previously saved state, or null if nothing saved. */
+/** Load previously saved state, or null if nothing saved. Migrates from older schemas. */
 export async function loadState(): Promise<AppState | null> {
-  return localforage.getItem<AppState>(STORE_KEY);
+  const raw = await localforage.getItem<unknown>(STORE_KEY);
+  if (!raw) return null;
+  return migrateState(raw as Partial<AppState>);
+}
+
+function migrateState(s: Partial<AppState>): AppState {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const v = (s as any).schemaVersion ?? 1;
+  let state: Partial<AppState> = s;
+
+  if (v < 2) {
+    // v1→v2: layer system added.
+    // Note: defaultLayers() returns the current (v3) defaults including REGMARK,
+    // so v1 data already has REGMARK after this step and skips the v2→v3 injection.
+    state = {
+      ...createDefaultState(),
+      ...state,
+      layers: defaultLayers(),
+      activeLayerName: '0',
+      schemaVersion: 2,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      shapes: ((state.shapes as any[]) ?? []).map((p: any) => ({ ...p, layer: '0' })),
+    };
+  }
+
+  if (v < 3) {
+    // v2→v3: REGMARK layer added. Append only if missing so user-deleted REGMARK
+    // stays deleted after the first v3 save.
+    const REGMARK_TEMPLATE = defaultLayers().find((l) => l.name === 'REGMARK')!;
+    const existingLayers = state.layers ?? defaultLayers();
+    state = {
+      ...state,
+      schemaVersion: 3,
+      layers: existingLayers.some((l) => l.name === 'REGMARK')
+        ? existingLayers
+        : [...existingLayers, REGMARK_TEMPLATE],
+    };
+  }
+
+  if (v < 4) {
+    // v3→v4: Vertex IDs added to Ring. All vertices without an 'id' get one.
+    // Old Dimension format used p1/p2; convert to free anchors.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const assignIds = (ring: any[]): any[] =>
+      ring.map((p: any) => (p.id ? p : vertex(p.x, p.y)));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const migratedShapes = ((state.shapes ?? []) as any[]).map((shape: any) => ({
+      ...shape,
+      outer: assignIds(shape.outer ?? []),
+      holes: (shape.holes ?? []).map(assignIds),
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const migratedDims: Dimension[] = ((state as any).dimensions ?? []).map((d: any): Dimension => {
+      if (d.anchor1 && d.anchor2) return d as Dimension; // already v4
+      const freeAnchor = (pt: { x: number; y: number }): DimensionAnchor => ({
+        kind: 'free',
+        point: { x: pt.x, y: pt.y },
+      });
+      return {
+        id: d.id,
+        kind: d.kind,
+        anchor1: freeAnchor(d.p1 ?? { x: 0, y: 0 }),
+        anchor2: freeAnchor(d.p2 ?? { x: 0, y: 0 }),
+        offset: d.offset ?? 0,
+        layer: d.layer ?? 'DIMENSIONS',
+        frozen: true,
+      };
+    });
+    state = {
+      ...state,
+      schemaVersion: 4,
+      shapes: migratedShapes,
+      dimensions: migratedDims,
+    };
+  }
+
+  // Inject new fields added after v2 if missing
+  const finalState = {
+    ...(state as AppState),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dimensions: (state as any).dimensions ?? [],
+  };
+
+  // Enforce DIMENSIONS layer invariants: never aperture, never plotted
+  finalState.layers = finalState.layers.map((l) =>
+    l.name === 'DIMENSIONS' ? { ...l, isAperture: false, plot: false } : l
+  );
+  if (finalState.activeLayerName === 'DIMENSIONS') {
+    const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);
+    if (fallback) finalState.activeLayerName = fallback.name;
+  }
+
+  return finalState;
 }
 
 /** Clear saved state. */

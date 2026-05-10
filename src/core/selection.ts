@@ -1,7 +1,8 @@
-import type { Point, Polygon, Selection, ViewTransform } from '../types';
+import type { Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
 import { canvasToWorld } from '../types';
 import { pointInRing } from '../normalize';
-import { distSqPointToSegment, midpoint, dist } from './geometry';
+import { distSqPointToSegment, midpoint, dist, isRingCircleLike, ringCentroid } from './geometry';
+import { resolveDimension } from './dimension-resolve';
 
 /**
  * Hit test at canvas coordinates (px, py).
@@ -75,6 +76,12 @@ export function findSnapPoint(
     if (shape.id === excludeShapeId) continue;
     const rings = [shape.outer, ...shape.holes];
     for (const ring of rings) {
+      // Center snap for circular rings (circleToPolygon-style n-gons with n >= 12)
+      if (isRingCircleLike(ring)) {
+        const c = ringCentroid(ring);
+        const d = dist(worldPt, c);
+        if (d < bestDist) { bestDist = d; best = c; }
+      }
       // Endpoints
       for (const p of ring) {
         const d = dist(worldPt, p);
@@ -98,6 +105,43 @@ export function findSnapPoint(
   }
 
   return best;
+}
+
+// ─── Annotation hit test ──────────────────────────────────────────────────────
+
+// ─── Dimension hit test ───────────────────────────────────────────────────────
+
+export interface DimHit {
+  id: string;
+  part: 'p1' | 'p2' | 'dimLine';
+}
+
+export function hitTestDimension(
+  px: number, py: number,
+  dimensions: Dimension[],
+  shapes: Polygon[],
+  vt: ViewTransform,
+  snapRadius: number,
+): DimHit | null {
+  const wp = canvasToWorld(px, py, vt);
+  const r = snapRadius / vt.zoom;
+  for (let i = dimensions.length - 1; i >= 0; i--) {
+    const dim = dimensions[i];
+    const { p1, p2 } = resolveDimension(dim, shapes);
+    if (dist(wp, p1) <= r) return { id: dim.id, part: 'p1' };
+    if (dist(wp, p2) <= r) return { id: dim.id, part: 'p2' };
+    let ds: Point, de: Point;
+    if (dim.kind === 'centerline') {
+      ds = p1; de = p2;
+    } else if (dim.kind === 'linear-h') {
+      ds = { x: p1.x, y: dim.offset }; de = { x: p2.x, y: dim.offset };
+    } else {
+      ds = { x: dim.offset, y: p1.y }; de = { x: dim.offset, y: p2.y };
+    }
+    if (Math.sqrt(distSqPointToSegment(wp, ds, de)) <= r)
+      return { id: dim.id, part: 'dimLine' };
+  }
+  return null;
 }
 
 /** Get all shapes that are fully within the rubber-band selection box. */

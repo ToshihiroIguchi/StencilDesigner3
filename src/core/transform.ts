@@ -1,4 +1,4 @@
-import type { AppState, Selection, Polygon, Point } from '../types';
+import type { AppState, Selection, Polygon, Vertex } from '../types';
 import { normalize, normalizeAll } from '../normalize';
 import { polygonBbox, translatePolygon } from './geometry';
 
@@ -68,7 +68,7 @@ export function arrayCopyShapes(
 
 /**
  * Resize a polygon to a new bounding box, scaling all points proportionally.
- * Holes are scaled relative to the same bbox origin.
+ * Vertex IDs are preserved through scaling.
  */
 export function resizePolygon(
   poly: Polygon,
@@ -80,14 +80,15 @@ export function resizePolygon(
   const bb = polygonBbox(poly);
   const oldW = bb.maxX - bb.minX;
   const oldH = bb.maxY - bb.minY;
-  const scalePoint = (p: Point): Point => ({
+  const scaleVertex = (p: Vertex): Vertex => ({
+    ...p,
     x: oldW === 0 ? newMinX : Math.round(newMinX + (p.x - bb.minX) * newW / oldW),
     y: oldH === 0 ? newMinY : Math.round(newMinY + (p.y - bb.minY) * newH / oldH),
   });
   return normalize({
     ...poly,
-    outer: poly.outer.map(scalePoint),
-    holes: poly.holes.map((h) => h.map(scalePoint)),
+    outer: poly.outer.map(scaleVertex),
+    holes: poly.holes.map((h) => h.map(scaleVertex)),
   });
 }
 

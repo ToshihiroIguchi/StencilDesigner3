@@ -5,8 +5,12 @@ export interface Point {
   y: number; // integer µm
 }
 
+export interface Vertex extends Point {
+  id: string; // persistent identity, survives normalize/move/resize
+}
+
 /** Closed polygon ring. The last point must NOT equal the first (implicit closure). */
-export type Ring = Point[];
+export type Ring = Vertex[];
 
 export interface Polygon {
   id: string;
@@ -20,14 +24,16 @@ export type ToolType =
   | 'rect'
   | 'circle'
   | 'polygon'
-  | 'text'
   | 'move'
   | 'copy'
   | 'delete'
   | 'array'
   | 'union'
   | 'difference'
-  | 'fillet';
+  | 'fillet'
+  | 'measure'
+  | 'dimension'
+  | 'centerline';
 
 export interface Selection {
   type: 'vertex' | 'edge' | 'polygon';
@@ -35,6 +41,59 @@ export interface Selection {
   /** vertex/edge index within the outer ring (or hole ring if holeIndex >= 0) */
   index: number;
   holeIndex: number; // -1 = outer ring
+}
+
+export type LineType = 'CONTINUOUS' | 'DASHED' | 'HIDDEN' | 'CENTER' | 'PHANTOM' | 'DASHDOT';
+
+export interface Layer {
+  name: string;        // unique key, DXF group code 8
+  color: string;       // CSS color "#RRGGBB"
+  linetype: LineType;
+  lineweight: number;  // 0.01mm units, -1=default
+  visible: boolean;
+  locked: boolean;
+  plot: boolean;       // DXF export flag
+  isAperture: boolean; // true=DRC target+DXF export target (app-specific, not written to DXF)
+}
+
+/**
+ * Reference to a specific vertex or edge of a polygon ring.
+ * Vertex IDs survive translate/resize/normalize. Boolean operations generate new IDs.
+ */
+export type DimensionAnchor =
+  | {
+      kind: 'vertex';
+      shapeId: string;
+      ringIndex: number;   // -1 = outer, 0+ = hole index
+      vertexId: string;    // Vertex.id of the referenced vertex
+      cachedPoint: Point;  // last resolved position (fallback when shape deleted)
+    }
+  | {
+      kind: 'edge';
+      shapeId: string;
+      ringIndex: number;
+      edgeStartId: string; // Vertex.id of edge start
+      edgeEndId: string;   // Vertex.id of edge end
+      cachedPoint: Point;  // for centerline: the centerline endpoint; for linear: edge midpoint
+    }
+  | {
+      kind: 'free';
+      point: Point;        // absolute world coordinate (no shape ref)
+    };
+
+export interface Dimension {
+  id: string;
+  kind: 'linear-h' | 'linear-v' | 'centerline';
+  anchor1: DimensionAnchor;
+  anchor2: DimensionAnchor;
+  /** World coordinate of the dimension line.
+   *  linear-h: Y coordinate of the horizontal dim line.
+   *  linear-v: X coordinate of the vertical dim line.
+   *  centerline: unused (always 0). */
+  offset: number;
+  layer: string;
+  /** True when at least one anchor cannot be resolved (shape deleted or boolean consumed). */
+  frozen: boolean;
 }
 
 export interface AppState {
@@ -47,6 +106,10 @@ export interface AppState {
   snapEnabled: boolean;
   gridSize: number; // µm
   snapRadius: number; // pixels
+  layers: Layer[];
+  activeLayerName: string;
+  dimensions: Dimension[];
+  schemaVersion: number;
 }
 
 export interface Command {
@@ -83,6 +146,15 @@ export function worldToCanvas(wx: number, wy: number, vt: ViewTransform): Point 
   };
 }
 
+export function defaultLayers(): Layer[] {
+  return [
+    { name: '0',          color: '#4a9eff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true,  isAperture: true  },
+    { name: 'REGMARK',    color: '#ff4444', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true,  isAperture: true  },
+    { name: 'OUTLINE',    color: '#888888', linetype: 'DASHED',     lineweight: -1, visible: true, locked: false, plot: true,  isAperture: false },
+    { name: 'DIMENSIONS', color: '#aabbdd', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: false, isAperture: false },
+  ];
+}
+
 export function createDefaultState(): AppState {
   return {
     shapes: [],
@@ -94,6 +166,10 @@ export function createDefaultState(): AppState {
     snapEnabled: true,
     gridSize: 1000, // 1mm grid
     snapRadius: 8, // pixels
+    layers: defaultLayers(),
+    activeLayerName: '0',
+    dimensions: [],
+    schemaVersion: 4,
   };
 }
 

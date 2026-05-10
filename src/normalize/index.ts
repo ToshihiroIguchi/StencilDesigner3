@@ -1,13 +1,13 @@
 import type { Point, Ring, Polygon } from '../types';
 
-/** Remove consecutive duplicate points from a ring. */
+/** Remove consecutive duplicate points from a ring, preserving vertex IDs. */
 function removeDuplicates(ring: Ring): Ring {
   const result: Ring = [];
   for (let i = 0; i < ring.length; i++) {
     const p = ring[i];
     const prev = result[result.length - 1];
     if (!prev || prev.x !== p.x || prev.y !== p.y) {
-      result.push({ x: p.x, y: p.y });
+      result.push(p); // preserve vertex with its ID
     }
   }
   // Remove last point if it equals the first (explicit closure not allowed)
@@ -21,7 +21,7 @@ function removeDuplicates(ring: Ring): Ring {
   return result;
 }
 
-/** Remove collinear points (points on a straight line between neighbors). */
+/** Remove collinear points, preserving vertex IDs of surviving vertices. */
 function removeCollinear(ring: Ring): Ring {
   if (ring.length < 3) return ring;
   const result: Ring = [];
@@ -32,7 +32,7 @@ function removeCollinear(ring: Ring): Ring {
     const next = ring[(i + 1) % n];
     const cross = (curr.x - prev.x) * (next.y - prev.y) - (curr.y - prev.y) * (next.x - prev.x);
     if (cross !== 0) {
-      result.push(curr);
+      result.push(curr); // preserve vertex with its ID
     }
   }
   return result.length >= 3 ? result : ring;
@@ -50,12 +50,12 @@ export function signedArea2(ring: Ring): number {
   return area;
 }
 
-/** Ensure ring is counter-clockwise (CCW). Used for outer rings. */
+/** Ensure ring is counter-clockwise (CCW). Used for outer rings. Preserves vertex IDs. */
 function ensureCCW(ring: Ring): Ring {
   return signedArea2(ring) >= 0 ? ring : [...ring].reverse();
 }
 
-/** Ensure ring is clockwise (CW). Used for holes. */
+/** Ensure ring is clockwise (CW). Used for holes. Preserves vertex IDs. */
 function ensureCW(ring: Ring): Ring {
   return signedArea2(ring) <= 0 ? ring : [...ring].reverse();
 }

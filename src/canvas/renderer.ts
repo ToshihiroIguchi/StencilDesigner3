@@ -1,6 +1,26 @@
-import type { AppState, DrcError, Point, Polygon, Ring, ViewTransform } from '../types';
+import type { AppState, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
 import { selectedIds } from '../core/transform';
+import { fmtMm, fmtMmBare } from '../core/format';
+import { resolveDimension } from '../core/dimension-resolve';
+
+function linetypeToDash(lt: string): number[] {
+  switch (lt) {
+    case 'DASHED':  return [8, 4];
+    case 'HIDDEN':  return [4, 4];
+    case 'CENTER':  return [12, 4, 4, 4];
+    case 'PHANTOM': return [12, 4, 4, 4, 4, 4];
+    case 'DASHDOT': return [10, 4, 2, 4];
+    default: return [];
+  }
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 const COLORS = {
   background: '#1e1e2e',
@@ -36,6 +56,23 @@ export interface DraftShape {
 }
 
 export type FilletVertexStatus = 'ok' | 'skip' | 'bad' | 'hover';
+
+/** Live distance overlay rendered by MeasureTool. */
+export interface MeasureOverlay { p1: Point; p2: Point; }
+
+/** In-progress dimension drawn by DimensionTool or CenterlineTool. */
+export interface DimDraft {
+  p1: Point;
+  p2?: Point;
+  kind?: 'linear-h' | 'linear-v' | 'centerline';
+  offset?: number;
+}
+
+export interface RendererExtras {
+  measureOverlay?: MeasureOverlay;
+  dimDraft?: DimDraft;
+  selectedDimId?: string | null;
+}
 
 export class CanvasRenderer {
   private canvas: HTMLCanvasElement;
@@ -73,6 +110,7 @@ export class CanvasRenderer {
     filletStatuses?: Map<string, FilletVertexStatus>,
     drcErrors?: DrcError[],
     diffBaseId?: string,
+    extras?: RendererExtras,
   ): void {
     const ctx = this.ctx;
     const vt: ViewTransform = { zoom: state.zoom, panX: state.panX, panY: state.panY };
@@ -96,8 +134,11 @@ export class CanvasRenderer {
     const drcErrorIds = new Set(
       drcErrors?.flatMap((e) => e.shapeId2 ? [e.shapeId, e.shapeId2] : [e.shapeId]) ?? [],
     );
+    const layerMap = new Map(state.layers.map((l) => [l.name, l]));
     for (const shape of state.shapes) {
-      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses, drcErrorIds.has(shape.id));
+      const layer = layerMap.get(shape.layer);
+      if (layer && !layer.visible) continue;
+      this.drawPolygon(shape, selIds.has(shape.id), vt, showAllVertices, filletStatuses, drcErrorIds.has(shape.id), layer);
     }
 
     // Diff BASE label (step 2: user has picked BASE, now picking CUT)
@@ -126,6 +167,21 @@ export class CanvasRenderer {
       ctx.strokeStyle = COLORS.snapIndicator;
       ctx.lineWidth = 1.5;
       ctx.stroke();
+    }
+
+    // Dimensions
+    if (state.dimensions.length > 0) {
+      this.drawDimensions(state.dimensions, state.shapes, layerMap, extras?.selectedDimId ?? null, vt);
+    }
+
+    // In-progress dimension draft
+    if (extras?.dimDraft) {
+      this.drawDimDraft(extras.dimDraft, vt);
+    }
+
+    // Measure overlay
+    if (extras?.measureOverlay) {
+      this.drawMeasureOverlay(extras.measureOverlay, vt);
     }
 
     // Rubber-band selection rectangle
@@ -205,11 +261,18 @@ export class CanvasRenderer {
     showAllVertices = false,
     filletStatuses?: Map<string, FilletVertexStatus>,
     drcError = false,
+    layer?: Layer,
   ): void {
     const ctx = this.ctx;
-    const strokeColor = selected ? COLORS.shapeSelected : COLORS.shape;
-    const fillColor = selected ? COLORS.shapeFillSelected : COLORS.shapeFill;
+    const strokeColor = selected ? COLORS.shapeSelected : (layer?.color ?? COLORS.shape);
+    const fillColor = hexToRgba(strokeColor, selected ? 0.25 : 0.15);
     ctx.lineWidth = 1;
+
+    // Locked layers render at half opacity
+    ctx.globalAlpha = layer?.locked ? 0.5 : 1.0;
+
+    // Apply linetype dash pattern
+    ctx.setLineDash(layer ? linetypeToDash(layer.linetype) : []);
 
     // Fill with even-odd rule for holes
     ctx.fillStyle = fillColor;
@@ -234,6 +297,8 @@ export class CanvasRenderer {
       this.tracePath(hole, vt);
       ctx.stroke();
     }
+
+    ctx.setLineDash([]);
 
     // DRC error overlay
     if (drcError) {
@@ -274,6 +339,8 @@ export class CanvasRenderer {
         }
       }
     }
+
+    ctx.globalAlpha = 1.0;
   }
 
   private tracePath(ring: Ring, vt: ViewTransform): void {
@@ -440,6 +507,249 @@ export class CanvasRenderer {
     ctx.fillRect(x, y, w, h);
     ctx.strokeRect(x, y, w, h);
     ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // ─── Measure overlay ───────────────────────────────────────────────────────
+
+  private drawMeasureOverlay(ov: MeasureOverlay, vt: ViewTransform): void {
+    const ctx = this.ctx;
+    const c1 = worldToCanvas(ov.p1.x, ov.p1.y, vt);
+    const c2 = worldToCanvas(ov.p2.x, ov.p2.y, vt);
+    const color = '#00ffcc';
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(c1.x, c1.y);
+    ctx.lineTo(c2.x, c2.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Endpoint dots
+    for (const cp of [c1, c2]) {
+      ctx.beginPath();
+      ctx.arc(cp.x, cp.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Label at midpoint
+    const mx = (c1.x + c2.x) / 2;
+    const my = (c1.y + c2.y) / 2;
+    const dx = Math.abs(ov.p2.x - ov.p1.x);
+    const dy = Math.abs(ov.p2.y - ov.p1.y);
+    const d = Math.round(Math.sqrt(dx * dx + dy * dy));
+    const label = `dx=${fmtMm(dx)}  dy=${fmtMm(dy)}  d=${fmtMm(d)}`;
+
+    ctx.font = 'bold 11px monospace';
+    const tw = ctx.measureText(label).width;
+    const padX = 6, padY = 3;
+    ctx.fillStyle = 'rgba(0,30,24,0.82)';
+    ctx.fillRect(mx - tw / 2 - padX, my - 9 - padY, tw + padX * 2, 18 + padY * 2);
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, mx, my);
+    ctx.restore();
+  }
+
+  // ─── Dimension rendering ───────────────────────────────────────────────────
+
+  private static readonly DIM_ARROW = 8;
+  private static readonly DIM_ANGLE = Math.PI / 6;
+  private static readonly DIM_EXT_GAP = 3;
+  private static readonly DIM_EXT_OVER = 5;
+  private static readonly DIM_TEXT_GAP = 7;
+
+  private drawDimensions(
+    dimensions: Dimension[],
+    shapes: Polygon[],
+    layerMap: Map<string, Layer>,
+    selectedId: string | null,
+    vt: ViewTransform,
+  ): void {
+    for (const dim of dimensions) {
+      const layer = layerMap.get(dim.layer);
+      if (layer && !layer.visible) continue;
+      const selected = selectedId === dim.id;
+      const { p1, p2, frozen } = resolveDimension(dim, shapes);
+      const baseColor = selected ? COLORS.shapeSelected : (layer?.color ?? '#888888');
+      const color = frozen ? '#7a7a8a' : baseColor;
+      this.drawOneDimension(dim.kind, p1, p2, dim.offset, color, vt, frozen);
+    }
+  }
+
+  private drawOneDimension(
+    kind: Dimension['kind'],
+    p1: Point,
+    p2: Point,
+    offset: number,
+    color: string,
+    vt: ViewTransform,
+    frozen = false,
+  ): void {
+    const ctx = this.ctx;
+    const { DIM_ARROW, DIM_ANGLE, DIM_EXT_GAP, DIM_EXT_OVER, DIM_TEXT_GAP } = CanvasRenderer;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = frozen ? 0.6 : 0.8;
+    ctx.setLineDash([]);
+
+    if (kind === 'centerline') {
+      const c1 = worldToCanvas(p1.x, p1.y, vt);
+      const c2 = worldToCanvas(p2.x, p2.y, vt);
+      ctx.setLineDash([12, 3, 2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(c1.x, c1.y);
+      ctx.lineTo(c2.x, c2.y);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    if (kind === 'linear-h') {
+      const c1 = worldToCanvas(p1.x, p1.y, vt);
+      const c2 = worldToCanvas(p2.x, p2.y, vt);
+      const cdy = worldToCanvas(0, offset, vt).y;
+
+      const d1 = Math.sign(cdy - c1.y) || 1;
+      const d2 = Math.sign(cdy - c2.y) || 1;
+      ctx.beginPath();
+      ctx.moveTo(c1.x, c1.y + DIM_EXT_GAP * d1);
+      ctx.lineTo(c1.x, cdy + DIM_EXT_OVER * d1);
+      ctx.moveTo(c2.x, c2.y + DIM_EXT_GAP * d2);
+      ctx.lineTo(c2.x, cdy + DIM_EXT_OVER * d2);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(c1.x, cdy);
+      ctx.lineTo(c2.x, cdy);
+      ctx.stroke();
+
+      const dirX = Math.sign(c2.x - c1.x);
+      this.drawArrowhead(c1.x, cdy, dirX > 0 ? 0 : Math.PI, DIM_ARROW, DIM_ANGLE);
+      this.drawArrowhead(c2.x, cdy, dirX > 0 ? Math.PI : 0, DIM_ARROW, DIM_ANGLE);
+
+      const label = fmtMmBare(Math.abs(p2.x - p1.x)) + ' mm';
+      const textDir = -(d1 || 1);
+      this.drawDimLabel(label, (c1.x + c2.x) / 2, cdy + DIM_TEXT_GAP * textDir);
+    } else {
+      // linear-v
+      const c1 = worldToCanvas(p1.x, p1.y, vt);
+      const c2 = worldToCanvas(p2.x, p2.y, vt);
+      const cdx = worldToCanvas(offset, 0, vt).x;
+
+      const d1 = Math.sign(cdx - c1.x) || 1;
+      const d2 = Math.sign(cdx - c2.x) || 1;
+      ctx.beginPath();
+      ctx.moveTo(c1.x + DIM_EXT_GAP * d1, c1.y);
+      ctx.lineTo(cdx + DIM_EXT_OVER * d1, c1.y);
+      ctx.moveTo(c2.x + DIM_EXT_GAP * d2, c2.y);
+      ctx.lineTo(cdx + DIM_EXT_OVER * d2, c2.y);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(cdx, c1.y);
+      ctx.lineTo(cdx, c2.y);
+      ctx.stroke();
+
+      const dirY = Math.sign(c2.y - c1.y);
+      this.drawArrowhead(cdx, c1.y, dirY > 0 ? Math.PI / 2 : -Math.PI / 2, DIM_ARROW, DIM_ANGLE);
+      this.drawArrowhead(cdx, c2.y, dirY > 0 ? -Math.PI / 2 : Math.PI / 2, DIM_ARROW, DIM_ANGLE);
+
+      const label = fmtMmBare(Math.abs(p2.y - p1.y)) + ' mm';
+      const textDir = -(d1 || 1);
+      ctx.save();
+      ctx.translate(cdx + DIM_TEXT_GAP * textDir * 3 + (textDir < 0 ? -2 : 2), (c1.y + c2.y) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.font = '10px monospace';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }
+
+    // Reference point dots
+    for (const p of [p1, p2]) {
+      const cp = worldToCanvas(p.x, p.y, vt);
+      ctx.beginPath();
+      ctx.arc(cp.x, cp.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  private drawArrowhead(x: number, y: number, angle: number, size: number, half: number): void {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + size * Math.cos(angle + half), y + size * Math.sin(angle + half));
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + size * Math.cos(angle - half), y + size * Math.sin(angle - half));
+    ctx.stroke();
+  }
+
+  private drawDimLabel(text: string, cx: number, cy: number): void {
+    const ctx = this.ctx;
+    ctx.font = '10px monospace';
+    const tw = ctx.measureText(text).width;
+    const padX = 3, padY = 2;
+    const bg = this.isDark ? 'rgba(30,30,46,0.85)' : 'rgba(245,245,240,0.85)';
+    ctx.fillStyle = bg;
+    ctx.fillRect(cx - tw / 2 - padX, cy - 6 - padY, tw + padX * 2, 12 + padY * 2);
+    ctx.fillStyle = ctx.strokeStyle as string;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, cx, cy);
+  }
+
+  // ─── In-progress drafts ────────────────────────────────────────────────────
+
+  private drawDimDraft(draft: DimDraft, vt: ViewTransform): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(100,200,100,0.7)';
+    ctx.fillStyle = 'rgba(100,200,100,0.7)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+
+    const c1 = worldToCanvas(draft.p1.x, draft.p1.y, vt);
+    ctx.beginPath();
+    ctx.arc(c1.x, c1.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (!draft.p2) { ctx.restore(); return; }
+    const c2 = worldToCanvas(draft.p2.x, draft.p2.y, vt);
+    ctx.beginPath();
+    ctx.moveTo(c1.x, c1.y);
+    ctx.lineTo(c2.x, c2.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(c2.x, c2.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (draft.kind === 'centerline') {
+      ctx.restore();
+      this.drawOneDimension('centerline', draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', vt);
+      return;
+    }
+
+    if (draft.kind === undefined || draft.offset === undefined) { ctx.restore(); return; }
+
+    ctx.setLineDash([]);
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(100,200,100,0.7)';
+    ctx.fillStyle = 'rgba(100,200,100,0.7)';
+    ctx.lineWidth = 1.2;
+    this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', vt);
     ctx.restore();
   }
 

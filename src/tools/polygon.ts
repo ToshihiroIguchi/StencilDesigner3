@@ -1,13 +1,14 @@
-import type { AppState, Point } from '../types';
+import type { AppState, Point, Vertex } from '../types';
 import { newId } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import { normalize, hasSelfIntersection } from '../normalize';
 import { AddShapeCommand } from '../state/commands';
 import { markDirty } from '../state/autosave';
 import { segmentsIntersect } from '../core/geometry';
+import { vertex } from '../core/vertex';
 
 export class PolygonTool extends BaseTool {
-  private vertices: Point[] = [];
+  private vertices: Vertex[] = [];
   private hoverPt: Point | null = null;
   private willClose = false;
   private hasSelfIntersect = false;
@@ -41,7 +42,7 @@ export class PolygonTool extends BaseTool {
       if (last.x === pt.x && last.y === pt.y) return;
     }
 
-    this.vertices.push(pt);
+    this.vertices.push(vertex(pt.x, pt.y));
     this.updateDraft();
     void canvasPt; // unused but kept for interface consistency
   }
@@ -99,16 +100,16 @@ export class PolygonTool extends BaseTool {
     super.cancel();
   }
 
-  private commit(_state: AppState): void {
+  private commit(state: AppState): void {
     if (this.vertices.length < 3) return;
     // Final validation uses committed vertices only — independent of hover state
     if (hasSelfIntersection(this.vertices)) return;
     try {
       const poly = normalize({
         id: newId(),
-        outer: this.vertices.map((p) => ({ ...p })),
+        outer: this.vertices,
         holes: [],
-        layer: '0',
+        layer: state.activeLayerName,
       });
       this.ctx.history.execute(new AddShapeCommand(poly));
       markDirty();
@@ -134,7 +135,7 @@ export class PolygonTool extends BaseTool {
       return;
     }
 
-    const pts = [...this.vertices];
+    const pts: { x: number; y: number }[] = [...this.vertices];
     if (this.hoverPt) pts.push(this.hoverPt);
 
     this.draft = {

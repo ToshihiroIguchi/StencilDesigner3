@@ -26,7 +26,7 @@ export class CircleTool extends BaseTool {
     this.ctx.requestRender();
   }
 
-  onMouseUp(worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {
+  onMouseUp(worldPt: Point, _canvasPt: Point, _shift: boolean, state: AppState): void {
     if (!this.centerPt) return;
     const snapped = this.ctx.getSnapPoint(worldPt);
 
@@ -36,7 +36,7 @@ export class CircleTool extends BaseTool {
 
     if (r >= 1) {
       try {
-        const poly = circleToPolygon(this.centerPt.x, this.centerPt.y, r);
+        const poly = circleToPolygon(this.centerPt.x, this.centerPt.y, r, 64, state.activeLayerName);
         this.ctx.history.execute(new AddShapeCommand(poly));
         markDirty();
       } catch {

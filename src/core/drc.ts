@@ -1,4 +1,4 @@
-import type { Polygon, DrcError } from '../types';
+import type { Polygon, DrcError, Layer } from '../types';
 import { polygonBbox, polygonEdgeDistance, polygonNarrowestPassage } from './geometry';
 
 export interface DrcConfig {
@@ -25,9 +25,11 @@ function bboxClearance(a: Bbox, b: Bbox): number {
 
 const MAX_ERRORS = 20;
 
-export function runDrc(shapes: Polygon[], config: DrcConfig): DrcError[] {
+export function runDrc(shapes: Polygon[], layers: Layer[], config: DrcConfig): DrcError[] {
+  const apertureNames = new Set(layers.filter((l) => l.isAperture).map((l) => l.name));
+  const targets = shapes.filter((s) => apertureNames.has(s.layer));
   const errors: DrcError[] = [];
-  const items = shapes.map((s) => ({ shape: s, bb: polygonBbox(s) }));
+  const items = targets.map((s) => ({ shape: s, bb: polygonBbox(s) }));
 
   // Aperture check: narrowest passage width (catches thin arms, not just bbox dimensions)
   for (const { shape } of items) {

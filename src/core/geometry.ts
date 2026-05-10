@@ -1,33 +1,31 @@
-import type { Point, Ring, Polygon } from '../types';
+import type { Point, Ring, Polygon, Vertex } from '../types';
 import { newId } from '../types';
 import { normalize, bbox, area } from '../normalize';
+import { vertex } from './vertex';
 
 /** Approximate a circle as a polygon with N sides (default 64). */
-export function circleToPolygon(cx: number, cy: number, r: number, sides = 64): Polygon {
+export function circleToPolygon(cx: number, cy: number, r: number, sides = 64, layer = '0'): Polygon {
   const outer: Ring = [];
   for (let i = 0; i < sides; i++) {
     const angle = (2 * Math.PI * i) / sides;
-    outer.push({
-      x: Math.round(cx + r * Math.cos(angle)),
-      y: Math.round(cy + r * Math.sin(angle)),
-    });
+    outer.push(vertex(cx + r * Math.cos(angle), cy + r * Math.sin(angle)));
   }
-  return normalize({ id: newId(), outer, holes: [], layer: '0' });
+  return normalize({ id: newId(), outer, holes: [], layer });
 }
 
 /** Create a rectangle polygon from two corner points. */
-export function rectToPolygon(x1: number, y1: number, x2: number, y2: number): Polygon {
+export function rectToPolygon(x1: number, y1: number, x2: number, y2: number, layer = '0'): Polygon {
   const minX = Math.min(x1, x2);
   const minY = Math.min(y1, y2);
   const maxX = Math.max(x1, x2);
   const maxY = Math.max(y1, y2);
   const outer: Ring = [
-    { x: minX, y: minY },
-    { x: maxX, y: minY },
-    { x: maxX, y: maxY },
-    { x: minX, y: maxY },
+    vertex(minX, minY),
+    vertex(maxX, minY),
+    vertex(maxX, maxY),
+    vertex(minX, maxY),
   ];
-  return normalize({ id: newId(), outer, holes: [], layer: '0' });
+  return normalize({ id: newId(), outer, holes: [], layer });
 }
 
 /** Get polygon bounding box. */
@@ -44,9 +42,9 @@ export function polygonArea(poly: Polygon): number {
   return a;
 }
 
-/** Translate a ring by (dx, dy). */
+/** Translate a ring by (dx, dy), preserving vertex IDs. */
 export function translateRing(ring: Ring, dx: number, dy: number): Ring {
-  return ring.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+  return ring.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy }));
 }
 
 /** Translate a polygon by (dx, dy). All values must be integers. */
@@ -59,7 +57,7 @@ export function translatePolygon(poly: Polygon, dx: number, dy: number): Polygon
   };
 }
 
-/** Deep clone a polygon with a new ID. */
+/** Deep clone a polygon with a new ID, preserving vertex IDs. */
 export function clonePolygon(poly: Polygon): Polygon {
   return {
     id: newId(),
@@ -161,10 +159,27 @@ export function polygonsOverlap(a: Polygon, b: Polygon): boolean {
   return false;
 }
 
-function ringCentroid(ring: Ring): Point {
+export function ringCentroid(ring: Ring): Point {
   let sx = 0, sy = 0;
   for (const p of ring) { sx += p.x; sy += p.y; }
   return { x: Math.round(sx / ring.length), y: Math.round(sy / ring.length) };
+}
+
+/**
+ * True if the ring is an approximately regular n-gon with n >= 12 (≈ a circle).
+ */
+export function isRingCircleLike(ring: Ring): boolean {
+  if (ring.length < 12) return false;
+  const c = ringCentroid(ring);
+  let sum = 0;
+  for (const p of ring) sum += dist(p, c);
+  const avg = sum / ring.length;
+  if (avg < 1) return false;
+  const tol = Math.max(2, avg * 0.02);
+  for (const p of ring) {
+    if (Math.abs(dist(p, c) - avg) > tol) return false;
+  }
+  return true;
 }
 
 /**
@@ -208,12 +223,6 @@ function nearestOnSegmentF(
   return [s1x + t * dx, s1y + t * dy];
 }
 
-/**
- * Returns true if the direction connecting the closest points of the two segments
- * is nearly parallel to either segment. This indicates the segments lie on the same
- * convex boundary (e.g. a fillet arc approaching a straight edge tangentially) rather
- * than facing each other across a genuine interior passage.
- */
 function connectingDirNearlyParallel(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
   const candidates: Array<[number, number, number, number]> = [
     [a1.x, a1.y, ...nearestOnSegmentF(a1.x, a1.y, b1.x, b1.y, b2.x, b2.y)],
@@ -243,10 +252,6 @@ function connectingDirNearlyParallel(a1: Point, a2: Point, b1: Point, b2: Point)
 
 /**
  * Narrowest passage width of a polygon (min distance between non-adjacent edges).
- * Approximates the minimum inscribed width; catches thin arms in L-shapes etc.
- * Segment pairs whose connecting direction is nearly parallel to either segment are
- * skipped — they represent convex-arc artefacts (e.g. fillet tangent points), not
- * genuine narrow passages.
  */
 export function polygonNarrowestPassage(poly: Polygon): { width: number; loc: Point } {
   const ring = poly.outer;
@@ -272,3 +277,6 @@ export function polygonNarrowestPassage(poly: Polygon): { width: number; loc: Po
   }
   return { width: Math.sqrt(minSq), loc: bestLoc };
 }
+
+// Re-export Vertex for convenience
+export type { Vertex };
