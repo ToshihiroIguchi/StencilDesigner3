@@ -3,11 +3,24 @@ import { newId } from '../types';
 import { normalize, bbox, area } from '../normalize';
 import { vertex } from './vertex';
 
-/** Approximate a circle as a polygon with N sides (default 64). */
-export function circleToPolygon(cx: number, cy: number, r: number, sides = 64, layer = '0'): Polygon {
+/** 
+ * Calculate number of sides for a circle approximation to keep chord error small.
+ * Max chord error of 0.5 µm ensures the polygon stays visually and physically smooth.
+ */
+export function getCircleSegments(r: number): number {
+  if (r <= 0) return 4;
+  const maxChordError = 0.5; // µm
+  if (r <= maxChordError) return 8;
+  const theta = 2 * Math.acos(1 - maxChordError / r);
+  return Math.max(32, Math.ceil((2 * Math.PI) / theta));
+}
+
+/** Approximate a circle as a polygon with dynamic or explicit sides. */
+export function circleToPolygon(cx: number, cy: number, r: number, sides?: number, layer = '0'): Polygon {
+  const nSides = sides ?? getCircleSegments(r);
   const outer: Ring = [];
-  for (let i = 0; i < sides; i++) {
-    const angle = (2 * Math.PI * i) / sides;
+  for (let i = 0; i < nSides; i++) {
+    const angle = (2 * Math.PI * i) / nSides;
     outer.push(vertex(cx + r * Math.cos(angle), cy + r * Math.sin(angle)));
   }
   return normalize({ id: newId(), outer, holes: [], layer });

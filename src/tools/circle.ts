@@ -36,7 +36,7 @@ export class CircleTool extends BaseTool {
 
     if (r >= 1) {
       try {
-        const poly = circleToPolygon(this.centerPt.x, this.centerPt.y, r, 64, state.activeLayerName);
+        const poly = circleToPolygon(this.centerPt.x, this.centerPt.y, r, undefined, state.activeLayerName);
         this.ctx.history.execute(new AddShapeCommand(poly));
         markDirty();
       } catch {

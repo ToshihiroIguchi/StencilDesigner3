@@ -1,5 +1,6 @@
 import type { Ring } from '../types';
 import { vertex } from './vertex';
+import { getCircleSegments } from './geometry';
 
 export type FilletSkipReason =
   | 'zero-length-edge'
@@ -63,7 +64,9 @@ function filletSegment(
   if (delta > Math.PI) delta -= 2 * Math.PI;
   if (delta < -Math.PI) delta += 2 * Math.PI;
 
-  const nSeg = Math.max(2, Math.ceil(Math.abs(delta) / (Math.PI / 30)));
+  const fullCircleSegments = getCircleSegments(R);
+  // Calculate segments needed for this arc angle, minimum 2
+  const nSeg = Math.max(2, Math.ceil((Math.abs(delta) / (2 * Math.PI)) * fullCircleSegments));
   const arcPts: Ring = [];
   for (let k = 1; k < nSeg; k++) {
     const angle = a1 + delta * (k / nSeg);

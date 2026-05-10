@@ -1,7 +1,7 @@
 import type { Polygon, Ring, Layer, Vertex } from '../types';
 import { newId } from '../types';
 import { normalizeAll } from '../normalize';
-import { dist } from '../core/geometry';
+import { dist, getCircleSegments } from '../core/geometry';
 import { vertex } from '../core/vertex';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,7 +25,8 @@ function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endA
   let end = endAngle;
   if (end < start) end += 360;
   const span = end - start;
-  const steps = Math.max(8, Math.ceil(Math.abs(span) / 5));
+  const fullCircleSegments = getCircleSegments(mmToUm(r));
+  const steps = Math.max(2, Math.ceil((Math.abs(span) / 360) * fullCircleSegments));
   for (let i = 0; i <= steps; i++) {
     const angle = ((start + (span * i) / steps) * Math.PI) / 180;
     points.push(vertex(mmToUm(cx + r * Math.cos(angle)), mmToUm(-(cy + r * Math.sin(angle)))));
