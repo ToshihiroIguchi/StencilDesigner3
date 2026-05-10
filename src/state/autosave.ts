@@ -133,10 +133,18 @@ function migrateState(s: Partial<AppState>): AppState {
     dimensions: (state as any).dimensions ?? [],
   };
 
-  // Enforce DIMENSIONS layer invariants: never aperture, never plotted
-  finalState.layers = finalState.layers.map((l) =>
-    l.name === 'DIMENSIONS' ? { ...l, isAperture: false, plot: false } : l
+  // Fill in missing isAperture from defaults (old saves lack this field)
+  const defaultApertureMap: Record<string, boolean> = Object.fromEntries(
+    defaultLayers().map((l) => [l.name, l.isAperture])
   );
+  finalState.layers = finalState.layers.map((l) => {
+    if (l.name === 'DIMENSIONS') return { ...l, isAperture: false, plot: false };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((l as any).isAperture === undefined) {
+      return { ...l, isAperture: defaultApertureMap[l.name] ?? false };
+    }
+    return l;
+  });
   if (finalState.activeLayerName === 'DIMENSIONS') {
     const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);
     if (fallback) finalState.activeLayerName = fallback.name;
