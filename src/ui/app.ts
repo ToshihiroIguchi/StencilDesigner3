@@ -319,7 +319,12 @@ export class App {
     // When select tool is active, check dim hits before polygons
     if (this.activeTool instanceof SelectTool) {
       const state = this.history.state;
-      const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, state.dimensions, state.shapes, state, state.snapRadius);
+      const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+      const interactiveDims = state.dimensions.filter((d) => {
+        const l = layerMap.get(d.layer);
+        return l && l.visible && !l.locked;
+      });
+      const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, interactiveDims, state.shapes, state, state.snapRadius);
       if (dimHit) {
         this.selectedDimId = dimHit.id;
         state.selection = [];
