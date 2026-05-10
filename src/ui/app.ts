@@ -581,18 +581,32 @@ export class App {
   }
 
   private async showImportDialog(result: ImportResult): Promise<void> {
+    const existingNames = new Set(this.history.state.layers.map((l) => l.name));
+    const newLayers = result.layers.filter((l) => !existingNames.has(l.name));
+
+    // No new layers — import shapes directly without showing a dialog
+    if (newLayers.length === 0) {
+      for (const poly of result.polygons) {
+        this.history.execute(new AddShapeCommand(poly));
+      }
+      markDirty();
+      this.requestRender();
+      return;
+    }
+
     const modal = document.getElementById('dxf-import-modal') as HTMLElement;
     const layersDiv = document.getElementById('dxf-import-layers') as HTMLElement;
     const okBtn = document.getElementById('dxf-import-ok') as HTMLButtonElement;
     const cancelBtn = document.getElementById('dxf-import-cancel') as HTMLButtonElement;
 
-    // Build layer list with checkboxes
+    // Build layer list showing only new layers, all pre-checked
     layersDiv.innerHTML = '';
-    for (const layer of result.layers) {
+    for (const layer of newLayers) {
       const label = document.createElement('label');
       label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0';
       const cb = document.createElement('input');
       cb.type = 'checkbox';
+      cb.checked = true;
       cb.value = layer.name;
       const swatch = document.createElement('span');
       swatch.style.cssText = `display:inline-block;width:12px;height:12px;background:${layer.color};border:1px solid #555`;
@@ -714,6 +728,13 @@ export class App {
 
   exportDxf(): void {
     const state = this.history.state;
+    if (state.shapes.length > 0) {
+      const apertureNames = new Set(state.layers.filter((l) => l.isAperture).map((l) => l.name));
+      if (!state.shapes.some((s) => apertureNames.has(s.layer))) {
+        alert('No shapes to export. Mark at least one layer as aperture using the "A" button in the Layers panel.');
+        return;
+      }
+    }
     downloadDxf(state.shapes, state.layers);
   }
 
