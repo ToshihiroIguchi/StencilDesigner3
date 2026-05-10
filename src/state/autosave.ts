@@ -1,5 +1,6 @@
-import type { AppState } from '../types';
+import type { AppState, Dimension, DimensionAnchor } from '../types';
 import { createDefaultState, defaultLayers } from '../types';
+import { vertex } from '../core/vertex';
 import localforage from 'localforage';
 
 const STORE_KEY = 'stencil_designer_autosave';
@@ -88,6 +89,43 @@ function migrateState(s: Partial<AppState>): AppState {
     };
   }
 
+  if (v < 4) {
+    // v3→v4: Vertex IDs added to Ring. All vertices without an 'id' get one.
+    // Old Dimension format used p1/p2; convert to free anchors.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const assignIds = (ring: any[]): any[] =>
+      ring.map((p: any) => (p.id ? p : vertex(p.x, p.y)));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const migratedShapes = ((state.shapes ?? []) as any[]).map((shape: any) => ({
+      ...shape,
+      outer: assignIds(shape.outer ?? []),
+      holes: (shape.holes ?? []).map(assignIds),
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const migratedDims: Dimension[] = ((state as any).dimensions ?? []).map((d: any): Dimension => {
+      if (d.anchor1 && d.anchor2) return d as Dimension; // already v4
+      const freeAnchor = (pt: { x: number; y: number }): DimensionAnchor => ({
+        kind: 'free',
+        point: { x: pt.x, y: pt.y },
+      });
+      return {
+        id: d.id,
+        kind: d.kind,
+        anchor1: freeAnchor(d.p1 ?? { x: 0, y: 0 }),
+        anchor2: freeAnchor(d.p2 ?? { x: 0, y: 0 }),
+        offset: d.offset ?? 0,
+        layer: d.layer ?? 'DIMENSIONS',
+        frozen: true,
+      };
+    });
+    state = {
+      ...state,
+      schemaVersion: 4,
+      shapes: migratedShapes,
+      dimensions: migratedDims,
+    };
+  }
+
   // Inject new fields added after v2 if missing
   const finalState = {
     ...(state as AppState),
@@ -95,9 +133,9 @@ function migrateState(s: Partial<AppState>): AppState {
     dimensions: (state as any).dimensions ?? [],
   };
 
-  // Enforce DIMENSIONS layer invariants: never aperture, gray color
+  // Enforce DIMENSIONS layer invariants: never aperture, never plotted
   finalState.layers = finalState.layers.map((l) =>
-    l.name === 'DIMENSIONS' ? { ...l, isAperture: false, plot: false, color: '#888888' } : l
+    l.name === 'DIMENSIONS' ? { ...l, isAperture: false, plot: false } : l
   );
   if (finalState.activeLayerName === 'DIMENSIONS') {
     const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);

@@ -4,6 +4,7 @@
 import type { Polygon, Ring } from '../types';
 import { newId } from '../types';
 import { normalize } from '../normalize';
+import { vertex } from './vertex';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import * as ClipperLib from 'clipper-lib';
 
@@ -16,8 +17,9 @@ function toClipperPath(ring: Ring): ClipperPath {
   return ring.map((p) => ({ X: p.x * SCALE, Y: p.y * SCALE }));
 }
 
+// Boolean operations produce new geometry — new vertex IDs are assigned.
 function fromClipperPath(path: ClipperPath): Ring {
-  return path.map((p) => ({ x: Math.round(p.X / SCALE), y: Math.round(p.Y / SCALE) }));
+  return path.map((p) => vertex(Math.round(p.X / SCALE), Math.round(p.Y / SCALE)));
 }
 
 function toClipperPaths(polygon: Polygon): ClipperPath[] {

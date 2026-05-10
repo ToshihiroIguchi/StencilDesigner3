@@ -12,7 +12,7 @@ describe('Layer commands', () => {
     const s = createDefaultState();
     expect(s.layers).toHaveLength(4);
     expect(s.activeLayerName).toBe('0');
-    expect(s.schemaVersion).toBe(3);
+    expect(s.schemaVersion).toBe(4);
   });
 
   it('AddLayerCommand adds and undoes', () => {

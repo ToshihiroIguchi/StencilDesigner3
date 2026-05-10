@@ -2,6 +2,7 @@ import type { Dimension, Point, Polygon, Selection, ViewTransform } from '../typ
 import { canvasToWorld } from '../types';
 import { pointInRing } from '../normalize';
 import { distSqPointToSegment, midpoint, dist, isRingCircleLike, ringCentroid } from './geometry';
+import { resolveDimension } from './dimension-resolve';
 
 /**
  * Hit test at canvas coordinates (px, py).
@@ -118,6 +119,7 @@ export interface DimHit {
 export function hitTestDimension(
   px: number, py: number,
   dimensions: Dimension[],
+  shapes: Polygon[],
   vt: ViewTransform,
   snapRadius: number,
 ): DimHit | null {
@@ -125,12 +127,17 @@ export function hitTestDimension(
   const r = snapRadius / vt.zoom;
   for (let i = dimensions.length - 1; i >= 0; i--) {
     const dim = dimensions[i];
-    if (dist(wp, dim.p1) <= r) return { id: dim.id, part: 'p1' };
-    if (dist(wp, dim.p2) <= r) return { id: dim.id, part: 'p2' };
-    const ds = dim.kind === 'linear-h'
-      ? { x: dim.p1.x, y: dim.offset } : { x: dim.offset, y: dim.p1.y };
-    const de = dim.kind === 'linear-h'
-      ? { x: dim.p2.x, y: dim.offset } : { x: dim.offset, y: dim.p2.y };
+    const { p1, p2 } = resolveDimension(dim, shapes);
+    if (dist(wp, p1) <= r) return { id: dim.id, part: 'p1' };
+    if (dist(wp, p2) <= r) return { id: dim.id, part: 'p2' };
+    let ds: Point, de: Point;
+    if (dim.kind === 'centerline') {
+      ds = p1; de = p2;
+    } else if (dim.kind === 'linear-h') {
+      ds = { x: p1.x, y: dim.offset }; de = { x: p2.x, y: dim.offset };
+    } else {
+      ds = { x: dim.offset, y: p1.y }; de = { x: dim.offset, y: p2.y };
+    }
     if (Math.sqrt(distSqPointToSegment(wp, ds, de)) <= r)
       return { id: dim.id, part: 'dimLine' };
   }

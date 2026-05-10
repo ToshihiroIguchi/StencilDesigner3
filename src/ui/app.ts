@@ -9,6 +9,7 @@ import { FilletTool } from '../tools/fillet';
 import { PolygonTool } from '../tools/polygon';
 import { MeasureTool } from '../tools/measure';
 import { DimensionTool } from '../tools/dimension';
+import { CenterlineTool } from '../tools/centerline';
 import { findSnapPoint, hitTest, hitTestDimension } from '../core/selection';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
@@ -22,11 +23,12 @@ import { importDxf, type ImportResult } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
 import { resizePolygon } from '../core/transform';
+import { resolveDimension } from '../core/dimension-resolve';
 import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
 import { fmtMm } from '../core/format';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -98,6 +100,10 @@ export class App {
       this.renderer.resize();
       this.requestRender();
     });
+
+    window.addEventListener('beforeunload', () => {
+      void saveState(this.history.state);
+    });
   }
 
   private getSnapPoint(worldPt: Point): Point {
@@ -149,7 +155,10 @@ export class App {
         measureOverlay: this.activeTool instanceof MeasureTool
           ? (this.activeTool.getMeasureOverlay() ?? undefined) : undefined,
         dimDraft: this.activeTool instanceof DimensionTool
-          ? (this.activeTool.getDimDraft() ?? undefined) : undefined,
+          ? (this.activeTool.getDimDraft() ?? undefined)
+          : this.activeTool instanceof CenterlineTool
+            ? (this.activeTool.getDimDraft(state) ?? undefined)
+            : undefined,
         selectedDimId: this.selectedDimId,
       },
     );
@@ -310,7 +319,7 @@ export class App {
     // When select tool is active, check dim hits before polygons
     if (this.activeTool instanceof SelectTool) {
       const state = this.history.state;
-      const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, state.dimensions, state, state.snapRadius);
+      const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, state.dimensions, state.shapes, state, state.snapRadius);
       if (dimHit) {
         this.selectedDimId = dimHit.id;
         state.selection = [];
@@ -403,6 +412,7 @@ export class App {
       if (e.key === 'f' || e.key === 'F') { this.setTool('fillet'); return; }
       if (e.key === 'm' || e.key === 'M') { this.setTool('measure'); return; }
       if (e.key === 'd' || e.key === 'D') { this.setTool('dimension'); return; }
+      if (e.key === 'l' || e.key === 'L') { this.setTool('centerline'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -438,6 +448,7 @@ export class App {
       case 'fillet': this.activeTool = new FilletTool(toolCtx, this.filletRadius); break;
       case 'measure': this.activeTool = new MeasureTool(toolCtx); break;
       case 'dimension': this.activeTool = new DimensionTool(toolCtx); break;
+      case 'centerline': this.activeTool = new CenterlineTool(toolCtx); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
 
@@ -680,8 +691,9 @@ export class App {
       expandBbox(bb.maxX, bb.maxY);
     }
     for (const d of state.dimensions) {
-      expandBbox(d.p1.x, d.p1.y);
-      expandBbox(d.p2.x, d.p2.y);
+      const { p1, p2 } = resolveDimension(d, state.shapes);
+      expandBbox(p1.x, p1.y);
+      expandBbox(p2.x, p2.y);
     }
 
     const contentW = maxX - minX || 1;
@@ -920,10 +932,15 @@ export class App {
         if (el('footer-area')) el('footer-area')!.textContent = 'Esc clear';
       }
     } else if (this.activeTool instanceof DimensionTool) {
-      const steps = ['Click p1', 'Click p2', 'Click offset'];
-      const step = this.activeTool.getStep() === 'p1' ? 0 : this.activeTool.getStep() === 'p2' ? 1 : 2;
+      const steps = ['Click v1', 'Click v2', 'Click offset'];
+      const step = this.activeTool.getStep() === 'v1' ? 0 : this.activeTool.getStep() === 'v2' ? 1 : 2;
       if (el('footer-w')) el('footer-w')!.textContent = 'Dim:';
       if (el('footer-h')) el('footer-h')!.textContent = steps[step];
+      if (el('footer-area')) el('footer-area')!.textContent = 'Esc cancel';
+    } else if (this.activeTool instanceof CenterlineTool) {
+      const step = this.activeTool.getStep();
+      if (el('footer-w')) el('footer-w')!.textContent = 'CL:';
+      if (el('footer-h')) el('footer-h')!.textContent = step === 'edge1' ? 'Click edge 1' : 'Click edge 2';
       if (el('footer-area')) el('footer-area')!.textContent = 'Esc cancel';
     } else if (this.activeTool instanceof PolygonTool && this.activeTool.isDrawing()) {
       const n = (this.activeTool as PolygonTool).vertexCount();
@@ -1007,10 +1024,22 @@ export class App {
     if (this.selectedDimId !== null) {
       const dim = state.dimensions.find((d) => d.id === this.selectedDimId);
       if (dim) {
-        const val = dim.kind === 'linear-h'
-          ? fmtMm(Math.abs(dim.p2.x - dim.p1.x))
-          : fmtMm(Math.abs(dim.p2.y - dim.p1.y));
-        infoEl.innerHTML = `<div class="shape-info"><span>Dimension</span><span>${dim.kind === 'linear-h' ? 'H' : 'V'}: ${val}</span><span style="color:var(--fg2)">Layer: ${dim.layer}</span></div>
+        const { p1, p2, frozen } = resolveDimension(dim, state.shapes);
+        let label: string;
+        if (dim.kind === 'centerline') {
+          const dx = Math.abs(p2.x - p1.x);
+          const dy = Math.abs(p2.y - p1.y);
+          const len = Math.round(Math.sqrt(dx * dx + dy * dy));
+          label = `CL: ${fmtMm(len)}`;
+        } else {
+          const val = dim.kind === 'linear-h'
+            ? fmtMm(Math.abs(p2.x - p1.x))
+            : fmtMm(Math.abs(p2.y - p1.y));
+          label = `${dim.kind === 'linear-h' ? 'H' : 'V'}: ${val}`;
+        }
+        const frozenTag = frozen ? ' <span style="color:#7a7a8a">[frozen]</span>' : '';
+        const title = dim.kind === 'centerline' ? 'Centerline' : 'Dimension';
+        infoEl.innerHTML = `<div class="shape-info"><span>${title}${frozenTag}</span><span>${label}</span><span style="color:var(--fg2)">Layer: ${dim.layer}</span></div>
           <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del to delete</p>`;
         if (propsEl) propsEl.style.display = 'none';
         return;

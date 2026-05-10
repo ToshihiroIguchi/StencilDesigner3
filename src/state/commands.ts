@@ -1,8 +1,70 @@
-import type { AppState, Command, Selection, Polygon, Ring, Layer, Dimension } from '../types';
+import type { AppState, Command, Selection, Polygon, Ring, Layer, Dimension, DimensionAnchor, Point } from '../types';
 import { defaultLayers } from '../types';
 import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
 import { normalize, normalizeAll } from '../normalize';
+import { resolveAnchor, resolveEdge } from '../core/dimension-resolve';
+import { centerlineEndpoints } from '../core/centerline-geometry';
+
+/**
+ * Freeze any dimensions that reference shapes being removed.
+ * Resolves live positions from `shapesBefore` and stores as cachedPoint.
+ */
+function freezeDimsForRemovedShapes(
+  dims: Dimension[],
+  shapesBefore: Polygon[],
+  removedIds: Set<string>,
+): Dimension[] {
+  return dims.map((dim) => {
+    const refersRemoved = (a: DimensionAnchor) =>
+      (a.kind === 'vertex' || a.kind === 'edge') && removedIds.has(a.shapeId);
+    if (!refersRemoved(dim.anchor1) && !refersRemoved(dim.anchor2)) return dim;
+
+    const updatedAnchor = (a: DimensionAnchor, otherEndpoint: Point): DimensionAnchor => {
+      if (a.kind === 'free') return a;
+      if (!refersRemoved(a)) return a;
+      if (a.kind === 'vertex') {
+        const live = resolveAnchor(a, shapesBefore);
+        return { ...a, cachedPoint: live ?? a.cachedPoint };
+      }
+      // edge anchor: for centerline, cachedPoint should be the centerline endpoint
+      // which is already stored correctly; just ensure we have a good value
+      const live = resolveEdge(a, shapesBefore);
+      if (live) {
+        // midpoint as fallback
+        const mid: Point = {
+          x: Math.round((live[0].x + live[1].x) / 2),
+          y: Math.round((live[0].y + live[1].y) / 2),
+        };
+        return { ...a, cachedPoint: mid };
+      }
+      return a;
+      void otherEndpoint;
+    };
+
+    // For centerline: compute full centerline before freeze so both endpoints are captured
+    let frozenAnchor1 = dim.anchor1;
+    let frozenAnchor2 = dim.anchor2;
+    if (dim.kind === 'centerline') {
+      const e1 = resolveEdge(dim.anchor1, shapesBefore);
+      const e2 = resolveEdge(dim.anchor2, shapesBefore);
+      if (e1 && e2) {
+        const cl = centerlineEndpoints(e1, e2);
+        if (cl) {
+          if (dim.anchor1.kind === 'edge') frozenAnchor1 = { ...dim.anchor1, cachedPoint: cl.p1 };
+          if (dim.anchor2.kind === 'edge') frozenAnchor2 = { ...dim.anchor2, cachedPoint: cl.p2 };
+        }
+      }
+    } else {
+      const p2 = resolveAnchor(dim.anchor2, shapesBefore) ?? (dim.anchor2.kind !== 'free' ? dim.anchor2.cachedPoint : dim.anchor2.point);
+      frozenAnchor1 = updatedAnchor(dim.anchor1, p2);
+      const p1 = resolveAnchor(dim.anchor1, shapesBefore) ?? (dim.anchor1.kind !== 'free' ? dim.anchor1.cachedPoint : dim.anchor1.point);
+      frozenAnchor2 = updatedAnchor(dim.anchor2, p1);
+    }
+
+    return { ...dim, anchor1: frozenAnchor1, anchor2: frozenAnchor2, frozen: true };
+  });
+}
 
 // ─── Add Shape ───────────────────────────────────────────────────────────────
 
@@ -71,14 +133,27 @@ export class CopyCommand implements Command {
 
 export class DeleteCommand implements Command {
   private deletedShapes: Polygon[] = [];
+  private dimsBefore: Dimension[] = [];
   constructor(private selection: Selection[]) {}
   do(state: AppState): AppState {
     const ids = new Set(this.selection.map((s) => s.shapeId));
     this.deletedShapes = state.shapes.filter((s) => ids.has(s.id));
-    return { ...state, shapes: deleteShapes(state.shapes, this.selection), selection: [] };
+    this.dimsBefore = state.dimensions;
+    const frozenDims = freezeDimsForRemovedShapes(state.dimensions, state.shapes, ids);
+    return {
+      ...state,
+      shapes: deleteShapes(state.shapes, this.selection),
+      dimensions: frozenDims,
+      selection: [],
+    };
   }
   undo(state: AppState): AppState {
-    return { ...state, shapes: normalizeAll([...state.shapes, ...this.deletedShapes]), selection: [] };
+    return {
+      ...state,
+      shapes: normalizeAll([...state.shapes, ...this.deletedShapes]),
+      dimensions: this.dimsBefore,
+      selection: [],
+    };
   }
 }
 
@@ -110,6 +185,7 @@ export class ArrayCopyCommand implements Command {
 export class UnionCommand implements Command {
   private originalShapes: Polygon[] = [];
   private resultIds: string[] = [];
+  private dimsBefore: Dimension[] = [];
 
   constructor(private selection: Selection[]) {}
 
@@ -119,18 +195,30 @@ export class UnionCommand implements Command {
     if (targets.length < 2) return state;
 
     this.originalShapes = targets;
+    this.dimsBefore = state.dimensions;
     const result = union(targets);
     this.resultIds = result.map((r) => r.id);
 
     const remaining = state.shapes.filter((s) => !ids.has(s.id));
     const newSel = result.map((r) => ({ type: 'polygon' as const, shapeId: r.id, index: -1, holeIndex: -1 }));
-    return { ...state, shapes: normalizeAll([...remaining, ...result]), selection: newSel };
+    const frozenDims = freezeDimsForRemovedShapes(state.dimensions, state.shapes, ids);
+    return {
+      ...state,
+      shapes: normalizeAll([...remaining, ...result]),
+      dimensions: frozenDims,
+      selection: newSel,
+    };
   }
 
   undo(state: AppState): AppState {
     const ids = new Set(this.resultIds);
     const remaining = state.shapes.filter((s) => !ids.has(s.id));
-    return { ...state, shapes: normalizeAll([...remaining, ...this.originalShapes]), selection: [] };
+    return {
+      ...state,
+      shapes: normalizeAll([...remaining, ...this.originalShapes]),
+      dimensions: this.dimsBefore,
+      selection: [],
+    };
   }
 }
 
@@ -140,6 +228,7 @@ export class DifferenceCommand implements Command {
   private originalA: Polygon | null = null;
   private originalB: Polygon | null = null;
   private resultIds: string[] = [];
+  private dimsBefore: Dimension[] = [];
 
   constructor(private selectionA: Selection, private selectionB: Selection) {}
 
@@ -150,12 +239,20 @@ export class DifferenceCommand implements Command {
 
     this.originalA = a;
     this.originalB = b;
+    this.dimsBefore = state.dimensions;
     const result = difference(a, b);
     this.resultIds = result.map((r) => r.id);
 
+    const removedIds = new Set([a.id, b.id]);
     const remaining = state.shapes.filter((s) => s.id !== a.id && s.id !== b.id);
     const newSel = result.map((r) => ({ type: 'polygon' as const, shapeId: r.id, index: -1, holeIndex: -1 }));
-    return { ...state, shapes: normalizeAll([...remaining, ...result]), selection: newSel };
+    const frozenDims = freezeDimsForRemovedShapes(state.dimensions, state.shapes, removedIds);
+    return {
+      ...state,
+      shapes: normalizeAll([...remaining, ...result]),
+      dimensions: frozenDims,
+      selection: newSel,
+    };
   }
 
   undo(state: AppState): AppState {
@@ -165,6 +262,7 @@ export class DifferenceCommand implements Command {
     return {
       ...state,
       shapes: normalizeAll([...remaining, this.originalA, this.originalB]),
+      dimensions: this.dimsBefore,
       selection: [],
     };
   }

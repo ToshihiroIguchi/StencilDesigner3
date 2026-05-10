@@ -1,4 +1,5 @@
 import type { Ring } from '../types';
+import { vertex } from './vertex';
 
 export type FilletSkipReason =
   | 'zero-length-edge'
@@ -44,14 +45,9 @@ function filletSegment(
   if (d1 === 0) return { ok: false, reason: 'r-too-small' };
   if (d1 >= dpLen || d1 >= dnLen) return { ok: false, reason: 'r-too-large' };
 
-  const T1 = {
-    x: Math.round(V.x + d1Float * dpUx),
-    y: Math.round(V.y + d1Float * dpUy),
-  };
-  const T2 = {
-    x: Math.round(V.x + d1Float * dnUx),
-    y: Math.round(V.y + d1Float * dnUy),
-  };
+  // Tangent points (new geometric vertices, get new IDs)
+  const T1 = vertex(V.x + d1Float * dpUx, V.y + d1Float * dpUy);
+  const T2 = vertex(V.x + d1Float * dnUx, V.y + d1Float * dnUy);
 
   const bisRawX = dpUx + dnUx;
   const bisRawY = dpUy + dnUy;
@@ -71,10 +67,7 @@ function filletSegment(
   const arcPts: Ring = [];
   for (let k = 1; k < nSeg; k++) {
     const angle = a1 + delta * (k / nSeg);
-    arcPts.push({
-      x: Math.round(Cfx + R * Math.cos(angle)),
-      y: Math.round(Cfy + R * Math.sin(angle)),
-    });
+    arcPts.push(vertex(Cfx + R * Math.cos(angle), Cfy + R * Math.sin(angle)));
   }
 
   return { ok: true, pts: [T1, ...arcPts, T2] };

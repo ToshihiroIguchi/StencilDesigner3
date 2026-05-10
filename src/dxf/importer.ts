@@ -1,7 +1,8 @@
-import type { Polygon, Ring, Point, Layer } from '../types';
+import type { Polygon, Ring, Layer, Vertex } from '../types';
 import { newId } from '../types';
 import { normalizeAll } from '../normalize';
 import { dist } from '../core/geometry';
+import { vertex } from '../core/vertex';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DxfEntity = any;
@@ -17,27 +18,23 @@ function mmToUm(v: number): number {
   return Math.round(v * 1000);
 }
 
-/** Approximate arc as polyline segments. Returns points in CCW order. */
-function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number): Point[] {
-  const points: Point[] = [];
-  // Normalize angles
+/** Approximate arc as polyline segments. Returns vertices with new IDs. */
+function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number): Vertex[] {
+  const points: Vertex[] = [];
   let start = startAngle;
   let end = endAngle;
   if (end < start) end += 360;
   const span = end - start;
-  const steps = Math.max(8, Math.ceil(Math.abs(span) / 5)); // ~5° per segment
+  const steps = Math.max(8, Math.ceil(Math.abs(span) / 5));
   for (let i = 0; i <= steps; i++) {
     const angle = ((start + (span * i) / steps) * Math.PI) / 180;
-    points.push({
-      x: mmToUm(cx + r * Math.cos(angle)),
-      y: mmToUm(cy + r * Math.sin(angle)),
-    });
+    points.push(vertex(mmToUm(cx + r * Math.cos(angle)), mmToUm(-(cy + r * Math.sin(angle)))));
   }
   return points;
 }
 
 /** Chain a set of open segments into closed polylines. */
-function chainSegments(segments: [Point, Point][]): Ring[] {
+function chainSegments(segments: [Vertex, Vertex][]): Ring[] {
   if (segments.length === 0) return [];
 
   const SNAP = 10; // µm gap tolerance for chaining
@@ -46,7 +43,7 @@ function chainSegments(segments: [Point, Point][]): Ring[] {
 
   for (let start = 0; start < segments.length; start++) {
     if (used[start]) continue;
-    const chain: Point[] = [segments[start][0], segments[start][1]];
+    const chain: Vertex[] = [segments[start][0], segments[start][1]];
     used[start] = true;
 
     let extended = true;
@@ -80,7 +77,6 @@ function chainSegments(segments: [Point, Point][]): Ring[] {
 }
 
 function aciToHex(aci: number): string {
-  // AutoCAD Color Index → approximate CSS color (main colors only)
   const map: Record<number, string> = {
     1: '#ff0000', 2: '#ffff00', 3: '#00ff00', 4: '#00ffff',
     5: '#0000ff', 6: '#ff00ff', 7: '#ffffff', 8: '#414141', 9: '#808080',
@@ -97,7 +93,6 @@ function normalizeLinetype(lt: string | undefined): Layer['linetype'] {
 
 /** Parse DXF text and return polygons with layer information. */
 export async function importDxf(dxfText: string): Promise<ImportResult> {
-  // Dynamic import to avoid bundling issues
   const DxfParser = await import('dxf-parser');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parser = new (DxfParser as any).default();
@@ -110,8 +105,7 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
   }
 
   const entities: DxfEntity[] = dxf?.entities ?? [];
-  // segments and closedRings track layer name per item
-  const segments: Array<{ seg: [Point, Point]; layer: string }> = [];
+  const segments: Array<{ seg: [Vertex, Vertex]; layer: string }> = [];
   const closedRings: Array<{ ring: Ring; layer: string }> = [];
   const ignoredCounts: Record<string, number> = {};
 
@@ -119,8 +113,8 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     const lyrName: string = ent.layer ?? '0';
     switch (ent.type) {
       case 'LINE': {
-        const a: Point = { x: mmToUm(ent.vertices[0].x), y: mmToUm(ent.vertices[0].y) };
-        const b: Point = { x: mmToUm(ent.vertices[1].x), y: mmToUm(ent.vertices[1].y) };
+        const a = vertex(mmToUm(ent.vertices[0].x), mmToUm(-ent.vertices[0].y));
+        const b = vertex(mmToUm(ent.vertices[1].x), mmToUm(-ent.vertices[1].y));
         segments.push({ seg: [a, b], layer: lyrName });
         break;
       }
@@ -135,16 +129,15 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
 
       case 'CIRCLE': {
         const pts = arcToPoints(ent.center.x, ent.center.y, ent.radius, 0, 360);
-        const ring: Ring = pts.slice(0, -1).map((p) => p);
+        const ring: Ring = pts.slice(0, -1);
         closedRings.push({ ring, layer: lyrName });
         break;
       }
 
       case 'LWPOLYLINE': {
-        const pts: Point[] = ent.vertices.map((v: { x: number; y: number }) => ({
-          x: mmToUm(v.x),
-          y: mmToUm(v.y),
-        }));
+        const pts: Vertex[] = ent.vertices.map((v: { x: number; y: number }) =>
+          vertex(mmToUm(v.x), mmToUm(-v.y))
+        );
         if (ent.shape || ent.closed) {
           closedRings.push({ ring: pts, layer: lyrName });
         } else {
@@ -156,10 +149,9 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
       }
 
       case 'POLYLINE': {
-        const pts: Point[] = (ent.vertices ?? []).map((v: { x: number; y: number }) => ({
-          x: mmToUm(v.x),
-          y: mmToUm(v.y),
-        }));
+        const pts: Vertex[] = (ent.vertices ?? []).map((v: { x: number; y: number }) =>
+          vertex(mmToUm(v.x), mmToUm(-v.y))
+        );
         if (ent.shape || ent.closed) {
           closedRings.push({ ring: pts, layer: lyrName });
         } else {
@@ -177,11 +169,10 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     }
   }
 
-  // Chain open segments into rings, preserving layer (use first segment's layer)
+  // Chain open segments into rings, preserving layer
   const chainedRings: Array<{ ring: Ring; layer: string }> = [];
   if (segments.length > 0) {
-    // Group by layer for chaining
-    const layerGroups = new Map<string, [Point, Point][]>();
+    const layerGroups = new Map<string, [Vertex, Vertex][]>();
     for (const { seg, layer } of segments) {
       if (!layerGroups.has(layer)) layerGroups.set(layer, []);
       layerGroups.get(layer)!.push(seg);

@@ -79,7 +79,7 @@ function writeLwPolyline(lines: string[], ring: Ring, layer: string, closed: boo
   lines.push(`90\n${ring.length}`);
   for (const p of ring) {
     lines.push(`10\n${umToMm(p.x).toFixed(6)}`);
-    lines.push(`20\n${umToMm(p.y).toFixed(6)}`);
+    lines.push(`20\n${umToMm(-p.y).toFixed(6)}`);
   }
 }
 
@@ -91,6 +91,8 @@ export function downloadDxf(polygons: Polygon[], layers: Layer[], filename = 'st
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
