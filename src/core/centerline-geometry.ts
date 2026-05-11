@@ -33,27 +33,60 @@ const CENTERLINE_EXTENSION_RATIO = 0.1;
 
 function parallelCenterline(e1: [Point, Point], e2: [Point, Point]): { p1: Point; p2: Point } {
   const [a1, a2] = e1;
-  // Match endpoints by proximity so the centerline runs a1↔b1 and a2↔b2
-  const d00 = sqDist(a1, e2[0]);
-  const d01 = sqDist(a1, e2[1]);
-  const [b1, b2] = d00 <= d01 ? [e2[0], e2[1]] : [e2[1], e2[0]];
+  const [b1, b2] = e2;
+  
+  const d1x = a2.x - a1.x, d1y = a2.y - a1.y;
+  const len1 = Math.sqrt(d1x * d1x + d1y * d1y);
+  
+  const d2x = b2.x - b1.x, d2y = b2.y - b1.y;
+  const len2 = Math.sqrt(d2x * d2x + d2y * d2y);
 
-  // Midpoint-to-midpoint centerline (same length as the edges)
-  const m1 = midpointInt(a1, b1);
-  const m2 = midpointInt(a2, b2);
+  if (len1 < 0.5 && len2 < 0.5) return { p1: a1, p2: b1 }; // degenerate
 
-  // Extend both ends by CENTERLINE_EXTENSION_RATIO of the centerline length
-  const dx = m2.x - m1.x;
-  const dy = m2.y - m1.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len < 0.5) return { p1: m1, p2: m2 };
+  // Reference direction (from longer edge)
+  let ux = 0, uy = 0;
+  if (len1 >= len2) {
+    ux = d1x / len1; uy = d1y / len1;
+  } else {
+    ux = d2x / len2; uy = d2y / len2;
+    if (ux * d1x + uy * d1y < 0) { ux = -ux; uy = -uy; } // Align directions
+  }
 
-  const ext = Math.round(len * CENTERLINE_EXTENSION_RATIO);
-  const ux = dx / len;
-  const uy = dy / len;
+  // Midpoint between the two parallel infinite lines
+  let midX = 0, midY = 0;
+  if (len2 >= 0.5) {
+    // Project a1 onto line e2
+    const v_x = a1.x - b1.x, v_y = a1.y - b1.y;
+    const e2_ux = d2x / len2, e2_uy = d2y / len2;
+    const dot = v_x * e2_ux + v_y * e2_uy;
+    const projX = b1.x + dot * e2_ux;
+    const projY = b1.y + dot * e2_uy;
+    midX = (a1.x + projX) / 2;
+    midY = (a1.y + projY) / 2;
+  } else if (len1 >= 0.5) {
+    // e2 is a point, project b1 onto line e1
+    const v_x = b1.x - a1.x, v_y = b1.y - a1.y;
+    const e1_ux = d1x / len1, e1_uy = d1y / len1;
+    const dot = v_x * e1_ux + v_y * e1_uy;
+    const projX = a1.x + dot * e1_ux;
+    const projY = a1.y + dot * e1_uy;
+    midX = (b1.x + projX) / 2;
+    midY = (b1.y + projY) / 2;
+  }
+
+  // Project all 4 endpoints onto the reference direction vector
+  const proj = (p: Point) => (p.x - midX) * ux + (p.y - midY) * uy;
+  const pA1 = proj(a1), pA2 = proj(a2);
+  const pB1 = proj(b1), pB2 = proj(b2);
+
+  const minP = Math.min(pA1, pA2, pB1, pB2);
+  const maxP = Math.max(pA1, pA2, pB1, pB2);
+  const baseLen = maxP - minP;
+  const ext = baseLen * CENTERLINE_EXTENSION_RATIO;
+
   return {
-    p1: { x: Math.round(m1.x - ux * ext), y: Math.round(m1.y - uy * ext) },
-    p2: { x: Math.round(m2.x + ux * ext), y: Math.round(m2.y + uy * ext) },
+    p1: { x: Math.round(midX + (minP - ext) * ux), y: Math.round(midY + (minP - ext) * uy) },
+    p2: { x: Math.round(midX + (maxP + ext) * ux), y: Math.round(midY + (maxP + ext) * uy) },
   };
 }
 
