@@ -16,13 +16,7 @@ export function areEdgesParallel(e1: [Point, Point], e2: [Point, Point]): boolea
   return cross * cross * 1_000_000n <= len1Sq * len2Sq;
 }
 
-function sqDist(a: Point, b: Point): number {
-  return (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
-}
 
-function midpointInt(a: Point, b: Point): Point {
-  return { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) };
-}
 
 /**
  * Ratio by which the centerline extends beyond each endpoint.
