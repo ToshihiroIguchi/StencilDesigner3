@@ -33,7 +33,8 @@ export type ToolType =
   | 'fillet'
   | 'measure'
   | 'dimension'
-  | 'centerline';
+  | 'centerline'
+  | 'arrow';
 
 export interface Selection {
   type: 'vertex' | 'edge' | 'polygon';
@@ -83,7 +84,7 @@ export type DimensionAnchor =
 
 export interface Dimension {
   id: string;
-  kind: 'linear-h' | 'linear-v' | 'centerline';
+  kind: 'linear-h' | 'linear-v' | 'centerline' | 'arrow';
   anchor1: DimensionAnchor;
   anchor2: DimensionAnchor;
   /** World coordinate of the dimension line.

@@ -10,6 +10,7 @@ import { PolygonTool } from '../tools/polygon';
 import { MeasureTool } from '../tools/measure';
 import { DimensionTool } from '../tools/dimension';
 import { CenterlineTool } from '../tools/centerline';
+import { ArrowTool } from '../tools/arrow';
 import { findSnapPoint, hitTest, hitTestDimension } from '../core/selection';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
@@ -28,7 +29,7 @@ import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
 import { fmtMm } from '../core/format';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -158,7 +159,9 @@ export class App {
           ? (this.activeTool.getDimDraft() ?? undefined)
           : this.activeTool instanceof CenterlineTool
             ? (this.activeTool.getDimDraft(state) ?? undefined)
-            : undefined,
+            : this.activeTool instanceof ArrowTool
+              ? (this.activeTool.getRendererExtras().dimDraft ?? undefined)
+              : undefined,
         selectedDimId: this.selectedDimId,
       },
     );
@@ -418,6 +421,7 @@ export class App {
       if (e.key === 'm' || e.key === 'M') { this.setTool('measure'); return; }
       if (e.key === 'd' || e.key === 'D') { this.setTool('dimension'); return; }
       if (e.key === 'l' || e.key === 'L') { this.setTool('centerline'); return; }
+      if (e.key === 'a' || e.key === 'A') { this.setTool('arrow'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -454,6 +458,7 @@ export class App {
       case 'measure': this.activeTool = new MeasureTool(toolCtx); break;
       case 'dimension': this.activeTool = new DimensionTool(toolCtx); break;
       case 'centerline': this.activeTool = new CenterlineTool(toolCtx); break;
+      case 'arrow': this.activeTool = new ArrowTool(toolCtx); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
 

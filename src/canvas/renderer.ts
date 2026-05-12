@@ -64,7 +64,7 @@ export interface MeasureOverlay { p1: Point; p2: Point; }
 export interface DimDraft {
   p1: Point;
   p2?: Point;
-  kind?: 'linear-h' | 'linear-v' | 'centerline';
+  kind?: 'linear-h' | 'linear-v' | 'centerline' | 'arrow';
   offset?: number;
 }
 
@@ -612,6 +612,21 @@ export class CanvasRenderer {
       return;
     }
 
+    if (kind === 'arrow') {
+      const c1 = worldToCanvas(p1.x, p1.y, vt);
+      const c2 = worldToCanvas(p2.x, p2.y, vt);
+      ctx.beginPath();
+      ctx.moveTo(c1.x, c1.y);
+      ctx.lineTo(c2.x, c2.y);
+      ctx.stroke();
+      
+      const angle = Math.atan2(c2.y - c1.y, c2.x - c1.x);
+      // Arrow points towards p2, so the arrowhead is at p2 pointing towards p1 (angle + PI)
+      this.drawArrowhead(c2.x, c2.y, angle + Math.PI, DIM_ARROW, DIM_ANGLE);
+      ctx.restore();
+      return;
+    }
+
     if (kind === 'linear-h') {
       const c1 = worldToCanvas(p1.x, p1.y, vt);
       const c2 = worldToCanvas(p2.x, p2.y, vt);
@@ -735,9 +750,9 @@ export class CanvasRenderer {
     ctx.arc(c2.x, c2.y, 4, 0, Math.PI * 2);
     ctx.fill();
 
-    if (draft.kind === 'centerline') {
+    if (draft.kind === 'centerline' || draft.kind === 'arrow') {
       ctx.restore();
-      this.drawOneDimension('centerline', draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', vt);
+      this.drawOneDimension(draft.kind, draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', vt);
       return;
     }
 
