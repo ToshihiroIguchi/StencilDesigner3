@@ -1,7 +1,7 @@
 import type { AppState, Point, Dimension, DimensionAnchor } from '../types';
 import { newId } from '../types';
 import { BaseTool, type ToolContext } from './base';
-
+import { constrainAngle } from '../core/geometry';
 import { AddDimensionCommand } from '../state/commands';
 import { markDirty } from '../state/autosave';
 import { findVertexAnchor } from '../core/anchor-pick';
@@ -9,7 +9,8 @@ import { findVertexAnchor } from '../core/anchor-pick';
 export class ArrowTool extends BaseTool {
   private p1: Point | null = null;
   private anchor1: DimensionAnchor | null = null;
-  
+
+  private static readonly ANGLE_SNAP_DEG = 45;
   constructor(ctx: ToolContext) {
     super(ctx);
   }
@@ -26,18 +27,25 @@ export class ArrowTool extends BaseTool {
     this.ctx.requestRender();
   }
 
-  onMouseMove(worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {
-    this.snapPoint = this.ctx.getSnapPoint(worldPt);
+  onMouseMove(worldPt: Point, _canvasPt: Point, shift: boolean, _state: AppState): void {
+    let snapped = this.ctx.getSnapPoint(worldPt);
+    if (shift && this.p1) {
+      snapped = constrainAngle(this.p1, snapped, ArrowTool.ANGLE_SNAP_DEG);
+    }
+    this.snapPoint = snapped;
     this.ctx.requestRender();
   }
 
-  onMouseUp(worldPt: Point, _canvasPt: Point, _shift: boolean, state: AppState): void {
+  onMouseUp(worldPt: Point, _canvasPt: Point, shift: boolean, state: AppState): void {
     if (!this.p1 || !this.anchor1) {
       this.cancel();
       return;
     }
 
-    const snapped = this.ctx.getSnapPoint(worldPt);
+    let snapped = this.ctx.getSnapPoint(worldPt);
+    if (shift && this.p1) {
+      snapped = constrainAngle(this.p1, snapped, ArrowTool.ANGLE_SNAP_DEG);
+    }
     const worldRadius = state.snapRadius / state.zoom;
     const va = findVertexAnchor(snapped, state.shapes, worldRadius);
     const anchor2 = va ?? { kind: 'free', point: snapped };

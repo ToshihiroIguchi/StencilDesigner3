@@ -291,5 +291,24 @@ export function polygonNarrowestPassage(poly: Polygon): { width: number; loc: Po
   return { width: Math.sqrt(minSq), loc: bestLoc };
 }
 
+/**
+ * Constrain point `to` to multiples of `stepDeg` degrees from `from`.
+ * The distance between the two points is preserved.
+ * Result coordinates are rounded to the nearest integer µm.
+ */
+export function constrainAngle(from: Point, to: Point, stepDeg: number): Point {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distVal = Math.sqrt(dx * dx + dy * dy);
+  if (distVal === 0) return to;
+  const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+  const snappedDeg = Math.round(angleDeg / stepDeg) * stepDeg;
+  const rad = snappedDeg * (Math.PI / 180);
+  return {
+    x: Math.round(from.x + distVal * Math.cos(rad)),
+    y: Math.round(from.y + distVal * Math.sin(rad)),
+  };
+}
+
 // Re-export Vertex for convenience
 export type { Vertex };

@@ -4,7 +4,7 @@ import { BaseTool, type ToolContext } from './base';
 import { normalize, hasSelfIntersection } from '../normalize';
 import { AddShapeCommand } from '../state/commands';
 import { markDirty } from '../state/autosave';
-import { segmentsIntersect } from '../core/geometry';
+import { segmentsIntersect, constrainAngle } from '../core/geometry';
 import { vertex } from '../core/vertex';
 
 export class PolygonTool extends BaseTool {
@@ -27,7 +27,7 @@ export class PolygonTool extends BaseTool {
   onMouseDown(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void {
     const snapped = this.ctx.getSnapPoint(worldPt);
     const pt = shift && this.vertices.length > 0
-      ? this.constrainAngle(this.vertices[this.vertices.length - 1], snapped)
+      ? constrainAngle(this.vertices[this.vertices.length - 1], snapped, PolygonTool.ANGLE_SNAP_DEG)
       : snapped;
 
     // Close polygon when clicking near the first vertex
@@ -50,7 +50,7 @@ export class PolygonTool extends BaseTool {
   onMouseMove(worldPt: Point, _canvasPt: Point, shift: boolean, state: AppState): void {
     const snapped = this.ctx.getSnapPoint(worldPt);
     this.hoverPt = shift && this.vertices.length > 0
-      ? this.constrainAngle(this.vertices[this.vertices.length - 1], snapped)
+      ? constrainAngle(this.vertices[this.vertices.length - 1], snapped, PolygonTool.ANGLE_SNAP_DEG)
       : snapped;
 
     // willClose: world-space distance to first vertex ≤ snap threshold
@@ -148,22 +148,6 @@ export class PolygonTool extends BaseTool {
     this.ctx.requestRender();
   }
 
-  private constrainAngle(from: Point, to: Point): Point {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist === 0) return to;
-
-    const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-    const step = PolygonTool.ANGLE_SNAP_DEG;
-    const snappedDeg = Math.round(angleDeg / step) * step;
-    const rad = snappedDeg * (Math.PI / 180);
-
-    return {
-      x: Math.round(from.x + dist * Math.cos(rad)),
-      y: Math.round(from.y + dist * Math.sin(rad)),
-    };
-  }
 
   private detectSelfIntersect(): boolean {
     const verts = this.vertices;

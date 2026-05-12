@@ -72,7 +72,7 @@ export class SelectTool extends BaseTool {
     this.ctx.requestRender();
   }
 
-  onMouseMove(worldPt: Point, canvasPt: Point, _shift: boolean, _state: AppState): void {
+  onMouseMove(worldPt: Point, canvasPt: Point, shift: boolean, _state: AppState): void {
     this.snapPoint = this.ctx.getSnapPoint(worldPt);
     const state = this.ctx.history.state;
 
@@ -86,8 +86,15 @@ export class SelectTool extends BaseTool {
       }
 
       if (this.dragThresholdReached) {
-        const dx = worldPt.x - this.moveOrigin.x;
-        const dy = worldPt.y - this.moveOrigin.y;
+        let dx = worldPt.x - this.moveOrigin.x;
+        let dy = worldPt.y - this.moveOrigin.y;
+
+        if (shift) {
+          // Ortho lock: constrain movement to the dominant axis
+          if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
+          else dx = 0;
+        }
+
         if (dx !== 0 || dy !== 0) {
           this.pendingDx += dx;
           this.pendingDy += dy;
