@@ -11,13 +11,12 @@ import { MeasureTool } from '../tools/measure';
 import { DimensionTool } from '../tools/dimension';
 import { CenterlineTool } from '../tools/centerline';
 import { ArrowTool } from '../tools/arrow';
-import { findSnapPoint, hitTest, hitTestDimension } from '../core/selection';
+import { findSnapPoint, hitTest } from '../core/selection';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
   ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand,
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
   UpdateLayerStyleCommand, MoveShapesToLayerCommand,
-  DeleteDimensionCommand,
 } from '../state/commands';
 import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
 import { importDxf, type ImportResult } from '../dxf/importer';
@@ -59,7 +58,6 @@ export class App {
   private drcErrors: DrcError[] = [];
   private diffStep: 0 | 1 | 2 = 0;
   private diffBaseId: string | null = null;
-  private selectedDimId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -162,7 +160,7 @@ export class App {
             : this.activeTool instanceof ArrowTool
               ? (this.activeTool.getRendererExtras().dimDraft ?? undefined)
               : undefined,
-        selectedDimId: this.selectedDimId,
+        selectedDimIds: new Set(state.selection.filter((s) => s.type === 'dimension').map((s) => s.shapeId)),
       },
     );
     this.updateFooter(state);
@@ -319,24 +317,6 @@ export class App {
     const { canvasPt, worldPt } = this.getCanvasPt(e);
     if (this.diffStep > 0) { this.handleDiffClick(canvasPt); return; }
 
-    // When select tool is active, check dim hits before polygons
-    if (this.activeTool instanceof SelectTool) {
-      const state = this.history.state;
-      const layerMap = new Map(state.layers.map((l) => [l.name, l]));
-      const interactiveDims = state.dimensions.filter((d) => {
-        const l = layerMap.get(d.layer);
-        return l && l.visible && !l.locked;
-      });
-      const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, interactiveDims, state.shapes, state, state.snapRadius);
-      if (dimHit) {
-        this.selectedDimId = dimHit.id;
-        state.selection = [];
-        this.requestRender();
-        return;
-      }
-      // No dim hit — clear dim selection
-      this.selectedDimId = null;
-    }
 
     this.activeTool.onMouseDown(worldPt, canvasPt, e.shiftKey, this.history.state);
   }
@@ -481,14 +461,6 @@ export class App {
   }
 
   deleteSelected(): void {
-    if (this.selectedDimId !== null) {
-      const id = this.selectedDimId;
-      this.selectedDimId = null;
-      this.history.execute(new DeleteDimensionCommand(id));
-      markDirty();
-      this.requestRender();
-      return;
-    }
     const state = this.history.state;
     if (state.selection.length === 0) return;
     this.history.execute(new DeleteCommand(state.selection));
@@ -903,7 +875,6 @@ export class App {
   async hardReset(): Promise<void> {
     if (!await this.showMessageModal({ title: 'Clear All', message: 'Clear all shapes and history?', okText: 'Clear', cancelText: 'Cancel', danger: true })) return;
     this.cancelDiffMode();
-    this.selectedDimId = null;
     await clearState();
     this.history.loadState(createDefaultState());
     this.requestRender();
@@ -1212,9 +1183,9 @@ export class App {
     const propsEl = document.getElementById('shape-props');
     if (!infoEl) return;
 
-    // Dimension selected
-    if (this.selectedDimId !== null) {
-      const dim = state.dimensions.find((d) => d.id === this.selectedDimId);
+    const dimSels = sel.filter((s) => s.type === 'dimension');
+    if (dimSels.length === 1 && sel.length === 1) {
+      const dim = state.dimensions.find((d) => d.id === dimSels[0].shapeId);
       if (dim) {
         const { p1, p2, frozen } = resolveDimension(dim, state.shapes);
         let label: string;

@@ -37,8 +37,8 @@ export type ToolType =
   | 'arrow';
 
 export interface Selection {
-  type: 'vertex' | 'edge' | 'polygon';
-  shapeId: string;
+  type: 'vertex' | 'edge' | 'polygon' | 'dimension';
+  shapeId: string; // If type === 'dimension', this is the dimension ID
   /** vertex/edge index within the outer ring (or hole ring if holeIndex >= 0) */
   index: number;
   holeIndex: number; // -1 = outer ring

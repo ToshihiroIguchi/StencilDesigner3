@@ -136,14 +136,16 @@ export class DeleteCommand implements Command {
   private dimsBefore: Dimension[] = [];
   constructor(private selection: Selection[]) {}
   do(state: AppState): AppState {
-    const ids = new Set(this.selection.map((s) => s.shapeId));
-    this.deletedShapes = state.shapes.filter((s) => ids.has(s.id));
+    const shapeIds = new Set(this.selection.filter((s) => s.type !== 'dimension').map((s) => s.shapeId));
+    const dimIds = new Set(this.selection.filter((s) => s.type === 'dimension').map((s) => s.shapeId));
+    this.deletedShapes = state.shapes.filter((s) => shapeIds.has(s.id));
     this.dimsBefore = state.dimensions;
-    const frozenDims = freezeDimsForRemovedShapes(state.dimensions, state.shapes, ids);
+    let nextDims = freezeDimsForRemovedShapes(state.dimensions, state.shapes, shapeIds);
+    nextDims = nextDims.filter((d) => !dimIds.has(d.id));
     return {
       ...state,
       shapes: deleteShapes(state.shapes, this.selection),
-      dimensions: frozenDims,
+      dimensions: nextDims,
       selection: [],
     };
   }

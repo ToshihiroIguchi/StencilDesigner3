@@ -131,7 +131,7 @@ export function hitTestDimension(
     if (dist(wp, p1) <= r) return { id: dim.id, part: 'p1' };
     if (dist(wp, p2) <= r) return { id: dim.id, part: 'p2' };
     let ds: Point, de: Point;
-    if (dim.kind === 'centerline') {
+    if (dim.kind === 'centerline' || dim.kind === 'arrow') {
       ds = p1; de = p2;
     } else if (dim.kind === 'linear-h') {
       ds = { x: p1.x, y: dim.offset }; de = { x: p2.x, y: dim.offset };
@@ -148,16 +148,37 @@ export function hitTestDimension(
 export function rubberBandSelect(
   x1: number, y1: number, x2: number, y2: number,
   shapes: Polygon[],
+  dimensions: Dimension[],
   vt: ViewTransform
 ): Selection[] {
   const wp1 = canvasToWorld(Math.min(x1, x2), Math.min(y1, y2), vt);
   const wp2 = canvasToWorld(Math.max(x1, x2), Math.max(y1, y2), vt);
 
-  return shapes
+  const shapeSels: Selection[] = shapes
     .filter((shape) => {
       return shape.outer.every(
         (p) => p.x >= wp1.x && p.x <= wp2.x && p.y >= wp1.y && p.y <= wp2.y
       );
     })
     .map((shape) => ({ type: 'polygon' as const, shapeId: shape.id, index: -1, holeIndex: -1 }));
+
+  const dimSels: Selection[] = dimensions
+    .filter((dim) => {
+      const { p1, p2 } = resolveDimension(dim, shapes);
+      let ds: Point, de: Point;
+      if (dim.kind === 'centerline' || dim.kind === 'arrow') {
+        ds = p1; de = p2;
+      } else if (dim.kind === 'linear-h') {
+        ds = { x: p1.x, y: dim.offset }; de = { x: p2.x, y: dim.offset };
+      } else {
+        ds = { x: dim.offset, y: p1.y }; de = { x: dim.offset, y: p2.y };
+      }
+      return p1.x >= wp1.x && p1.x <= wp2.x && p1.y >= wp1.y && p1.y <= wp2.y &&
+             p2.x >= wp1.x && p2.x <= wp2.x && p2.y >= wp1.y && p2.y <= wp2.y &&
+             ds.x >= wp1.x && ds.x <= wp2.x && ds.y >= wp1.y && ds.y <= wp2.y &&
+             de.x >= wp1.x && de.x <= wp2.x && de.y >= wp1.y && de.y <= wp2.y;
+    })
+    .map((dim) => ({ type: 'dimension' as const, shapeId: dim.id, index: -1, holeIndex: -1 }));
+
+  return [...shapeSels, ...dimSels];
 }

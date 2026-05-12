@@ -1,6 +1,6 @@
 import type { AppState, Point, Polygon, Selection } from '../types';
 import { BaseTool, type ToolContext } from './base';
-import { hitTest, rubberBandSelect } from '../core/selection';
+import { hitTest, hitTestDimension, rubberBandSelect } from '../core/selection';
 import { MoveCommand, SetSelectionCommand } from '../state/commands';
 import { translatePolygon } from '../core/geometry';
 import { markDirty } from '../state/autosave';
@@ -32,7 +32,18 @@ export class SelectTool extends BaseTool {
     this.pendingDx = 0;
     this.pendingDy = 0;
 
-    const hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
+    let hit: Selection | null = null;
+    const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+    const interactiveDims = state.dimensions.filter((d) => {
+      const l = layerMap.get(d.layer);
+      return l && l.visible && !l.locked;
+    });
+    const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, interactiveDims, state.shapes, state, state.snapRadius);
+    if (dimHit) {
+      hit = { type: 'dimension', shapeId: dimHit.id, index: -1, holeIndex: -1 };
+    } else {
+      hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
+    }
     if (hit) {
       const alreadySelected = state.selection.some((s) => s.shapeId === hit.shapeId);
       if (!alreadySelected) {
@@ -105,7 +116,7 @@ export class SelectTool extends BaseTool {
       const sel = rubberBandSelect(
         this.rubberBandStart.x, this.rubberBandStart.y,
         canvasPt.x, canvasPt.y,
-        state.shapes, vt
+        state.shapes, state.dimensions, vt
       );
       if (sel.length > 0) {
         const newSel = shift ? [...state.selection, ...sel] : sel;

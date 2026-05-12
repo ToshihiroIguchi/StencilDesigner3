@@ -71,7 +71,7 @@ export interface DimDraft {
 export interface RendererExtras {
   measureOverlay?: MeasureOverlay;
   dimDraft?: DimDraft;
-  selectedDimId?: string | null;
+  selectedDimIds?: Set<string>;
 }
 
 export class CanvasRenderer {
@@ -171,7 +171,7 @@ export class CanvasRenderer {
 
     // Dimensions
     if (state.dimensions.length > 0) {
-      this.drawDimensions(state.dimensions, state.shapes, layerMap, extras?.selectedDimId ?? null, vt);
+      this.drawDimensions(state.dimensions, state.shapes, layerMap, extras?.selectedDimIds ?? new Set(), vt);
     }
 
     // In-progress dimension draft
@@ -568,13 +568,13 @@ export class CanvasRenderer {
     dimensions: Dimension[],
     shapes: Polygon[],
     layerMap: Map<string, Layer>,
-    selectedId: string | null,
+    selectedIds: Set<string>,
     vt: ViewTransform,
   ): void {
     for (const dim of dimensions) {
       const layer = layerMap.get(dim.layer);
       if (layer && !layer.visible) continue;
-      const selected = selectedId === dim.id;
+      const selected = selectedIds.has(dim.id);
       const { p1, p2, frozen } = resolveDimension(dim, shapes);
       const baseColor = selected ? COLORS.shapeSelected : (layer?.color ?? '#888888');
       const color = frozen ? '#7a7a8a' : baseColor;
