@@ -13,7 +13,7 @@ describe('Layer commands', () => {
     expect(s.layers).toHaveLength(1);
     expect(s.layers[0].name).toBe('0');
     expect(s.activeLayerName).toBe('0');
-    expect(s.schemaVersion).toBe(5);
+    expect(s.schemaVersion).toBe(6);
     expect(s.layers.find((l) => l.name === 'DIMENSIONS')).toBeUndefined();
     expect(s.layers.find((l) => l.name === 'REGMARK')).toBeUndefined();
     expect(s.layers.find((l) => l.name === 'OUTLINE')).toBeUndefined();

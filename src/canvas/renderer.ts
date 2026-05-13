@@ -171,7 +171,7 @@ export class CanvasRenderer {
 
     // Dimensions
     if (state.dimensions.length > 0) {
-      this.drawDimensions(state.dimensions, state.shapes, layerMap, extras?.selectedDimIds ?? new Set(), vt);
+      this.drawDimensions(state.dimensions, state.shapes, layerMap, extras?.selectedDimIds ?? new Set(), state.displayUnit, vt);
     }
 
     // In-progress dimension draft
@@ -568,6 +568,7 @@ export class CanvasRenderer {
     shapes: Polygon[],
     layerMap: Map<string, Layer>,
     selectedIds: Set<string>,
+    unit: 'mm' | 'um',
     vt: ViewTransform,
   ): void {
     for (const dim of dimensions) {
@@ -577,7 +578,7 @@ export class CanvasRenderer {
       const { p1, p2, frozen } = resolveDimension(dim, shapes);
       const baseColor = selected ? COLORS.shapeSelected : (layer?.color ?? '#888888');
       const color = frozen ? '#7a7a8a' : baseColor;
-      this.drawOneDimension(dim.kind, p1, p2, dim.offset, color, state.displayUnit, vt, frozen);
+      this.drawOneDimension(dim.kind, p1, p2, dim.offset, color, unit, vt, frozen);
     }
   }
 
@@ -646,6 +647,8 @@ export class CanvasRenderer {
       ctx.lineTo(c2.x, cdy);
       ctx.stroke();
 
+      const dirX = Math.sign(c2.x - c1.x);
+      this.drawArrowhead(c1.x, cdy, dirX > 0 ? 0 : Math.PI, DIM_ARROW, DIM_ANGLE);
       this.drawArrowhead(c2.x, cdy, dirX > 0 ? Math.PI : 0, DIM_ARROW, DIM_ANGLE);
 
       const label = UnitConverter.formatOutput(Math.abs(p2.x - p1.x), unit, true);
@@ -671,6 +674,8 @@ export class CanvasRenderer {
       ctx.lineTo(cdx, c2.y);
       ctx.stroke();
 
+      const dirY = Math.sign(c2.y - c1.y);
+      this.drawArrowhead(cdx, c1.y, dirY > 0 ? Math.PI / 2 : -Math.PI / 2, DIM_ARROW, DIM_ANGLE);
       this.drawArrowhead(cdx, c2.y, dirY > 0 ? -Math.PI / 2 : Math.PI / 2, DIM_ARROW, DIM_ANGLE);
 
       const label = UnitConverter.formatOutput(Math.abs(p2.y - p1.y), unit, true);
@@ -799,6 +804,7 @@ export class CanvasRenderer {
     }
 
     // Minor ticks: step / 5, only when ≥ 8px apart
+    const subDiv = 5;
     const subStep = step / subDiv;
     const showMinor = subStep * vt.zoom >= 8;
 
