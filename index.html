@@ -165,7 +165,7 @@
       <label class="fillet-row">
         <span>R</span>
         <input id="fillet-r" type="number" min="1" step="100" value="500">
-        <span>µm</span>
+        <span class="unit-label">µm</span>
       </label>
       <button id="btn-fillet-all" class="hdr-btn" style="width:100%;margin-top:6px;font-size:11px">
         Apply to all corners
@@ -183,10 +183,10 @@
       <div id="selection-info"><p class="muted">No selection</p></div>
       <!-- Numeric position/size editing — visible when exactly 1 shape is selected -->
       <div id="shape-props" style="display:none">
-        <div class="props-row"><span class="props-key">X</span><input id="prop-x" type="number" step="1"><span class="props-unit">µm</span></div>
-        <div class="props-row"><span class="props-key">Y</span><input id="prop-y" type="number" step="1"><span class="props-unit">µm</span></div>
-        <div class="props-row"><span class="props-key">W</span><input id="prop-w" type="number" min="1" step="1"><span class="props-unit">µm</span></div>
-        <div class="props-row"><span class="props-key">H</span><input id="prop-h" type="number" min="1" step="1"><span class="props-unit">µm</span></div>
+        <div class="props-row"><span class="props-key">X</span><input id="prop-x" type="number" step="1"><span class="unit-label">µm</span></div>
+        <div class="props-row"><span class="props-key">Y</span><input id="prop-y" type="number" step="1"><span class="unit-label">µm</span></div>
+        <div class="props-row"><span class="props-key">W</span><input id="prop-w" type="number" min="1" step="1"><span class="unit-label">µm</span></div>
+        <div class="props-row"><span class="props-key">H</span><input id="prop-h" type="number" min="1" step="1"><span class="unit-label">µm</span></div>
       </div>
     </div>
     <div class="panel-section">
@@ -195,12 +195,12 @@
         <label class="drc-cfg-row">
           <span>Min aperture</span>
           <input id="drc-min-aperture" type="number" min="10" step="10" value="30">
-          <span>µm</span>
+          <span class="unit-label">µm</span>
         </label>
         <label class="drc-cfg-row">
           <span>Min spacing</span>
           <input id="drc-min-spacing" type="number" min="0" step="10" value="30">
-          <span>µm</span>
+          <span class="unit-label">µm</span>
         </label>
       </div>
       <div id="drc-list"><p class="muted">No errors</p></div>
@@ -255,12 +255,12 @@
     <div class="modal-title">Copy</div>
     <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
       <div style="display:flex;align-items:center;gap:8px">
-        <label style="min-width:90px">Offset X (µm)</label>
+        <label style="min-width:90px" class="copy-modal-x-label">Offset X (µm)</label>
         <input id="copy-modal-x" type="number" value="1000" step="100"
           style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px">
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <label style="min-width:90px">Offset Y (µm)</label>
+        <label style="min-width:90px" class="copy-modal-y-label">Offset Y (µm)</label>
         <input id="copy-modal-y" type="number" value="0" step="100"
           style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px">
       </div>
@@ -280,7 +280,7 @@
       <div></div>
       <div style="text-align:center;font-weight:bold;color:var(--fg2)">Count</div>
       <div></div>
-      <div style="text-align:center;font-weight:bold;color:var(--fg2)">Pitch (µm)</div>
+      <div style="text-align:center;font-weight:bold;color:var(--fg2)" class="array-modal-pitch-label">Pitch (µm)</div>
       <label>X</label>
       <input id="array-modal-nx" type="number" value="3" min="1" step="1"
         style="background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px;width:100%;box-sizing:border-box">
@@ -336,6 +336,7 @@
   <span class="footer-item"><span class="footer-key">Area:</span><span class="footer-val" id="footer-area">—</span></span>
   <span class="footer-item"><span class="footer-key">Grid:</span><span class="footer-val" id="footer-grid">1000µm</span></span>
   <span class="footer-item"><span class="footer-key">Snap:</span><span class="footer-val" id="footer-snap">ON</span></span>
+  <span class="footer-item"><span class="footer-key">Unit:</span><span class="footer-val" id="footer-unit" style="cursor:pointer;color:var(--accent)">mm</span></span>
   <span class="footer-item"><span class="footer-key">Zoom:</span><span class="footer-val" id="footer-zoom" title="Click to reset zoom to 100%" style="cursor:pointer">50%</span></span>
 </footer>
 

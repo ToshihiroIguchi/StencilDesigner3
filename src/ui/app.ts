@@ -26,7 +26,7 @@ import { resizePolygon } from '../core/transform';
 import { resolveDimension } from '../core/dimension-resolve';
 import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
-import { fmtMm } from '../core/format';
+import { UnitConverter } from '../core/format';
 
 type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool;
 
@@ -90,6 +90,7 @@ export class App {
       // Ignore load errors
     }
 
+    this.updateUnitUI();
     this.renderer.resize();
     this.setupEventListeners();
     this.stopAutosave = startAutosave(() => this.history.state);
@@ -200,6 +201,7 @@ export class App {
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
     document.getElementById('btn-fit')?.addEventListener('click', () => this.fitToContent());
     document.getElementById('footer-zoom')?.addEventListener('click', () => this.resetZoom());
+    document.getElementById('footer-unit')?.addEventListener('click', () => this.toggleUnit());
 
     // Layer panel buttons
     document.getElementById('btn-layer-add')?.addEventListener('click', () => this.addLayer());
@@ -208,8 +210,8 @@ export class App {
     // Fillet panel
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
     filletRInput?.addEventListener('input', () => {
-      const r = parseInt(filletRInput.value, 10);
-      if (isNaN(r) || r <= 0) return;
+      const r = UnitConverter.parseInput(filletRInput.value, this.history.state.displayUnit);
+      if (r <= 0) return;
       this.filletRadius = r;
       savePrefs({ filletRadius: r }).catch(() => {});
       if (this.activeTool instanceof FilletTool) {
@@ -235,9 +237,8 @@ export class App {
       const shapes = state.shapes.filter((s) => ids.has(s.id));
       if (shapes.length !== 1) return;
       const bb = polygonBbox(shapes[0]);
-      const newX = parseInt(propX.value, 10);
-      const newY = parseInt(propY.value, 10);
-      if (isNaN(newX) || isNaN(newY)) return;
+      const newX = UnitConverter.parseInput(propX.value, state.displayUnit);
+      const newY = UnitConverter.parseInput(propY.value, state.displayUnit);
       const dx = newX - bb.minX;
       const dy = newY - bb.minY;
       if (dx === 0 && dy === 0) return;
@@ -253,9 +254,9 @@ export class App {
       const shapes = state.shapes.filter((s) => ids.has(s.id));
       if (shapes.length !== 1) return;
       const bb = polygonBbox(shapes[0]);
-      const newW = parseInt(propW.value, 10);
-      const newH = parseInt(propH.value, 10);
-      if (isNaN(newW) || isNaN(newH) || newW < 1 || newH < 1) return;
+      const newW = UnitConverter.parseInput(propW.value, state.displayUnit);
+      const newH = UnitConverter.parseInput(propH.value, state.displayUnit);
+      if (newW < 1 || newH < 1) return;
       if (newW === bb.maxX - bb.minX && newH === bb.maxY - bb.minY) return;
       const resized = resizePolygon(shapes[0], bb.minX, bb.minY, newW, newH);
       this.history.execute(new ResizeCommand(shapes[0], resized));
@@ -272,16 +273,16 @@ export class App {
     const drcApertureInput = document.getElementById('drc-min-aperture') as HTMLInputElement | null;
     const drcSpacingInput = document.getElementById('drc-min-spacing') as HTMLInputElement | null;
     drcApertureInput?.addEventListener('change', () => {
-      const v = parseInt(drcApertureInput.value, 10);
-      if (!isNaN(v) && v > 0) {
+      const v = UnitConverter.parseInput(drcApertureInput.value, this.history.state.displayUnit);
+      if (v > 0) {
         this.drcConfig = { ...this.drcConfig, minApertureUm: v };
         savePrefs({ drcMinApertureUm: v }).catch(() => {});
         this.requestRender();
       }
     });
     drcSpacingInput?.addEventListener('change', () => {
-      const v = parseInt(drcSpacingInput.value, 10);
-      if (!isNaN(v) && v >= 0) {
+      const v = UnitConverter.parseInput(drcSpacingInput.value, this.history.state.displayUnit);
+      if (v >= 0) {
         this.drcConfig = { ...this.drcConfig, minSpacingUm: v };
         savePrefs({ drcMinSpacingUm: v }).catch(() => {});
         this.requestRender();
@@ -339,8 +340,8 @@ export class App {
     // Update cursor position in footer
     const cursorX = document.getElementById('footer-cx');
     const cursorY = document.getElementById('footer-cy');
-    if (cursorX) cursorX.textContent = String(worldPt.x);
-    if (cursorY) cursorY.textContent = String(worldPt.y);
+    if (cursorX) cursorX.textContent = UnitConverter.formatOutput(worldPt.x, this.history.state.displayUnit);
+    if (cursorY) cursorY.textContent = UnitConverter.formatOutput(worldPt.y, this.history.state.displayUnit);
   }
 
   private onMouseUp(e: MouseEvent): void {
@@ -781,9 +782,8 @@ export class App {
         resolve(result);
       };
       const onOk = () => {
-        const dx = parseInt(xInput.value, 10);
-        const dy = parseInt(yInput.value, 10);
-        if (isNaN(dx) || isNaN(dy)) return;
+        const dx = UnitConverter.parseInput(xInput.value, this.history.state.displayUnit);
+        const dy = UnitConverter.parseInput(yInput.value, this.history.state.displayUnit);
         close({ dx, dy });
       };
       const onCancel = () => close(null);
@@ -819,9 +819,9 @@ export class App {
       const onOk = () => {
         const nx = parseInt(nxInput.value, 10);
         const ny = parseInt(nyInput.value, 10);
-        const pitchX = parseInt(pxInput.value, 10);
-        const pitchY = parseInt(pyInput.value, 10);
-        if ([nx, ny, pitchX, pitchY].some(isNaN) || nx < 1 || ny < 1) return;
+        const pitchX = UnitConverter.parseInput(pxInput.value, this.history.state.displayUnit);
+        const pitchY = UnitConverter.parseInput(pyInput.value, this.history.state.displayUnit);
+        if (isNaN(nx) || isNaN(ny) || nx < 1 || ny < 1) return;
         close({ nx, ny, pitchX, pitchY });
       };
       const onCancel = () => close(null);
@@ -1073,7 +1073,8 @@ export class App {
 
   private updateFooter(state: AppState): void {
     const el = (id: string) => document.getElementById(id);
-    const f = (v: number) => v.toLocaleString();
+    const unit = state.displayUnit;
+    const f = (v: number) => UnitConverter.formatOutput(v, unit);
 
     if (this.diffStep > 0) {
       const hint = this.diffStep === 1 ? 'Click BASE (keeps)' : 'Click CUT (removes)';
@@ -1086,9 +1087,9 @@ export class App {
         const dx = Math.abs(ov.p2.x - ov.p1.x);
         const dy = Math.abs(ov.p2.y - ov.p1.y);
         const d = Math.round(Math.sqrt(dx * dx + dy * dy));
-        if (el('footer-w')) el('footer-w')!.textContent = `dx:${fmtMm(dx)}`;
-        if (el('footer-h')) el('footer-h')!.textContent = `dy:${fmtMm(dy)}`;
-        if (el('footer-area')) el('footer-area')!.textContent = `d:${fmtMm(d)}`;
+        if (el('footer-w')) el('footer-w')!.textContent = `dx:${f(dx)}`;
+        if (el('footer-h')) el('footer-h')!.textContent = `dy:${f(dy)}`;
+        if (el('footer-area')) el('footer-area')!.textContent = `d:${f(d)}`;
       } else {
         if (el('footer-w')) el('footer-w')!.textContent = 'Click p1';
         if (el('footer-h')) el('footer-h')!.textContent = '—';
@@ -1125,10 +1126,15 @@ export class App {
       }
       if (el('footer-w')) el('footer-w')!.textContent = f(w);
       if (el('footer-h')) el('footer-h')!.textContent = f(h);
-      if (el('footer-area')) el('footer-area')!.textContent = f(Math.round(a));
+      if (el('footer-area')) {
+        // Area is squared, so if in mm, it's mm², if in um, it's um²
+        // But for mm, we need to divide by 1,000,000.
+        const areaStr = unit === 'mm' ? (a / 1000000).toFixed(4) : Math.round(a).toLocaleString();
+        el('footer-area')!.textContent = areaStr;
+      }
     }
 
-    if (el('footer-grid')) el('footer-grid')!.textContent = `${state.gridSize}µm`;
+    if (el('footer-grid')) el('footer-grid')!.textContent = UnitConverter.formatOutput(state.gridSize, unit, true);
     if (el('footer-snap')) el('footer-snap')!.textContent = state.snapEnabled ? 'ON' : 'OFF';
     if (el('footer-zoom')) el('footer-zoom')!.textContent = `${(state.zoom * 100).toFixed(0)}%`;
   }
@@ -1142,8 +1148,8 @@ export class App {
       const ft = this.activeTool as FilletTool;
       const rInput = document.getElementById('fillet-r') as HTMLInputElement | null;
       if (rInput) {
-        const cur = parseInt(rInput.value, 10);
-        if (cur !== ft.getRadius()) rInput.value = String(ft.getRadius());
+        const cur = UnitConverter.parseInput(rInput.value, state.displayUnit);
+        if (cur !== ft.getRadius()) rInput.value = UnitConverter.formatOutput(ft.getRadius(), state.displayUnit);
       }
       const statusEl = document.getElementById('fillet-status');
       if (statusEl) statusEl.textContent = ft.getStatusMessage();
@@ -1193,11 +1199,11 @@ export class App {
           const dx = Math.abs(p2.x - p1.x);
           const dy = Math.abs(p2.y - p1.y);
           const len = Math.round(Math.sqrt(dx * dx + dy * dy));
-          label = `CL: ${fmtMm(len)}`;
+          label = `CL: ${UnitConverter.formatOutput(len, state.displayUnit, true)}`;
         } else {
           const val = dim.kind === 'linear-h'
-            ? fmtMm(Math.abs(p2.x - p1.x))
-            : fmtMm(Math.abs(p2.y - p1.y));
+            ? UnitConverter.formatOutput(Math.abs(p2.x - p1.x), state.displayUnit, true)
+            : UnitConverter.formatOutput(Math.abs(p2.y - p1.y), state.displayUnit, true);
           label = `${dim.kind === 'linear-h' ? 'H' : 'V'}: ${val}`;
         }
         const frozenTag = frozen ? ' <span style="color:#7a7a8a">[frozen]</span>' : '';
@@ -1220,19 +1226,24 @@ export class App {
     let totalArea = 0;
     let html = `<p><strong>${shapes.length} shape(s)</strong></p>`;
 
+    const unit = state.displayUnit;
+    const f = (v: number) => UnitConverter.formatOutput(v, unit, true);
+
     for (const shape of shapes) {
       const bb = polygonBbox(shape);
       const a = polygonArea(shape);
       totalArea += a;
+      const areaStr = unit === 'mm' ? (a / 1000000).toFixed(4) + ' mm²' : Math.round(a).toLocaleString() + ' µm²';
       html += `<div class="shape-info">
-        <span>W: ${(bb.maxX - bb.minX).toLocaleString()}µm</span>
-        <span>H: ${(bb.maxY - bb.minY).toLocaleString()}µm</span>
-        <span>Area: ${Math.round(a).toLocaleString()}µm²</span>
+        <span>W: ${f(bb.maxX - bb.minX)}</span>
+        <span>H: ${f(bb.maxY - bb.minY)}</span>
+        <span>Area: ${areaStr}</span>
       </div>`;
     }
 
     if (shapes.length > 1) {
-      html += `<p>Total area: ${Math.round(totalArea).toLocaleString()}µm²</p>`;
+      const totalAreaStr = unit === 'mm' ? (totalArea / 1000000).toFixed(4) + ' mm²' : Math.round(totalArea).toLocaleString() + ' µm²';
+      html += `<p>Total area: ${totalAreaStr}</p>`;
     }
 
     infoEl.innerHTML = html;
@@ -1247,14 +1258,70 @@ export class App {
         const pw = document.getElementById('prop-w') as HTMLInputElement | null;
         const ph = document.getElementById('prop-h') as HTMLInputElement | null;
         // Don't overwrite inputs that the user is currently editing
-        if (px && document.activeElement !== px) px.value = String(bb.minX);
-        if (py && document.activeElement !== py) py.value = String(bb.minY);
-        if (pw && document.activeElement !== pw) pw.value = String(bb.maxX - bb.minX);
-        if (ph && document.activeElement !== ph) ph.value = String(bb.maxY - bb.minY);
+        if (px && document.activeElement !== px) px.value = UnitConverter.formatOutput(bb.minX, unit);
+        if (py && document.activeElement !== py) py.value = UnitConverter.formatOutput(bb.minY, unit);
+        if (pw && document.activeElement !== pw) pw.value = UnitConverter.formatOutput(bb.maxX - bb.minX, unit);
+        if (ph && document.activeElement !== ph) ph.value = UnitConverter.formatOutput(bb.maxY - bb.minY, unit);
       } else {
         propsEl.style.display = 'none';
       }
     }
+  }
+
+  toggleUnit(): void {
+    const state = this.history.state;
+    state.displayUnit = state.displayUnit === 'mm' ? 'um' : 'mm';
+    this.updateUnitUI();
+    markDirty();
+    this.requestRender();
+  }
+
+  private updateUnitUI(): void {
+    const state = this.history.state;
+    const unit = state.displayUnit;
+    const isMm = unit === 'mm';
+
+    // Update footer unit button
+    const unitEl = document.getElementById('footer-unit');
+    if (unitEl) unitEl.textContent = unit === 'um' ? 'µm' : unit;
+
+    // Update all unit labels in sidebar/modals
+    document.querySelectorAll('.unit-label').forEach((el) => {
+      el.textContent = unit === 'mm' ? 'mm' : 'µm';
+    });
+
+    const displayUnitLabel = unit === 'um' ? 'µm' : unit;
+    // Update input modal labels
+    document.querySelectorAll('.copy-modal-x-label').forEach((el) => { el.textContent = `Offset X (${displayUnitLabel})`; });
+    document.querySelectorAll('.copy-modal-y-label').forEach((el) => { el.textContent = `Offset Y (${displayUnitLabel})`; });
+    document.querySelectorAll('.array-modal-pitch-label').forEach((el) => { el.textContent = `Pitch (${displayUnitLabel})`; });
+
+    // Update input attributes (step) to allow decimals in mm mode
+    const inputs = document.querySelectorAll('input[type="number"]');
+    inputs.forEach((input) => {
+      const el = input as HTMLInputElement;
+      if (el.id.includes('nx') || el.id.includes('ny')) return; // skip counts
+      if (el.id === 'drc-min-aperture' || el.id === 'drc-min-spacing') {
+        el.step = isMm ? '0.01' : '10';
+      } else if (el.id === 'fillet-r' || el.id.includes('pitch') || el.id.includes('modal-x') || el.id.includes('modal-y')) {
+        el.step = isMm ? '0.1' : '100';
+      } else {
+        el.step = isMm ? '0.001' : '1';
+      }
+    });
+
+    // Refresh existing values in visible inputs to match new unit
+    const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
+    if (filletRInput) filletRInput.value = UnitConverter.formatOutput(this.filletRadius, unit);
+
+    const drcAInput = document.getElementById('drc-min-aperture') as HTMLInputElement | null;
+    if (drcAInput) drcAInput.value = UnitConverter.formatOutput(this.drcConfig.minApertureUm, unit);
+
+    const drcSInput = document.getElementById('drc-min-spacing') as HTMLInputElement | null;
+    if (drcSInput) drcSInput.value = UnitConverter.formatOutput(this.drcConfig.minSpacingUm, unit);
+
+    // Refresh selection props if visible
+    this.updateRightPanel(state);
   }
 
   private updateUndoButtons(): void {

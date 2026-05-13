@@ -136,6 +136,11 @@ function migrateState(s: Partial<AppState>): AppState {
     state = { ...state, schemaVersion: 5, layers: newLayers, shapes: newShapes };
   }
 
+  if (v < 6) {
+    // v5→v6: displayUnit added.
+    state = { ...state, schemaVersion: 6, displayUnit: 'mm' };
+  }
+
   const finalState = {
     ...(state as AppState),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

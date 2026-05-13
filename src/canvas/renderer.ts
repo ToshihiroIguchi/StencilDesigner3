@@ -1,7 +1,7 @@
 import type { AppState, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
 import { selectedIds } from '../core/transform';
-import { fmtMm, fmtMmBare } from '../core/format';
+import { UnitConverter } from '../core/format';
 import { resolveDimension } from '../core/dimension-resolve';
 
 function linetypeToDash(lt: string): number[] {
@@ -181,7 +181,7 @@ export class CanvasRenderer {
 
     // Measure overlay
     if (extras?.measureOverlay) {
-      this.drawMeasureOverlay(extras.measureOverlay, vt);
+      this.drawMeasureOverlay(extras.measureOverlay, state.displayUnit, vt);
     }
 
     // Rubber-band selection rectangle
@@ -512,7 +512,7 @@ export class CanvasRenderer {
 
   // ─── Measure overlay ───────────────────────────────────────────────────────
 
-  private drawMeasureOverlay(ov: MeasureOverlay, vt: ViewTransform): void {
+  private drawMeasureOverlay(ov: MeasureOverlay, unit: 'mm' | 'um', vt: ViewTransform): void {
     const ctx = this.ctx;
     const c1 = worldToCanvas(ov.p1.x, ov.p1.y, vt);
     const c2 = worldToCanvas(ov.p2.x, ov.p2.y, vt);
@@ -536,13 +536,12 @@ export class CanvasRenderer {
       ctx.fill();
     }
 
-    // Label at midpoint
     const mx = (c1.x + c2.x) / 2;
     const my = (c1.y + c2.y) / 2;
     const dx = Math.abs(ov.p2.x - ov.p1.x);
     const dy = Math.abs(ov.p2.y - ov.p1.y);
     const d = Math.round(Math.sqrt(dx * dx + dy * dy));
-    const label = `dx=${fmtMm(dx)}  dy=${fmtMm(dy)}  d=${fmtMm(d)}`;
+    const label = `dx=${UnitConverter.formatOutput(dx, unit, true)}  dy=${UnitConverter.formatOutput(dy, unit, true)}  d=${UnitConverter.formatOutput(d, unit, true)}`;
 
     ctx.font = 'bold 11px monospace';
     const tw = ctx.measureText(label).width;
@@ -578,7 +577,7 @@ export class CanvasRenderer {
       const { p1, p2, frozen } = resolveDimension(dim, shapes);
       const baseColor = selected ? COLORS.shapeSelected : (layer?.color ?? '#888888');
       const color = frozen ? '#7a7a8a' : baseColor;
-      this.drawOneDimension(dim.kind, p1, p2, dim.offset, color, vt, frozen);
+      this.drawOneDimension(dim.kind, p1, p2, dim.offset, color, state.displayUnit, vt, frozen);
     }
   }
 
@@ -588,6 +587,7 @@ export class CanvasRenderer {
     p2: Point,
     offset: number,
     color: string,
+    unit: 'mm' | 'um',
     vt: ViewTransform,
     frozen = false,
   ): void {
@@ -646,11 +646,9 @@ export class CanvasRenderer {
       ctx.lineTo(c2.x, cdy);
       ctx.stroke();
 
-      const dirX = Math.sign(c2.x - c1.x);
-      this.drawArrowhead(c1.x, cdy, dirX > 0 ? 0 : Math.PI, DIM_ARROW, DIM_ANGLE);
       this.drawArrowhead(c2.x, cdy, dirX > 0 ? Math.PI : 0, DIM_ARROW, DIM_ANGLE);
 
-      const label = fmtMmBare(Math.abs(p2.x - p1.x)) + ' mm';
+      const label = UnitConverter.formatOutput(Math.abs(p2.x - p1.x), unit, true);
       const textDir = -(d1 || 1);
       this.drawDimLabel(label, (c1.x + c2.x) / 2, cdy + DIM_TEXT_GAP * textDir);
     } else {
@@ -673,11 +671,9 @@ export class CanvasRenderer {
       ctx.lineTo(cdx, c2.y);
       ctx.stroke();
 
-      const dirY = Math.sign(c2.y - c1.y);
-      this.drawArrowhead(cdx, c1.y, dirY > 0 ? Math.PI / 2 : -Math.PI / 2, DIM_ARROW, DIM_ANGLE);
       this.drawArrowhead(cdx, c2.y, dirY > 0 ? -Math.PI / 2 : Math.PI / 2, DIM_ARROW, DIM_ANGLE);
 
-      const label = fmtMmBare(Math.abs(p2.y - p1.y)) + ' mm';
+      const label = UnitConverter.formatOutput(Math.abs(p2.y - p1.y), unit, true);
       const textDir = -(d1 || 1);
       ctx.save();
       ctx.translate(cdx + DIM_TEXT_GAP * textDir * 3 + (textDir < 0 ? -2 : 2), (c1.y + c2.y) / 2);
@@ -752,7 +748,9 @@ export class CanvasRenderer {
 
     if (draft.kind === 'centerline' || draft.kind === 'arrow') {
       ctx.restore();
-      this.drawOneDimension(draft.kind, draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', vt);
+      // Use mm for dimension draft by default as it's just a preview, or pass proper unit if possible.
+      // Since it's a draft, we'll use mm.
+      this.drawOneDimension(draft.kind, draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', 'mm', vt);
       return;
     }
 
@@ -764,7 +762,7 @@ export class CanvasRenderer {
     ctx.strokeStyle = 'rgba(100,200,100,0.7)';
     ctx.fillStyle = 'rgba(100,200,100,0.7)';
     ctx.lineWidth = 1.2;
-    this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', vt);
+    this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', 'mm', vt);
     ctx.restore();
   }
 
@@ -801,12 +799,19 @@ export class CanvasRenderer {
     }
 
     // Minor ticks: step / 5, only when ≥ 8px apart
-    const subDiv = 5;
     const subStep = step / subDiv;
     const showMinor = subStep * vt.zoom >= 8;
 
-    const formatLabel = (w: number) =>
-      w >= 1000 ? `${(w / 1000).toFixed(w % 1000 === 0 ? 0 : 1)}mm` : `${w}µ`;
+    const unit = _state.displayUnit;
+    const formatLabel = (w: number) => {
+      if (unit === 'mm') {
+        const val = w / 1000;
+        // Optimization: show integer mm if possible to save space on ruler
+        return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + 'mm';
+      } else {
+        return Math.round(w) + 'µ';
+      }
+    };
 
     // Horizontal ruler (top)
     ctx.font = '9px monospace';

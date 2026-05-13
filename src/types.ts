@@ -110,6 +110,7 @@ export interface AppState {
   layers: Layer[];
   activeLayerName: string;
   dimensions: Dimension[];
+  displayUnit: 'mm' | 'um';
   schemaVersion: number;
 }
 
@@ -188,7 +189,8 @@ export function createDefaultState(): AppState {
     layers: defaultLayers(),
     activeLayerName: '0',
     dimensions: [],
-    schemaVersion: 5,
+    displayUnit: 'mm',
+    schemaVersion: 6,
   };
 }
 
