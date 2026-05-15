@@ -60,6 +60,9 @@ export class SelectTool extends BaseTool {
       const cur = this.ctx.history.state;
       this.savedShapes = [...cur.shapes];
       this.savedSelection = [...cur.selection];
+
+      // Snap the origin for movement reference
+      this.moveOrigin = this.ctx.getSnapPoint(worldPt);
     } else {
       this.isDragging = false;
       if (!shift) {
@@ -76,7 +79,7 @@ export class SelectTool extends BaseTool {
     this.snapPoint = this.ctx.getSnapPoint(worldPt);
     const state = this.ctx.history.state;
 
-    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.moveOrigin) {
+    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.moveOrigin && this.snapPoint) {
       if (!this.dragThresholdReached) {
         const dxPx = canvasPt.x - this.dragStartCanvas.x;
         const dyPx = canvasPt.y - this.dragStartCanvas.y;
@@ -86,8 +89,8 @@ export class SelectTool extends BaseTool {
       }
 
       if (this.dragThresholdReached) {
-        let dx = worldPt.x - this.moveOrigin.x;
-        let dy = worldPt.y - this.moveOrigin.y;
+        let dx = this.snapPoint.x - this.moveOrigin.x;
+        let dy = this.snapPoint.y - this.moveOrigin.y;
 
         if (shift) {
           // Ortho lock: constrain movement to the dominant axis
@@ -103,7 +106,9 @@ export class SelectTool extends BaseTool {
             if (!ids.has(shape.id)) return shape;
             return { ...translatePolygon(shape, dx, dy), id: shape.id };
           });
-          this.moveOrigin = { ...worldPt };
+          // Move reference point by exactly what we moved the shapes
+          this.moveOrigin.x += dx;
+          this.moveOrigin.y += dy;
         }
       }
     }
