@@ -401,7 +401,9 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 .fm-storage-text { font-size: 11px; color: var(--fg2); white-space: nowrap; }
 
 /* ── Doc name in header ──────────────────────────────────────────────────── */
-.doc-name-label { font-size: 12px; color: var(--fg2); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; padding: 0 4px; }
+.doc-name-label { font-size: 12px; color: var(--fg2); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; padding: 0 4px; cursor: pointer; border-radius: 3px; }
+.doc-name-label:hover { color: var(--fg); background: var(--btn-hover); }
+.doc-name-input { font-size: 12px; color: var(--fg); background: var(--bg3); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 4px; width: 140px; align-self: center; font-family: inherit; outline: none; }
 
 /* ── Storage full banner ─────────────────────────────────────────────────── */
 .storage-banner { position: fixed; bottom: var(--footer-h); left: 0; right: 0; background: var(--danger); color: #fff; font-size: 12px; text-align: center; padding: 4px 8px; z-index: 900; }

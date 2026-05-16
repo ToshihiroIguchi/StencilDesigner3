@@ -26,6 +26,7 @@ import {
 } from '../state/docStore';
 import { importDxf, type ImportResult } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
+import { downloadPdf } from '../pdf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
 import { resizePolygon } from '../core/transform';
 import { resolveDimension } from '../core/dimension-resolve';
@@ -226,6 +227,7 @@ export class App {
     document.getElementById('btn-array')?.addEventListener('click', () => this.doArray());
     document.getElementById('btn-import')?.addEventListener('click', () => this.importDxf());
     document.getElementById('btn-export')?.addEventListener('click', () => this.exportDxf());
+    document.getElementById('btn-export-pdf')?.addEventListener('click', () => { void this.exportPdf(); });
     document.getElementById('btn-files')?.addEventListener('click', () => { void this.showFileManager(); });
     document.getElementById('btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
@@ -326,12 +328,12 @@ export class App {
       if (file) this.loadDxfFile(file);
     });
 
-    // JSON file input (from file manager "Open from disk")
-    const jsonFileInput = document.getElementById('fm-json-input') as HTMLInputElement | null;
-    jsonFileInput?.addEventListener('change', (e) => {
+    // Stencil file input (from file manager "Open from disk")
+    const stencilFileInput = document.getElementById('fm-stencil-input') as HTMLInputElement | null;
+    stencilFileInput?.addEventListener('change', (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        void this.importJsonFile(file).then(() => { jsonFileInput.value = ''; });
+        void this.importStencilFile(file).then(() => { stencilFileInput.value = ''; });
       }
     });
   }
@@ -761,6 +763,18 @@ export class App {
     downloadDxf(state.shapes, state.layers);
   }
 
+  async exportPdf(): Promise<void> {
+    const state = this.history.state;
+    if (state.shapes.length === 0 && state.dimensions.length === 0) {
+      await this.showMessageModal({ title: 'Export PDF', message: 'Nothing to export.' });
+      return;
+    }
+    const ok = downloadPdf(state, this.currentDocName);
+    if (!ok) {
+      await this.showMessageModal({ title: 'Export PDF', message: 'No visible content to export. Make at least one layer visible.' });
+    }
+  }
+
   private showMessageModal(opts: {
     title: string; message: string;
     okText?: string; cancelText?: string; danger?: boolean;
@@ -948,7 +962,41 @@ export class App {
 
   private updateDocNameLabel(): void {
     const el = document.getElementById('doc-name-label');
-    if (el) el.textContent = this.currentDocName || 'Untitled';
+    if (!el) return;
+    el.textContent = this.currentDocName || 'Untitled';
+    el.title = 'Click to rename';
+    el.onclick = () => this.startInlineRename(el);
+  }
+
+  private startInlineRename(el: HTMLElement): void {
+    if (!this.currentDocId) return;
+    const current = this.currentDocName || 'Untitled';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    input.className = 'doc-name-input';
+    el.replaceWith(input);
+    input.select();
+
+    const commit = async () => {
+      const newName = input.value.trim();
+      const id = this.currentDocId;
+      const span = document.createElement('span');
+      span.id = 'doc-name-label';
+      input.replaceWith(span);
+      if (newName && newName !== current && id) {
+        await renameDoc(id, newName);
+        this.currentDocName = newName;
+      }
+      this.updateDocNameLabel();
+    };
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') { input.value = current; input.blur(); }
+    });
   }
 
   private showStorageFullBanner(msg: string): void {
@@ -969,13 +1017,13 @@ export class App {
     }, 10000);
   }
 
-  private async importJsonFile(file: File): Promise<void> {
+  private async importStencilFile(file: File): Promise<void> {
     try {
       const text = await file.text();
       const raw = JSON.parse(text) as unknown;
       if (typeof raw !== 'object' || raw === null) throw new Error('Invalid JSON');
       const docs = await listDocs();
-      const baseName = file.name.replace(/\.json$/i, '');
+      const baseName = file.name.replace(/\.(stencil|json)$/i, '');
       const allNames = docs.map((d) => d.name);
       const used = new Set(allNames);
       let name = baseName;
@@ -984,23 +1032,23 @@ export class App {
         while (used.has(`${baseName} ${i}`)) i++;
         name = `${baseName} ${i}`;
       }
-      // Create a new doc slot then overwrite its state with the imported JSON
+      // Create a new doc slot then overwrite its state with the imported stencil file
       const meta = await createDoc(name);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await saveDoc(meta.id, raw as any);
       // openDoc will run migration via loadDoc
       await this.openDoc(meta.id);
     } catch (e) {
-      await this.showMessageModal({ title: 'Import JSON', message: `Import failed: ${e}` });
+      await this.showMessageModal({ title: 'Import Stencil', message: `Import failed: ${e}` });
     }
   }
 
-  private downloadDocAsJson(_id: string, name: string, state: AppState): void {
+  private downloadDocAsStencil(_id: string, name: string, state: AppState): void {
     const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${name}.json`;
+    a.download = `${name}.stencil`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1067,8 +1115,8 @@ export class App {
       close();
     };
 
-    const importBtn = document.getElementById('fm-import-json');
-    if (importBtn) importBtn.onclick = () => { document.getElementById('fm-json-input')?.click(); };
+    const importBtn = document.getElementById('fm-import-stencil');
+    if (importBtn) importBtn.onclick = () => { document.getElementById('fm-stencil-input')?.click(); };
 
     const listEl = document.getElementById('fm-doc-list');
     if (listEl) listEl.onclick = async (e: MouseEvent) => {
@@ -1095,7 +1143,7 @@ export class App {
         if (!state) return;
         const docs = await listDocs();
         const name = docs.find((d) => d.id === id)?.name ?? 'document';
-        this.downloadDocAsJson(id, name, state);
+        this.downloadDocAsStencil(id, name, state);
       } else if (btn.classList.contains('fm-delete')) {
         const docs = await listDocs();
         const name = docs.find((d) => d.id === id)?.name ?? 'this document';
