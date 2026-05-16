@@ -54,6 +54,10 @@ export class App {
   private animFrame: number | null = null;
   private pendingRender = false;
   private filletRadius = 500;
+  private copyOffsetX = 1000;   // µm — last-used Copy X offset
+  private copyOffsetY = 0;      // µm — last-used Copy Y offset
+  private arrayPitchX = 2000;   // µm — last-used Array pitch X
+  private arrayPitchY = 2000;   // µm — last-used Array pitch Y
   private drcConfig: DrcConfig = { ...DEFAULT_DRC_CONFIG };
   private drcErrors: DrcError[] = [];
   private diffStep: 0 | 1 | 2 = 0;
@@ -771,6 +775,9 @@ export class App {
       const yInput = document.getElementById('copy-modal-y') as HTMLInputElement;
       const okBtn = document.getElementById('copy-modal-ok') as HTMLButtonElement;
       const cancelBtn = document.getElementById('copy-modal-cancel') as HTMLButtonElement;
+      const unit = this.history.state.displayUnit;
+      xInput.value = UnitConverter.formatOutput(this.copyOffsetX, unit);
+      yInput.value = UnitConverter.formatOutput(this.copyOffsetY, unit);
       modal.style.display = '';
       xInput.focus();
       xInput.select();
@@ -784,6 +791,8 @@ export class App {
       const onOk = () => {
         const dx = UnitConverter.parseInput(xInput.value, this.history.state.displayUnit);
         const dy = UnitConverter.parseInput(yInput.value, this.history.state.displayUnit);
+        this.copyOffsetX = dx;
+        this.copyOffsetY = dy;
         close({ dx, dy });
       };
       const onCancel = () => close(null);
@@ -806,6 +815,9 @@ export class App {
       const pyInput = document.getElementById('array-modal-py') as HTMLInputElement;
       const okBtn = document.getElementById('array-modal-ok') as HTMLButtonElement;
       const cancelBtn = document.getElementById('array-modal-cancel') as HTMLButtonElement;
+      const unit = this.history.state.displayUnit;
+      pxInput.value = UnitConverter.formatOutput(this.arrayPitchX, unit);
+      pyInput.value = UnitConverter.formatOutput(this.arrayPitchY, unit);
       modal.style.display = '';
       nxInput.focus();
       nxInput.select();
@@ -822,6 +834,8 @@ export class App {
         const pitchX = UnitConverter.parseInput(pxInput.value, this.history.state.displayUnit);
         const pitchY = UnitConverter.parseInput(pyInput.value, this.history.state.displayUnit);
         if (isNaN(nx) || isNaN(ny) || nx < 1 || ny < 1) return;
+        this.arrayPitchX = pitchX;
+        this.arrayPitchY = pitchY;
         close({ nx, ny, pitchX, pitchY });
       };
       const onCancel = () => close(null);
@@ -1319,6 +1333,15 @@ export class App {
 
     const drcSInput = document.getElementById('drc-min-spacing') as HTMLInputElement | null;
     if (drcSInput) drcSInput.value = UnitConverter.formatOutput(this.drcConfig.minSpacingUm, unit);
+
+    const copyXIn = document.getElementById('copy-modal-x') as HTMLInputElement | null;
+    if (copyXIn) copyXIn.value = UnitConverter.formatOutput(this.copyOffsetX, unit);
+    const copyYIn = document.getElementById('copy-modal-y') as HTMLInputElement | null;
+    if (copyYIn) copyYIn.value = UnitConverter.formatOutput(this.copyOffsetY, unit);
+    const arrayPxIn = document.getElementById('array-modal-px') as HTMLInputElement | null;
+    if (arrayPxIn) arrayPxIn.value = UnitConverter.formatOutput(this.arrayPitchX, unit);
+    const arrayPyIn = document.getElementById('array-modal-py') as HTMLInputElement | null;
+    if (arrayPyIn) arrayPyIn.value = UnitConverter.formatOutput(this.arrayPitchY, unit);
 
     // Refresh selection props if visible
     this.updateRightPanel(state);

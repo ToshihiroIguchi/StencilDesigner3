@@ -513,7 +513,7 @@ test.describe('11. Copy', () => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 200, box.y + 175);
     await page.click('#btn-copy-btn');
-    await page.fill('#copy-modal-x', '1000');
+    await page.fill('#copy-modal-x', '1');
     await page.fill('#copy-modal-y', '0');
     await page.click('#copy-modal-ok');
     await page.waitForTimeout(200);
@@ -524,7 +524,7 @@ test.describe('11. Copy', () => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 200, box.y + 175);
     await page.click('#btn-copy-btn');
-    await page.fill('#copy-modal-x', '1000');
+    await page.fill('#copy-modal-x', '1');
     await page.fill('#copy-modal-y', '0');
     await page.click('#copy-modal-ok');
     await page.waitForTimeout(200);
@@ -550,8 +550,8 @@ test.describe('12. Array copy', () => {
     await page.click('#btn-array');
     await page.fill('#array-modal-nx', '3');
     await page.fill('#array-modal-ny', '3');
-    await page.fill('#array-modal-px', '2000');
-    await page.fill('#array-modal-py', '2000');
+    await page.fill('#array-modal-px', '2');
+    await page.fill('#array-modal-py', '2');
     await page.click('#array-modal-ok');
     await page.waitForTimeout(300);
     expect(await shapeCount(page)).toBe(9);
@@ -563,7 +563,7 @@ test.describe('12. Array copy', () => {
     await page.click('#btn-array');
     await page.fill('#array-modal-nx', '2');
     await page.fill('#array-modal-ny', '1');
-    await page.fill('#array-modal-px', '3000');
+    await page.fill('#array-modal-px', '3');
     await page.fill('#array-modal-py', '0');
     await page.click('#array-modal-ok');
     await page.waitForTimeout(200);
@@ -576,8 +576,8 @@ test.describe('12. Array copy', () => {
     await page.click('#btn-array');
     await page.fill('#array-modal-nx', '3');
     await page.fill('#array-modal-ny', '3');
-    await page.fill('#array-modal-px', '2000');
-    await page.fill('#array-modal-py', '2000');
+    await page.fill('#array-modal-px', '2');
+    await page.fill('#array-modal-py', '2');
     await page.click('#array-modal-ok');
     await page.waitForTimeout(300);
     await page.keyboard.press('Control+z');
