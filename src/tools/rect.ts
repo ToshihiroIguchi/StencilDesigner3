@@ -2,7 +2,7 @@ import type { AppState, Point } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import { rectToPolygon } from '../core/geometry';
 import { AddShapeCommand } from '../state/commands';
-import { markDirty } from '../state/autosave';
+import { markDirty } from '../state/docStore';
 
 export class RectTool extends BaseTool {
   private startPt: Point | null = null;

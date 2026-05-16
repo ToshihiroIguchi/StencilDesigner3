@@ -4,7 +4,8 @@ import { hitTest } from '../core/selection';
 import { applyFillet, roundAllCorners, filletSkipMessage } from '../core/fillet';
 import { FilletCommand, FilletAllCommand } from '../state/commands';
 import { hasSelfIntersection, normalize } from '../normalize';
-import { markDirty, savePrefs } from '../state/autosave';
+import { markDirty } from '../state/docStore';
+import { savePrefs } from '../state/autosave';
 import type { DraftShape, FilletVertexStatus } from '../canvas/renderer';
 
 type VtxKey = string; // `${shapeId}_${holeIndex}_${index}`

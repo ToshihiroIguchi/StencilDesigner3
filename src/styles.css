@@ -378,3 +378,30 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
   padding: 20px; min-width: 300px; max-width: 420px;
 }
 .modal-title { font-weight: bold; font-size: 14px; margin-bottom: 12px; }
+
+/* ── File Manager Modal ──────────────────────────────────────────────────── */
+.fm-modal-box { min-width: 560px; max-width: 700px; width: 90vw; }
+.fm-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+.fm-doc-list { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; margin-bottom: 12px; }
+.fm-doc-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; border: 1px solid transparent; }
+.fm-doc-item:hover { background: var(--btn-hover); }
+.fm-doc-item.fm-active { border-color: var(--accent); background: var(--btn-active); }
+.fm-doc-info { flex: 1; overflow: hidden; }
+.fm-doc-name { font-weight: 500; font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-doc-meta { font-size: 11px; color: var(--fg2); }
+.fm-doc-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.fm-btn { padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; color: var(--fg2); }
+.fm-btn:hover { background: var(--btn-hover); color: var(--fg); }
+.fm-btn.danger { color: var(--danger); }
+.fm-btn.danger:hover { border-color: var(--danger); }
+.fm-empty { color: var(--fg2); font-size: 12px; padding: 8px; text-align: center; }
+.fm-storage-bar { display: flex; align-items: center; gap: 8px; }
+.fm-storage-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.fm-storage-fill { height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+.fm-storage-text { font-size: 11px; color: var(--fg2); white-space: nowrap; }
+
+/* ── Doc name in header ──────────────────────────────────────────────────── */
+.doc-name-label { font-size: 12px; color: var(--fg2); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; padding: 0 4px; }
+
+/* ── Storage full banner ─────────────────────────────────────────────────── */
+.storage-banner { position: fixed; bottom: var(--footer-h); left: 0; right: 0; background: var(--danger); color: #fff; font-size: 12px; text-align: center; padding: 4px 8px; z-index: 900; }

@@ -2,7 +2,7 @@ import type { AppState, Point } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import { circleToPolygon } from '../core/geometry';
 import { AddShapeCommand } from '../state/commands';
-import { markDirty } from '../state/autosave';
+import { markDirty } from '../state/docStore';
 
 export class CircleTool extends BaseTool {
   private centerPt: Point | null = null;

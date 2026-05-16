@@ -48,7 +48,7 @@ test.describe('1. Initial display', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     // Clear any saved state so tests start clean
-    await page.evaluate(() => (window as any).__app?.hardReset?.().catch(() => {}));
+    await page.evaluate(() => (window as any).__app?.resetForTests?.().catch(() => {}));
     await page.waitForTimeout(200);
   });
 
@@ -868,7 +868,7 @@ test.describe('20. Fit to content and zoom reset', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await page.evaluate(() => (window as any).__app?.hardReset?.().catch(() => {}));
+    await page.evaluate(() => (window as any).__app?.resetForTests?.().catch(() => {}));
     await page.waitForTimeout(200);
   });
 
@@ -959,7 +959,7 @@ test.describe('22. Polygon tool', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    await page.evaluate(() => (window as any).__app?.hardReset?.().catch(() => {}));
+    await page.evaluate(() => (window as any).__app?.resetForTests?.().catch(() => {}));
     await page.waitForTimeout(200);
   });
 

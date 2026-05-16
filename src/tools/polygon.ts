@@ -3,7 +3,7 @@ import { newId } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import { normalize, hasSelfIntersection } from '../normalize';
 import { AddShapeCommand } from '../state/commands';
-import { markDirty } from '../state/autosave';
+import { markDirty } from '../state/docStore';
 import { segmentsIntersect, constrainAngle } from '../core/geometry';
 import { vertex } from '../core/vertex';
 

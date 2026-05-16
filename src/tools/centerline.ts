@@ -3,7 +3,7 @@ import { newId } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import type { DimDraft } from '../canvas/renderer';
 import { AddDimensionCommand } from '../state/commands';
-import { markDirty } from '../state/autosave';
+import { markDirty } from '../state/docStore';
 import { findEdgeAnchor } from '../core/anchor-pick';
 import { centerlineEndpoints } from '../core/centerline-geometry';
 import { resolveEdge } from '../core/dimension-resolve';

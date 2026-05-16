@@ -18,7 +18,12 @@ import {
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
   UpdateLayerStyleCommand, MoveShapesToLayerCommand,
 } from '../state/commands';
-import { loadState, saveState, startAutosave, clearState, markDirty, loadPrefs, savePrefs } from '../state/autosave';
+import { loadPrefs, savePrefs } from '../state/autosave';
+import {
+  listDocs, loadDoc, saveDoc, createDoc, deleteDoc, renameDoc,
+  getCurrentDocId, setCurrentDocId, getStorageEstimate,
+  migrateLegacyKey, uniqueUntitledName, markDirty, startDocAutosave,
+} from '../state/docStore';
 import { importDxf, type ImportResult } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { polygonArea, polygonBbox } from '../core/geometry';
@@ -62,6 +67,9 @@ export class App {
   private drcErrors: DrcError[] = [];
   private diffStep: 0 | 1 | 2 = 0;
   private diffBaseId: string | null = null;
+  private currentDocId: string | null = null;
+  private currentDocName = '';
+  private storageBannerTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -77,11 +85,10 @@ export class App {
   }
 
   async init(): Promise<void> {
-    // Restore saved state and preferences
+    await migrateLegacyKey();
+
     try {
-      const [saved, prefs] = await Promise.all([loadState(), loadPrefs()]);
-      if (saved) this.history.loadState(saved);
-      this.history.state.gridSize = computeNiceGridSize(this.history.state.zoom);
+      const prefs = await loadPrefs();
       this.filletRadius = prefs.filletRadius;
       const rInput = document.getElementById('fillet-r') as HTMLInputElement | null;
       if (rInput) rInput.value = String(this.filletRadius);
@@ -97,7 +104,13 @@ export class App {
     this.updateUnitUI();
     this.renderer.resize();
     this.setupEventListeners();
-    this.stopAutosave = startAutosave(() => this.history.state);
+
+    this.stopAutosave = startDocAutosave(
+      () => this.currentDocId,
+      () => this.history.state,
+      (msg) => this.showStorageFullBanner(msg)
+    );
+
     this.requestRender();
 
     window.addEventListener('resize', () => {
@@ -106,8 +119,21 @@ export class App {
     });
 
     window.addEventListener('beforeunload', () => {
-      void saveState(this.history.state);
+      if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state);
     });
+
+    // Restore last opened doc, or show file manager
+    try {
+      const lastId = await getCurrentDocId();
+      const docs = await listDocs();
+      if (lastId && docs.some((d) => d.id === lastId)) {
+        await this.openDoc(lastId);
+      } else {
+        await this.showFileManager(true);
+      }
+    } catch {
+      await this.showFileManager(true);
+    }
   }
 
   private getSnapPoint(worldPt: Point): Point {
@@ -200,7 +226,7 @@ export class App {
     document.getElementById('btn-array')?.addEventListener('click', () => this.doArray());
     document.getElementById('btn-import')?.addEventListener('click', () => this.importDxf());
     document.getElementById('btn-export')?.addEventListener('click', () => this.exportDxf());
-    document.getElementById('btn-clear')?.addEventListener('click', () => this.hardReset());
+    document.getElementById('btn-files')?.addEventListener('click', () => { void this.showFileManager(); });
     document.getElementById('btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
     document.getElementById('btn-fit')?.addEventListener('click', () => this.fitToContent());
@@ -293,11 +319,20 @@ export class App {
       }
     });
 
-    // File input
+    // DXF file input
     const fileInput = document.getElementById('dxf-file-input') as HTMLInputElement | null;
     fileInput?.addEventListener('change', (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) this.loadDxfFile(file);
+    });
+
+    // JSON file input (from file manager "Open from disk")
+    const jsonFileInput = document.getElementById('fm-json-input') as HTMLInputElement | null;
+    jsonFileInput?.addEventListener('change', (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        void this.importJsonFile(file).then(() => { jsonFileInput.value = ''; });
+      }
     });
   }
 
@@ -393,7 +428,7 @@ export class App {
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'z') { e.preventDefault(); this.undo(); return; }
       if (e.key === 'y') { e.preventDefault(); this.redo(); return; }
-      if (e.key === 's') { e.preventDefault(); saveState(this.history.state); return; }
+      if (e.key === 's') { e.preventDefault(); if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state); return; }
     }
     const target = e.target as HTMLElement;
     const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
@@ -886,12 +921,204 @@ export class App {
     });
   }
 
-  async hardReset(): Promise<void> {
-    if (!await this.showMessageModal({ title: 'Clear All', message: 'Clear all shapes and history?', okText: 'Clear', cancelText: 'Cancel', danger: true })) return;
+  // ─── Document management ────────────────────────────────────────────────────
+
+  async openDoc(id: string): Promise<void> {
+    const state = await loadDoc(id);
+    if (!state) return;
     this.cancelDiffMode();
-    await clearState();
-    this.history.loadState(createDefaultState());
+    this.history.loadState(state);
+    this.history.state.gridSize = computeNiceGridSize(this.history.state.zoom);
+    this.currentDocId = id;
+    const docs = await listDocs();
+    const meta = docs.find((d) => d.id === id);
+    this.currentDocName = meta?.name ?? '';
+    await setCurrentDocId(id);
+    this.updateDocNameLabel();
+    this.updateUnitUI();
     this.requestRender();
+  }
+
+  async newDoc(): Promise<void> {
+    const docs = await listDocs();
+    const name = uniqueUntitledName(docs);
+    const meta = await createDoc(name);
+    await this.openDoc(meta.id);
+  }
+
+  private updateDocNameLabel(): void {
+    const el = document.getElementById('doc-name-label');
+    if (el) el.textContent = this.currentDocName || 'Untitled';
+  }
+
+  private showStorageFullBanner(msg: string): void {
+    const footer = document.getElementById('footer');
+    if (!footer) return;
+    let banner = document.getElementById('storage-full-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'storage-full-banner';
+      banner.className = 'storage-banner';
+      footer.prepend(banner);
+    }
+    banner.textContent = '⚠ ' + msg;
+    if (this.storageBannerTimer !== null) clearTimeout(this.storageBannerTimer);
+    this.storageBannerTimer = setTimeout(() => {
+      banner?.remove();
+      this.storageBannerTimer = null;
+    }, 10000);
+  }
+
+  private async importJsonFile(file: File): Promise<void> {
+    try {
+      const text = await file.text();
+      const raw = JSON.parse(text) as unknown;
+      if (typeof raw !== 'object' || raw === null) throw new Error('Invalid JSON');
+      const docs = await listDocs();
+      const baseName = file.name.replace(/\.json$/i, '');
+      const allNames = docs.map((d) => d.name);
+      const used = new Set(allNames);
+      let name = baseName;
+      if (used.has(name)) {
+        let i = 2;
+        while (used.has(`${baseName} ${i}`)) i++;
+        name = `${baseName} ${i}`;
+      }
+      // Create a new doc slot then overwrite its state with the imported JSON
+      const meta = await createDoc(name);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await saveDoc(meta.id, raw as any);
+      // openDoc will run migration via loadDoc
+      await this.openDoc(meta.id);
+    } catch (e) {
+      await this.showMessageModal({ title: 'Import JSON', message: `Import failed: ${e}` });
+    }
+  }
+
+  private downloadDocAsJson(_id: string, name: string, state: AppState): void {
+    const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private async showFileManager(forceOpen = false): Promise<void> {
+    const modal = document.getElementById('file-manager-modal') as HTMLElement | null;
+    if (!modal) return;
+
+    const renderList = async () => {
+      const docs = await listDocs();
+      docs.sort((a, b) => b.lastModified - a.lastModified);
+      const listEl = document.getElementById('fm-doc-list');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      if (docs.length === 0) {
+        listEl.innerHTML = '<li class="fm-empty">No documents yet. Create one below.</li>';
+        return;
+      }
+      for (const doc of docs) {
+        const li = document.createElement('li');
+        li.className = 'fm-doc-item' + (doc.id === this.currentDocId ? ' fm-active' : '');
+        const dt = new Date(doc.lastModified).toLocaleString();
+        const sz = fmtBytes(doc.sizeBytes);
+        li.innerHTML = `
+          <div class="fm-doc-info">
+            <span class="fm-doc-name">${escHtml(doc.name)}</span>
+            <span class="fm-doc-meta">${dt} · ${sz}</span>
+          </div>
+          <div class="fm-doc-actions">
+            <button class="fm-btn fm-open" data-id="${doc.id}">Open</button>
+            <button class="fm-btn fm-rename" data-id="${doc.id}">Rename</button>
+            <button class="fm-btn fm-download" data-id="${doc.id}">Download</button>
+            <button class="fm-btn fm-delete danger" data-id="${doc.id}">Delete</button>
+          </div>`;
+        listEl.appendChild(li);
+      }
+
+      const est = await getStorageEstimate();
+      const storageText = document.getElementById('fm-storage-text');
+      const storageFill = document.getElementById('fm-storage-fill') as HTMLElement | null;
+      if (est && storageText && storageFill) {
+        const pct = est.quota > 0 ? Math.min(100, Math.round((est.usage / est.quota) * 100)) : 0;
+        storageText.textContent = `${fmtBytes(est.usage)} / ${fmtBytes(est.quota)} (${pct}%)`;
+        storageFill.style.width = `${pct}%`;
+        storageFill.style.background = pct > 95 ? 'var(--danger)' : pct > 80 ? 'var(--accent2)' : 'var(--accent)';
+      } else if (storageText) {
+        storageText.textContent = 'Storage estimate unavailable';
+      }
+    };
+
+    await renderList();
+    modal.style.display = '';
+
+    const closeBtn = document.getElementById('fm-close') as HTMLButtonElement | null;
+    if (closeBtn) closeBtn.style.display = forceOpen && !this.currentDocId ? 'none' : '';
+
+    const close = () => { modal.style.display = 'none'; };
+
+    if (closeBtn) closeBtn.onclick = () => { if (this.currentDocId) close(); };
+
+    const newBtn = document.getElementById('fm-new');
+    if (newBtn) newBtn.onclick = async () => {
+      await this.newDoc();
+      close();
+    };
+
+    const importBtn = document.getElementById('fm-import-json');
+    if (importBtn) importBtn.onclick = () => { document.getElementById('fm-json-input')?.click(); };
+
+    const listEl = document.getElementById('fm-doc-list');
+    if (listEl) listEl.onclick = async (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement).closest('button[data-id]') as HTMLButtonElement | null;
+      if (!btn) return;
+      const id = btn.dataset.id!;
+      if (btn.classList.contains('fm-open')) {
+        await this.openDoc(id);
+        close();
+      } else if (btn.classList.contains('fm-rename')) {
+        const docs = await listDocs();
+        const meta = docs.find((d) => d.id === id);
+        const newName = await this.showInputModal({ title: 'Rename', label: 'New name:', defaultValue: meta?.name ?? '' });
+        if (newName && newName.trim()) {
+          await renameDoc(id, newName.trim());
+          if (id === this.currentDocId) {
+            this.currentDocName = newName.trim();
+            this.updateDocNameLabel();
+          }
+          await renderList();
+        }
+      } else if (btn.classList.contains('fm-download')) {
+        const state = await loadDoc(id);
+        if (!state) return;
+        const docs = await listDocs();
+        const name = docs.find((d) => d.id === id)?.name ?? 'document';
+        this.downloadDocAsJson(id, name, state);
+      } else if (btn.classList.contains('fm-delete')) {
+        const docs = await listDocs();
+        const name = docs.find((d) => d.id === id)?.name ?? 'this document';
+        const ok = await this.showMessageModal({ title: 'Delete', message: `Delete "${name}"? This cannot be undone.`, okText: 'Delete', cancelText: 'Cancel', danger: true });
+        if (!ok) return;
+        await deleteDoc(id);
+        if (id === this.currentDocId) {
+          this.currentDocId = null;
+          await setCurrentDocId(null);
+        }
+        await renderList();
+        if (closeBtn) closeBtn.style.display = this.currentDocId ? '' : 'none';
+      }
+    };
+  }
+
+  /** For E2E tests: delete all docs and create a fresh Untitled. */
+  async resetForTests(): Promise<void> {
+    this.cancelDiffMode();
+    const docs = await listDocs();
+    await Promise.all(docs.map((d) => deleteDoc(d.id)));
+    await setCurrentDocId(null);
+    await this.newDoc();
   }
 
   toggleTheme(): void {
@@ -1358,4 +1585,16 @@ export class App {
     this.stopAutosave?.();
     if (this.animFrame !== null) cancelAnimationFrame(this.animFrame);
   }
+}
+
+// ── Module-level helpers ──────────────────────────────────────────────────────
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

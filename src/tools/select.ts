@@ -3,7 +3,7 @@ import { BaseTool, type ToolContext } from './base';
 import { hitTest, hitTestDimension, rubberBandSelect } from '../core/selection';
 import { MoveCommand, SetSelectionCommand } from '../state/commands';
 import { translatePolygon } from '../core/geometry';
-import { markDirty } from '../state/autosave';
+import { markDirty } from '../state/docStore';
 
 const DRAG_THRESHOLD_PX = 5;
 
