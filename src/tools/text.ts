@@ -5,6 +5,7 @@ import { AddShapesCommand } from '../state/commands';
 import { markDirty } from '../state/docStore';
 import { loadFont, getCachedFont } from '../core/font-loader';
 import { textToPolygons, isAsciiPrintable } from '../core/text-to-polygon';
+import { union } from '../core/boolean';
 
 export class TextTool extends BaseTool {
   private text = '';
@@ -39,10 +40,11 @@ export class TextTool extends BaseTool {
     const font = getCachedFont();
     if (!font) { this.previewPolys = null; return; }
     const layer = this.ctx.history.state.activeLayerName;
-    this.previewPolys = textToPolygons(
+    const raw = textToPolygons(
       this.text, font, this.capHeightUm,
       this.cursorOrigin.x, this.cursorOrigin.y, this.letterSpacingUm, layer,
     );
+    this.previewPolys = union(raw);
   }
 
   onMouseMove(worldPt: Point, _cp: Point, _shift: boolean, _state: AppState): void {
@@ -65,10 +67,11 @@ export class TextTool extends BaseTool {
 
   private placeSync(origin: Point, font: Font): void {
     const layer = this.ctx.history.state.activeLayerName;
-    const polys = textToPolygons(
+    const raw = textToPolygons(
       this.text, font, this.capHeightUm,
       origin.x, origin.y, this.letterSpacingUm, layer,
     );
+    const polys = union(raw);
     if (polys.length === 0) return;
     this.ctx.history.execute(new AddShapesCommand(polys));
     markDirty();
