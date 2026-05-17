@@ -380,7 +380,7 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 .modal-title { font-weight: bold; font-size: 14px; margin-bottom: 12px; }
 #message-modal, #input-modal { z-index: 1010; }
 
-/* ── Text Tool Modal ─────────────────────────────────────────────────────── */
+/* ── Text Tool Panel ─────────────────────────────────────────────────────── */
 .text-font-note { font-size: 11px; color: var(--fg2); margin-bottom: 8px; }
 .text-input-wrap { margin-bottom: 10px; }
 .text-input-wrap input[type=text] {
@@ -389,17 +389,16 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
   font-size: 13px; font-family: monospace; outline: none;
 }
 .text-input-wrap input[type=text]:focus { border-color: var(--accent); }
-.text-warn { color: var(--danger); font-size: 11px; margin-top: 4px; display: block; }
-.text-opt-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 10px; }
+.text-warn { color: var(--danger); font-size: 11px; margin-top: 4px; }
+.text-opt-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 6px; }
 .text-opt-row label { color: var(--fg2); flex-shrink: 0; min-width: 70px; }
 .text-opt-row input[type=number] {
-  width: 80px; background: var(--bg3); border: 1px solid var(--border);
+  width: 68px; background: var(--bg3); border: 1px solid var(--border);
   color: var(--fg); padding: 3px 5px; border-radius: 3px;
   font-size: 12px; font-family: monospace; outline: none;
 }
 .text-opt-row input[type=number]:focus { border-color: var(--accent); }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.modal-actions button { padding: 5px 16px; font-size: 12px; }
+.text-place-hint { font-size: 11px; color: var(--fg2); margin-top: 8px; }
 
 /* ── File Manager Modal ──────────────────────────────────────────────────── */
 .fm-modal-box { min-width: 560px; max-width: 700px; width: 90vw; }

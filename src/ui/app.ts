@@ -11,7 +11,7 @@ import { MeasureTool } from '../tools/measure';
 import { DimensionTool } from '../tools/dimension';
 import { CenterlineTool } from '../tools/centerline';
 import { ArrowTool } from '../tools/arrow';
-import { TextTool, type TextDialogParams } from '../tools/text';
+import { TextTool } from '../tools/text';
 import { findSnapPoint, hitTest } from '../core/selection';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
@@ -70,6 +70,8 @@ export class App {
   private diffStep: 0 | 1 | 2 = 0;
   private diffBaseId: string | null = null;
   private currentDocId: string | null = null;
+  private textCapHeightUm = 5000;
+  private textLetterSpacingUm = 0;
   private currentDocName = '';
   private storageBannerTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -194,6 +196,9 @@ export class App {
               ? (this.activeTool.getRendererExtras().dimDraft ?? undefined)
               : undefined,
         selectedDimIds: new Set(state.selection.filter((s) => s.type === 'dimension').map((s) => s.shapeId)),
+        textPreviewPolys: this.activeTool instanceof TextTool
+          ? (this.activeTool.getTextPreviewPolys() ?? undefined)
+          : undefined,
       },
     );
     this.updateFooter(state);
@@ -240,6 +245,26 @@ export class App {
     // Layer panel buttons
     document.getElementById('btn-layer-add')?.addEventListener('click', () => this.addLayer());
     document.getElementById('btn-layer-move-shapes')?.addEventListener('click', () => this.moveSelectedToActiveLayer());
+
+    // Text panel
+    const textInput = document.getElementById('text-input') as HTMLInputElement | null;
+    const textSizeInput = document.getElementById('text-size') as HTMLInputElement | null;
+    const textSpacingInput = document.getElementById('text-spacing') as HTMLInputElement | null;
+    const textAsciiWarn = document.getElementById('text-ascii-warn');
+    const ASCII_RE = /^[\x20-\x7E]+$/;
+    const syncTextParams = () => {
+      const text = textInput?.value ?? '';
+      const isValid = ASCII_RE.test(text);
+      if (textAsciiWarn) textAsciiWarn.style.display = (text.length > 0 && !isValid) ? 'block' : 'none';
+      this.textCapHeightUm = UnitConverter.parseInput(textSizeInput?.value ?? '5', this.history.state.displayUnit);
+      this.textLetterSpacingUm = UnitConverter.parseInput(textSpacingInput?.value ?? '0', this.history.state.displayUnit);
+      if (this.activeTool instanceof TextTool) {
+        this.activeTool.setParams(text, this.textCapHeightUm, this.textLetterSpacingUm);
+      }
+    };
+    textInput?.addEventListener('input', syncTextParams);
+    textSizeInput?.addEventListener('input', syncTextParams);
+    textSpacingInput?.addEventListener('input', syncTextParams);
 
     // Fillet panel
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
@@ -484,7 +509,16 @@ export class App {
       case 'dimension': this.activeTool = new DimensionTool(toolCtx); break;
       case 'centerline': this.activeTool = new CenterlineTool(toolCtx); break;
       case 'arrow': this.activeTool = new ArrowTool(toolCtx); break;
-      case 'text': this.activeTool = new TextTool(toolCtx, (wp, cb) => this.showTextDialog(wp, cb)); break;
+      case 'text': {
+        const tt = new TextTool(toolCtx);
+        tt.setParams(
+          (document.getElementById('text-input') as HTMLInputElement | null)?.value ?? '',
+          this.textCapHeightUm,
+          this.textLetterSpacingUm,
+        );
+        this.activeTool = tt;
+        break;
+      }
       default: this.activeTool = new SelectTool(toolCtx);
     }
 
@@ -1057,66 +1091,6 @@ export class App {
     URL.revokeObjectURL(url);
   }
 
-  private showTextDialog(
-    _worldPt: Point,
-    callback: (params: TextDialogParams | null) => void,
-  ): void {
-    const modal = document.getElementById('text-modal') as HTMLElement | null;
-    const input = document.getElementById('text-input') as HTMLInputElement | null;
-    const sizeInput = document.getElementById('text-size') as HTMLInputElement | null;
-    const sizeUnit = document.getElementById('text-size-unit') as HTMLElement | null;
-    const warnEl = document.getElementById('text-ascii-warn') as HTMLElement | null;
-    const okBtn = document.getElementById('text-ok') as HTMLButtonElement | null;
-    const cancelBtn = document.getElementById('text-cancel') as HTMLButtonElement | null;
-    if (!modal || !input || !sizeInput || !okBtn || !cancelBtn) return;
-
-    const unit = this.history.state.displayUnit;
-    if (sizeInput) sizeInput.value = unit === 'mm' ? '5' : '5000';
-    if (sizeUnit) sizeUnit.textContent = unit === 'mm' ? 'mm' : 'µm';
-    input.value = '';
-    if (warnEl) warnEl.style.display = 'none';
-    okBtn.disabled = true;
-    modal.style.display = 'flex';
-    input.focus();
-
-    const ASCII_RE = /^[\x20-\x7E]+$/;
-
-    const validate = () => {
-      const v = input.value;
-      const ok = ASCII_RE.test(v);
-      if (warnEl) warnEl.style.display = v.length > 0 && !ok ? 'block' : 'none';
-      okBtn.disabled = !ok;
-    };
-
-    const confirm = () => {
-      if (okBtn.disabled) return;
-      cleanup();
-      const raw = parseFloat(sizeInput.value);
-      const capHeightUm = unit === 'mm' ? Math.round(raw * 1000) : Math.round(raw);
-      callback({ text: input.value, capHeightUm: Math.max(100, capHeightUm), letterSpacingUm: 0 });
-    };
-
-    const cancel = () => { cleanup(); callback(null); };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') { e.preventDefault(); confirm(); }
-      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-    };
-
-    const cleanup = () => {
-      modal.style.display = 'none';
-      input.removeEventListener('input', validate);
-      okBtn.removeEventListener('click', confirm);
-      cancelBtn.removeEventListener('click', cancel);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-
-    input.addEventListener('input', validate);
-    okBtn.addEventListener('click', confirm);
-    cancelBtn.addEventListener('click', cancel);
-    document.addEventListener('keydown', onKeyDown);
-  }
-
   private async showFileManager(forceOpen = false): Promise<void> {
     const modal = document.getElementById('file-manager-modal') as HTMLElement | null;
     if (!modal) return;
@@ -1506,6 +1480,10 @@ export class App {
   }
 
   private updateRightPanel(state: AppState): void {
+    // Show/hide text panel
+    const textPanel = document.getElementById('text-panel');
+    if (textPanel) textPanel.style.display = this.activeTool instanceof TextTool ? '' : 'none';
+
     // Show/hide fillet panel and sync its state
     const filletPanel = document.getElementById('fillet-panel');
     const isFilletActive = this.activeTool instanceof FilletTool;
@@ -1677,6 +1655,11 @@ export class App {
     });
 
     // Refresh existing values in visible inputs to match new unit
+    const textSizeIn = document.getElementById('text-size') as HTMLInputElement | null;
+    if (textSizeIn) textSizeIn.value = UnitConverter.formatOutput(this.textCapHeightUm, unit);
+    const textSpacingIn = document.getElementById('text-spacing') as HTMLInputElement | null;
+    if (textSpacingIn) textSpacingIn.value = UnitConverter.formatOutput(this.textLetterSpacingUm, unit);
+
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
     if (filletRInput) filletRInput.value = UnitConverter.formatOutput(this.filletRadius, unit);
 

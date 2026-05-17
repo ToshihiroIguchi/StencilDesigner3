@@ -72,6 +72,7 @@ export interface RendererExtras {
   measureOverlay?: MeasureOverlay;
   dimDraft?: DimDraft;
   selectedDimIds?: Set<string>;
+  textPreviewPolys?: Polygon[];
 }
 
 export class CanvasRenderer {
@@ -157,6 +158,11 @@ export class CanvasRenderer {
     // Draft (preview while drawing)
     if (draft) {
       this.drawDraft(draft, vt);
+    }
+
+    // Text tool live preview
+    if (extras?.textPreviewPolys) {
+      this.drawTextPreview(extras.textPreviewPolys, vt);
     }
 
     // Snap indicator
@@ -450,6 +456,38 @@ export class CanvasRenderer {
     }
 
     ctx.setLineDash([]);
+  }
+
+  private drawTextPreview(polys: Polygon[], vt: ViewTransform): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = COLORS.draftShape;
+    ctx.fillStyle = 'rgba(100,200,100,0.12)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    for (const poly of polys) {
+      ctx.beginPath();
+      const o = poly.outer;
+      const f = worldToCanvas(o[0].x, o[0].y, vt);
+      ctx.moveTo(f.x, f.y);
+      for (let i = 1; i < o.length; i++) {
+        const cp = worldToCanvas(o[i].x, o[i].y, vt);
+        ctx.lineTo(cp.x, cp.y);
+      }
+      ctx.closePath();
+      for (const hole of poly.holes) {
+        const fh = worldToCanvas(hole[0].x, hole[0].y, vt);
+        ctx.moveTo(fh.x, fh.y);
+        for (let i = 1; i < hole.length; i++) {
+          const ch = worldToCanvas(hole[i].x, hole[i].y, vt);
+          ctx.lineTo(ch.x, ch.y);
+        }
+        ctx.closePath();
+      }
+      ctx.fill('evenodd');
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   private drawDiffLabel(shape: Polygon, label: string, vt: ViewTransform): void {
