@@ -189,7 +189,7 @@ export function createDefaultState(): AppState {
     layers: defaultLayers(),
     activeLayerName: '0',
     dimensions: [],
-    displayUnit: 'mm',
+    displayUnit: 'um',
     schemaVersion: 6,
   };
 }

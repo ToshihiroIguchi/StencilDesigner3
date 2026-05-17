@@ -7,7 +7,6 @@ if (!canvas) {
 }
 
 const app = new App(canvas);
-app.init().catch(console.error);
-
-// Expose app globally for E2E tests
-(window as unknown as { __app: App }).__app = app;
+app.init()
+  .then(() => { (window as unknown as { __app: App }).__app = app; })
+  .catch(console.error);

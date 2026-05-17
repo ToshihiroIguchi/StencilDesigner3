@@ -41,12 +41,26 @@ async function selectedCount(page: Page): Promise<number> {
   });
 }
 
+async function gotoAndCloseModal(page: Page) {
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(() => (window as any).__app !== undefined, { timeout: 15000 });
+  const modal = page.locator('#file-manager-modal');
+  if (await modal.isVisible()) {
+    await page.evaluate(async () => {
+      const app = (window as any).__app;
+      const m = document.getElementById('file-manager-modal');
+      if (app && m) { await app.newDoc(); m.style.display = 'none'; }
+    });
+    await page.waitForTimeout(200);
+  }
+}
+
 // ── 1. Initial display ─────────────────────────────────────────────────────
 
 test.describe('1. Initial display', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     // Clear any saved state so tests start clean
     await page.evaluate(() => (window as any).__app?.resetForTests?.().catch(() => {}));
     await page.waitForTimeout(200);
@@ -88,8 +102,7 @@ test.describe('1. Initial display', () => {
 
 test.describe('2. Theme toggle', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
   });
 
   test('2-1 click Theme applies light class', async ({ page }) => {
@@ -108,8 +121,7 @@ test.describe('2. Theme toggle', () => {
 
 test.describe('3. Cursor coordinates', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
   });
 
   test('3-1 coordinates update on mouse move', async ({ page }) => {
@@ -142,8 +154,7 @@ test.describe('3. Cursor coordinates', () => {
 
 test.describe('4. Zoom and pan', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
   });
 
   test('4-1 scroll wheel changes zoom percentage', async ({ page }) => {
@@ -204,8 +215,7 @@ test.describe('4. Zoom and pan', () => {
 
 test.describe('5. Rectangle tool', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     // Confirm clear
     await page.evaluate(() => {
       const app = (window as any).__app as any;
@@ -297,8 +307,7 @@ test.describe('5. Rectangle tool', () => {
 
 test.describe('7. Circle tool', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
   });
 
   test('7-1 Circle button highlights', async ({ page }) => {
@@ -353,8 +362,7 @@ test.describe('7. Circle tool', () => {
 
 test.describe('8. Selection', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
   });
@@ -405,8 +413,7 @@ test.describe('8. Selection', () => {
 
 test.describe('9. Move (drag)', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
   });
@@ -467,8 +474,7 @@ test.describe('9. Move (drag)', () => {
 
 test.describe('10. Delete', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
   });
@@ -503,8 +509,7 @@ test.describe('10. Delete', () => {
 
 test.describe('11. Copy', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
   });
@@ -538,8 +543,7 @@ test.describe('11. Copy', () => {
 
 test.describe('12. Array copy', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 200, box.y + 200);
   });
@@ -590,8 +594,7 @@ test.describe('12. Array copy', () => {
 
 test.describe('13. Boolean Union', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     // Two overlapping rectangles
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
@@ -640,8 +643,7 @@ test.describe('13. Boolean Union', () => {
 
 test.describe('14. Boolean Difference', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 80,  box.y + 80,  box.x + 420, box.y + 320);
     await drawRect(page, box.x + 150, box.y + 130, box.x + 350, box.y + 270);
@@ -681,8 +683,7 @@ test.describe('14. Boolean Difference', () => {
 
 test.describe('15. Snap toggle', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
   });
 
   test('15-1 snap is ON by default', async ({ page }) => {
@@ -713,8 +714,7 @@ test.describe('15. Snap toggle', () => {
 
 test.describe('16. DXF export', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
   });
@@ -744,8 +744,7 @@ test.describe('16. DXF export', () => {
 
 test.describe('17. Keyboard shortcuts', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
   });
@@ -793,8 +792,7 @@ test.describe('17. Keyboard shortcuts', () => {
 
 test.describe('18. Undo/Redo buttons', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
   });
 
   test('18-1 undo button enabled after draw', async ({ page }) => {
@@ -832,8 +830,7 @@ test.describe('18. Undo/Redo buttons', () => {
 
 test.describe('19. Autosave and restore', () => {
   test('19-1 Ctrl+S saves without error', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
 
@@ -845,8 +842,7 @@ test.describe('19. Autosave and restore', () => {
   });
 
   test('19-2 shapes survive page reload (IndexedDB)', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
 
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
@@ -866,8 +862,7 @@ test.describe('19. Autosave and restore', () => {
 
 test.describe('20. Fit to content and zoom reset', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     await page.evaluate(() => (window as any).__app?.resetForTests?.().catch(() => {}));
     await page.waitForTimeout(200);
   });
@@ -957,8 +952,7 @@ test.describe('20. Fit to content and zoom reset', () => {
 
 test.describe('22. Polygon tool', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     await page.evaluate(() => (window as any).__app?.resetForTests?.().catch(() => {}));
     await page.waitForTimeout(200);
   });
@@ -1221,15 +1215,13 @@ test.describe('21. Console error check', () => {
   test('21-1 no JS errors on load', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     await page.waitForTimeout(500);
     expect(errors).toHaveLength(0);
   });
 
   test('21-2 Clipper is available without CDN', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const clipperAvailable = await page.evaluate(() => {
       // Verify boolean ops work by checking union can be called
       try {
@@ -1243,8 +1235,7 @@ test.describe('21. Console error check', () => {
   });
 
   test('21-3 no NaN in coordinates after draw', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await gotoAndCloseModal(page);
     const box = await canvasBox(page);
     await drawRect(page, box.x + 100, box.y + 100, box.x + 300, box.y + 250);
 
