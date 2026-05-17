@@ -1227,7 +1227,7 @@ export class App {
         const dt = new Date(doc.lastModified).toLocaleString();
         const sz = fmtBytes(doc.sizeBytes);
         li.innerHTML = `
-          <div class="fm-doc-info">
+          <div class="fm-doc-info fm-open-area" data-id="${doc.id}">
             <div class="fm-doc-name-row">
               <span class="fm-doc-name">${escHtml(doc.name)}</span>
               <button class="fm-icon-btn fm-rename-btn fm-rename" data-id="${doc.id}" title="Rename">
@@ -1237,9 +1237,6 @@ export class App {
             <span class="fm-doc-meta">${dt} · ${sz}</span>
           </div>
           <div class="fm-doc-actions">
-            <button class="fm-icon-btn fm-open" data-id="${doc.id}" title="Open">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            </button>
             <button class="fm-icon-btn fm-download" data-id="${doc.id}" title="Download">
               <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
@@ -1285,62 +1282,66 @@ export class App {
     const listEl = document.getElementById('fm-doc-list');
     if (listEl) listEl.onclick = async (e: MouseEvent) => {
       const btn = (e.target as HTMLElement).closest('button[data-id]') as HTMLButtonElement | null;
-      if (!btn) return;
-      const id = btn.dataset.id!;
-      if (btn.classList.contains('fm-open')) {
-        await this.openDoc(id);
-        close();
-      } else if (btn.classList.contains('fm-rename')) {
-        const li = btn.closest('.fm-doc-item') as HTMLElement | null;
-        const nameSpan = li?.querySelector('.fm-doc-name') as HTMLElement | null;
-        if (!nameSpan || nameSpan.tagName === 'INPUT') return;
-        const currentName = nameSpan.textContent ?? '';
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'fm-name-input';
-        input.value = currentName;
-        nameSpan.replaceWith(input);
-        input.focus();
-        input.select();
-        let committed = false;
-        const commit = async () => {
-          if (committed) return;
-          committed = true;
-          const newName = input.value.trim();
-          if (newName && newName !== currentName) {
-            await renameDoc(id, newName);
-            if (id === this.currentDocId) {
-              this.currentDocName = newName;
-              this.updateDocNameLabel();
+      if (btn) {
+        const id = btn.dataset.id!;
+        if (btn.classList.contains('fm-rename')) {
+          const li = btn.closest('.fm-doc-item') as HTMLElement | null;
+          const nameSpan = li?.querySelector('.fm-doc-name') as HTMLElement | null;
+          if (!nameSpan || nameSpan.tagName === 'INPUT') return;
+          const currentName = nameSpan.textContent ?? '';
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'fm-name-input';
+          input.value = currentName;
+          nameSpan.replaceWith(input);
+          input.focus();
+          input.select();
+          let committed = false;
+          const commit = async () => {
+            if (committed) return;
+            committed = true;
+            const newName = input.value.trim();
+            if (newName && newName !== currentName) {
+              await renameDoc(id, newName);
+              if (id === this.currentDocId) {
+                this.currentDocName = newName;
+                this.updateDocNameLabel();
+              }
+              await renderList();
+            } else {
+              input.replaceWith(nameSpan);
             }
-            await renderList();
-          } else {
-            input.replaceWith(nameSpan);
+          };
+          input.addEventListener('keydown', (ke: KeyboardEvent) => {
+            if (ke.key === 'Enter') { ke.preventDefault(); void commit(); }
+            if (ke.key === 'Escape') { committed = true; input.replaceWith(nameSpan); }
+          });
+          input.addEventListener('blur', () => void commit());
+        } else if (btn.classList.contains('fm-download')) {
+          const state = await loadDoc(id);
+          if (!state) return;
+          const docs = await listDocs();
+          const name = docs.find((d) => d.id === id)?.name ?? 'document';
+          this.downloadDocAsStencil(id, name, state);
+        } else if (btn.classList.contains('fm-delete')) {
+          const docs = await listDocs();
+          const name = docs.find((d) => d.id === id)?.name ?? 'this document';
+          const ok = await this.showMessageModal({ title: 'Delete', message: `Delete "${name}"? This cannot be undone.`, okText: 'Delete', cancelText: 'Cancel', danger: true });
+          if (!ok) return;
+          await deleteDoc(id);
+          if (id === this.currentDocId) {
+            this.currentDocId = null;
+            await setCurrentDocId(null);
           }
-        };
-        input.addEventListener('keydown', (e: KeyboardEvent) => {
-          if (e.key === 'Enter') { e.preventDefault(); void commit(); }
-          if (e.key === 'Escape') { committed = true; input.replaceWith(nameSpan); }
-        });
-        input.addEventListener('blur', () => void commit());
-      } else if (btn.classList.contains('fm-download')) {
-        const state = await loadDoc(id);
-        if (!state) return;
-        const docs = await listDocs();
-        const name = docs.find((d) => d.id === id)?.name ?? 'document';
-        this.downloadDocAsStencil(id, name, state);
-      } else if (btn.classList.contains('fm-delete')) {
-        const docs = await listDocs();
-        const name = docs.find((d) => d.id === id)?.name ?? 'this document';
-        const ok = await this.showMessageModal({ title: 'Delete', message: `Delete "${name}"? This cannot be undone.`, okText: 'Delete', cancelText: 'Cancel', danger: true });
-        if (!ok) return;
-        await deleteDoc(id);
-        if (id === this.currentDocId) {
-          this.currentDocId = null;
-          await setCurrentDocId(null);
+          await renderList();
+          if (closeBtn) closeBtn.style.display = this.currentDocId ? '' : 'none';
         }
-        await renderList();
-        if (closeBtn) closeBtn.style.display = this.currentDocId ? '' : 'none';
+        return;
+      }
+      const area = (e.target as HTMLElement).closest('.fm-open-area[data-id]') as HTMLElement | null;
+      if (area) {
+        await this.openDoc(area.dataset.id!);
+        close();
       }
     };
   }

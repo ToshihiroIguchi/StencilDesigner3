@@ -437,6 +437,7 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 .fm-doc-item:hover { background: var(--btn-hover); }
 .fm-doc-item.fm-active { border-color: var(--accent); background: var(--btn-active); }
 .fm-doc-info { flex: 1; overflow: hidden; }
+.fm-open-area { cursor: pointer; }
 .fm-doc-name-row { display: flex; align-items: center; gap: 4px; overflow: hidden; }
 .fm-doc-name { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .fm-doc-meta { font-size: 11px; color: var(--fg2); }
