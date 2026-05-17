@@ -454,20 +454,14 @@ test.describe('9. Move (drag)', () => {
     await page.mouse.move(box.x + 400, box.y + 175);
     await page.mouse.up();
 
+    // A drag generates a single MoveCommand — one Ctrl+Z restores the original position
     await page.keyboard.press('Control+z');
     await page.waitForTimeout(100);
-
-    // Undo multiple times to get back to original (each mouse pixel = 1 command)
-    for (let i = 0; i < 20; i++) {
-      if (await page.locator('#btn-undo').isDisabled()) break;
-      await page.keyboard.press('Control+z');
-      await page.waitForTimeout(30);
-    }
 
     const finalX = await page.evaluate(() => {
       return (window as any).__app?.history?.state?.shapes?.[0]?.outer?.[0]?.x ?? null;
     });
-    // The shape should be somewhere close to where it started
+    expect(finalX).not.toBeNull();
     expect(Math.abs((finalX ?? 0) - (origX ?? 0))).toBeLessThan(500);
   });
 });
@@ -913,9 +907,9 @@ test.describe('20. Fit to content and zoom reset', () => {
 
   test('20-5 clicking zoom display opens preset menu and selecting 10 px/mm sets zoom', async ({ page }) => {
     const box = await canvasBox(page);
-    // Zoom in first
+    // Zoom in enough to exceed 50 px/mm (factor 1.1^20 from 10 px/mm ≈ 67)
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       await page.mouse.wheel(0, -120);
       await page.waitForTimeout(20);
     }
