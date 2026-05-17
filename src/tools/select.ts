@@ -1,7 +1,7 @@
-import type { AppState, Point, Polygon, Selection } from '../types';
+import type { AppState, Annotation, Point, Polygon, Selection } from '../types';
 import { BaseTool, type ToolContext } from './base';
-import { hitTest, hitTestDimension, rubberBandSelect } from '../core/selection';
-import { MoveCommand, SetSelectionCommand } from '../state/commands';
+import { hitTest, hitTestAnnotation, hitTestDimension, rubberBandSelect } from '../core/selection';
+import { MoveAnnotationCommand, MoveCommand, SetSelectionCommand } from '../state/commands';
 import { translatePolygon } from '../core/geometry';
 import { markDirty } from '../state/docStore';
 
@@ -15,6 +15,7 @@ export class SelectTool extends BaseTool {
   private pendingDx = 0;
   private pendingDy = 0;
   private savedShapes: Polygon[] | null = null;
+  private savedAnnotations: Annotation[] | null = null;
   private savedSelection: Selection[] | null = null;
 
   private isRubberBand = false;
@@ -38,11 +39,20 @@ export class SelectTool extends BaseTool {
       const l = layerMap.get(d.layer);
       return l && l.visible && !l.locked;
     });
+    const interactiveAnns = state.annotations.filter((a) => {
+      const l = layerMap.get(a.layer);
+      return l && l.visible && !l.locked;
+    });
     const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, interactiveDims, state.shapes, state, state.snapRadius);
     if (dimHit) {
       hit = { type: 'dimension', shapeId: dimHit.id, index: -1, holeIndex: -1 };
     } else {
-      hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
+      const annHit = hitTestAnnotation(canvasPt.x, canvasPt.y, interactiveAnns, state);
+      if (annHit) {
+        hit = { type: 'annotation', shapeId: annHit.id, index: -1, holeIndex: -1 };
+      } else {
+        hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
+      }
     }
     if (hit) {
       const alreadySelected = state.selection.some((s) => s.shapeId === hit.shapeId);
@@ -59,6 +69,7 @@ export class SelectTool extends BaseTool {
       }
       const cur = this.ctx.history.state;
       this.savedShapes = [...cur.shapes];
+      this.savedAnnotations = [...cur.annotations];
       this.savedSelection = [...cur.selection];
 
       // Snap the origin for movement reference
@@ -107,6 +118,11 @@ export class SelectTool extends BaseTool {
             if (!ids.has(shape.id)) return shape;
             return { ...translatePolygon(shape, dx, dy), id: shape.id };
           });
+          // Move annotations live as well
+          state.annotations = state.annotations.map((ann) => {
+            if (!ids.has(ann.id)) return ann;
+            return { ...ann, origin: { x: ann.origin.x + dx, y: ann.origin.y + dy } };
+          });
           // Move reference point by exactly what we moved the shapes
           this.moveOrigin.x += dx;
           this.moveOrigin.y += dy;
@@ -129,7 +145,7 @@ export class SelectTool extends BaseTool {
       const sel = rubberBandSelect(
         this.rubberBandStart.x, this.rubberBandStart.y,
         canvasPt.x, canvasPt.y,
-        state.shapes, state.dimensions, vt
+        state.shapes, state.dimensions, vt, state.annotations
       );
       if (sel.length > 0) {
         const newSel = shift ? [...state.selection, ...sel] : sel;
@@ -141,8 +157,21 @@ export class SelectTool extends BaseTool {
     if (this.isDragging && this.dragThresholdReached && this.savedShapes && this.savedSelection) {
       const savedSel = this.savedSelection;
       state.shapes = this.savedShapes;
+      state.annotations = this.savedAnnotations ?? state.annotations;
       if (this.pendingDx !== 0 || this.pendingDy !== 0) {
-        this.ctx.history.execute(new MoveCommand(savedSel, this.pendingDx, this.pendingDy));
+        // Commit shape move (shapes only — annotations committed separately below)
+        const shapeSel = savedSel.filter((s) => s.type !== 'annotation');
+        if (shapeSel.length > 0) {
+          this.ctx.history.execute(new MoveCommand(shapeSel, this.pendingDx, this.pendingDy));
+        }
+        // Commit annotation moves individually
+        const annIds = savedSel.filter((s) => s.type === 'annotation').map((s) => s.shapeId);
+        for (const id of annIds) {
+          const ann = state.annotations.find((a) => a.id === id);
+          if (!ann) continue;
+          const newOrigin = { x: ann.origin.x + this.pendingDx, y: ann.origin.y + this.pendingDy };
+          this.ctx.history.execute(new MoveAnnotationCommand(id, newOrigin));
+        }
         markDirty();
       }
     }
@@ -154,6 +183,7 @@ export class SelectTool extends BaseTool {
   override cancel(): void {
     if (this.isDragging && this.dragThresholdReached && this.savedShapes) {
       this.ctx.history.state.shapes = this.savedShapes;
+      if (this.savedAnnotations) this.ctx.history.state.annotations = this.savedAnnotations;
     }
     this._reset();
     super.cancel();
@@ -172,6 +202,7 @@ export class SelectTool extends BaseTool {
     this.rubberBandStart = null;
     this.rubberBandEnd = null;
     this.savedShapes = null;
+    this.savedAnnotations = null;
     this.savedSelection = null;
     this.dragThresholdReached = false;
     this.pendingDx = 0;

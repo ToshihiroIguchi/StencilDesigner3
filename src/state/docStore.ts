@@ -227,10 +227,16 @@ function migrateState(s: Partial<AppState>): AppState {
     state = { ...state, schemaVersion: 6, displayUnit: 'mm' };
   }
 
+  if (v < 7) {
+    state = { ...state, schemaVersion: 7 };
+  }
+
   const finalState = {
     ...(state as AppState),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     dimensions: (state as any).dimensions ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    annotations: (state as any).annotations ?? [],
   };
 
   const defaultApertureMap: Record<string, boolean> = {

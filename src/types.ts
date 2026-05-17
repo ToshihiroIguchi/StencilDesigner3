@@ -35,11 +35,12 @@ export type ToolType =
   | 'dimension'
   | 'centerline'
   | 'arrow'
-  | 'text';
+  | 'text'
+  | 'annotation';
 
 export interface Selection {
-  type: 'vertex' | 'edge' | 'polygon' | 'dimension';
-  shapeId: string; // If type === 'dimension', this is the dimension ID
+  type: 'vertex' | 'edge' | 'polygon' | 'dimension' | 'annotation';
+  shapeId: string; // If type === 'dimension'/'annotation', this is the respective ID
   /** vertex/edge index within the outer ring (or hole ring if holeIndex >= 0) */
   index: number;
   holeIndex: number; // -1 = outer ring
@@ -99,6 +100,15 @@ export interface Dimension {
   frozen: boolean;
 }
 
+/** Display-only text annotation. Never exported to DXF. */
+export interface Annotation {
+  id: string;
+  text: string;      // newline-delimited for multi-line
+  origin: Point;     // top-left of first line, world µm coords
+  heightUm: number;  // cap-height in µm (e.g. 5000 = 5 mm)
+  layer: string;     // default 'DIMENSIONS'
+}
+
 export interface AppState {
   shapes: Polygon[];
   activeTool: ToolType;
@@ -112,6 +122,7 @@ export interface AppState {
   layers: Layer[];
   activeLayerName: string;
   dimensions: Dimension[];
+  annotations: Annotation[];
   displayUnit: 'mm' | 'um';
   schemaVersion: number;
 }
@@ -191,8 +202,9 @@ export function createDefaultState(): AppState {
     layers: defaultLayers(),
     activeLayerName: '0',
     dimensions: [],
+    annotations: [],
     displayUnit: 'um',
-    schemaVersion: 6,
+    schemaVersion: 7,
   };
 }
 

@@ -1,4 +1,4 @@
-import type { AppState, Command, Selection, Polygon, Ring, Layer, Dimension, DimensionAnchor, Point } from '../types';
+import type { AppState, Command, Selection, Polygon, Ring, Layer, Dimension, DimensionAnchor, Point, Annotation } from '../types';
 import { DIMENSIONS_LAYER } from '../types';
 import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
@@ -152,18 +152,22 @@ export class CopyCommand implements Command {
 export class DeleteCommand implements Command {
   private deletedShapes: Polygon[] = [];
   private dimsBefore: Dimension[] = [];
+  private annsBefore: Annotation[] = [];
   constructor(private selection: Selection[]) {}
   do(state: AppState): AppState {
-    const shapeIds = new Set(this.selection.filter((s) => s.type !== 'dimension').map((s) => s.shapeId));
+    const shapeIds = new Set(this.selection.filter((s) => s.type !== 'dimension' && s.type !== 'annotation').map((s) => s.shapeId));
     const dimIds = new Set(this.selection.filter((s) => s.type === 'dimension').map((s) => s.shapeId));
+    const annIds = new Set(this.selection.filter((s) => s.type === 'annotation').map((s) => s.shapeId));
     this.deletedShapes = state.shapes.filter((s) => shapeIds.has(s.id));
     this.dimsBefore = state.dimensions;
+    this.annsBefore = state.annotations;
     let nextDims = freezeDimsForRemovedShapes(state.dimensions, state.shapes, shapeIds);
     nextDims = nextDims.filter((d) => !dimIds.has(d.id));
     return {
       ...state,
-      shapes: deleteShapes(state.shapes, this.selection),
+      shapes: deleteShapes(state.shapes, this.selection.filter((s) => s.type !== 'dimension' && s.type !== 'annotation')),
       dimensions: nextDims,
+      annotations: state.annotations.filter((a) => !annIds.has(a.id)),
       selection: [],
     };
   }
@@ -172,6 +176,7 @@ export class DeleteCommand implements Command {
       ...state,
       shapes: normalizeAll([...state.shapes, ...this.deletedShapes]),
       dimensions: this.dimsBefore,
+      annotations: this.annsBefore,
       selection: [],
     };
   }
@@ -484,6 +489,52 @@ export class DeleteDimensionCommand implements Command {
   undo(state: AppState): AppState {
     if (!this.saved) return state;
     return { ...state, dimensions: [...state.dimensions, this.saved] };
+  }
+}
+
+// ─── Annotations ─────────────────────────────────────────────────────────────
+
+export class AddAnnotationCommand implements Command {
+  constructor(private ann: Annotation) {}
+  do(state: AppState): AppState {
+    const layers = state.layers.some((l) => l.name === 'DIMENSIONS')
+      ? state.layers
+      : [...state.layers, { ...DIM_LAYER_TEMPLATE }];
+    return { ...state, layers, annotations: [...state.annotations, this.ann] };
+  }
+  undo(state: AppState): AppState {
+    return { ...state, annotations: state.annotations.filter((a) => a.id !== this.ann.id) };
+  }
+}
+
+export class EditAnnotationCommand implements Command {
+  private before: Annotation | null = null;
+  constructor(private id: string, private patch: Partial<Pick<Annotation, 'text' | 'heightUm' | 'origin' | 'layer'>>) {}
+  do(state: AppState): AppState {
+    this.before = state.annotations.find((a) => a.id === this.id) ?? null;
+    if (!this.before) return state;
+    return { ...state, annotations: state.annotations.map((a) => a.id === this.id ? { ...a, ...this.patch } : a) };
+  }
+  undo(state: AppState): AppState {
+    if (!this.before) return state;
+    const before = this.before;
+    return { ...state, annotations: state.annotations.map((a) => a.id === this.id ? before : a) };
+  }
+}
+
+export class MoveAnnotationCommand implements Command {
+  private before: Point | null = null;
+  constructor(private id: string, private newOrigin: Point) {}
+  do(state: AppState): AppState {
+    const ann = state.annotations.find((a) => a.id === this.id);
+    if (!ann) return state;
+    this.before = ann.origin;
+    return { ...state, annotations: state.annotations.map((a) => a.id === this.id ? { ...a, origin: this.newOrigin } : a) };
+  }
+  undo(state: AppState): AppState {
+    if (!this.before) return state;
+    const before = this.before;
+    return { ...state, annotations: state.annotations.map((a) => a.id === this.id ? { ...a, origin: before } : a) };
   }
 }
 

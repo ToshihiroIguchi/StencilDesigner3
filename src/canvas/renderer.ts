@@ -1,4 +1,4 @@
-import type { AppState, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
+import type { AppState, Annotation, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
 import type { SnapResult } from '../core/snap';
 import { selectedIds } from '../core/transform';
@@ -75,6 +75,8 @@ export interface RendererExtras {
   selectedDimIds?: Set<string>;
   textPreviewPolys?: Polygon[];
   textCursor?: { x: number; topY: number; bottomY: number };
+  annotationPreviewPt?: Point;
+  selectedAnnotationIds?: Set<string>;
 }
 
 export class CanvasRenderer {
@@ -175,6 +177,16 @@ export class CanvasRenderer {
     // Snap indicator
     if (snap && state.snapEnabled) {
       this.drawSnapIndicator(snap, vt);
+    }
+
+    // Annotations (display-only notes, never exported to DXF)
+    if (state.annotations.length > 0) {
+      this.drawAnnotations(state.annotations, layerMap, extras?.selectedAnnotationIds ?? new Set(), vt);
+    }
+
+    // Annotation tool placement preview
+    if (extras?.annotationPreviewPt) {
+      this.drawAnnotationPreview(extras.annotationPreviewPt, vt);
     }
 
     // Dimensions
@@ -859,6 +871,72 @@ export class CanvasRenderer {
     ctx.fillStyle = 'rgba(100,200,100,0.7)';
     ctx.lineWidth = 1.2;
     this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', 'mm', vt);
+    ctx.restore();
+  }
+
+  // ─── Annotation rendering ──────────────────────────────────────────────────
+
+  private static readonly ANNOTATION_FONT = '"Noto Sans JP", Meiryo, "Yu Gothic", "MS Gothic", sans-serif';
+
+  private drawAnnotations(
+    annotations: Annotation[],
+    layerMap: Map<string, Layer>,
+    selectedIds: Set<string>,
+    vt: ViewTransform,
+  ): void {
+    const ctx = this.ctx;
+    for (const ann of annotations) {
+      if (!ann.text.trim()) continue;
+      const layer = layerMap.get(ann.layer);
+      if (layer && !layer.visible) continue;
+
+      const isSelected = selectedIds.has(ann.id);
+      const color = isSelected ? COLORS.shapeSelected : (layer?.color ?? '#aabbdd');
+      const cp = worldToCanvas(ann.origin.x, ann.origin.y, vt);
+      const sizePx = Math.max(6, ann.heightUm * vt.zoom);
+      const lineHeightPx = sizePx * 1.2;
+      const lines = ann.text.split('\n');
+
+      ctx.save();
+      ctx.globalAlpha = layer?.locked ? 0.5 : 1.0;
+      ctx.font = `${sizePx}px ${CanvasRenderer.ANNOTATION_FONT}`;
+      ctx.fillStyle = color;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      ctx.setLineDash([]);
+
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], cp.x, cp.y + i * lineHeightPx);
+      }
+
+      if (isSelected) {
+        const maxWidth = Math.max(...lines.map((l) => ctx.measureText(l).width), 20);
+        const totalHeight = lines.length * lineHeightPx;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 0.8;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(cp.x - 2, cp.y - 2, maxWidth + 4, totalHeight + 4);
+        ctx.setLineDash([]);
+      }
+
+      ctx.restore();
+    }
+  }
+
+  private drawAnnotationPreview(pt: Point, vt: ViewTransform): void {
+    const ctx = this.ctx;
+    const cp = worldToCanvas(pt.x, pt.y, vt);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(100,200,100,0.7)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(cp.x - 6, cp.y);
+    ctx.lineTo(cp.x + 6, cp.y);
+    ctx.moveTo(cp.x, cp.y - 6);
+    ctx.lineTo(cp.x, cp.y + 6);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 

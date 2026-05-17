@@ -12,7 +12,8 @@ import { DimensionTool } from '../tools/dimension';
 import { CenterlineTool } from '../tools/centerline';
 import { ArrowTool } from '../tools/arrow';
 import { TextTool } from '../tools/text';
-import { hitTest } from '../core/selection';
+import { AnnotationTool } from '../tools/annotation';
+import { hitTest, hitTestAnnotation } from '../core/selection';
 import { findSnap, type SnapResult } from '../core/snap';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
@@ -36,7 +37,7 @@ import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
 import { UnitConverter } from '../core/format';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool | TextTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool | TextTool | AnnotationTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -73,6 +74,7 @@ export class App {
   private currentDocId: string | null = null;
   private textCapHeightUm = 5000;
   private textLetterSpacingUm = 0;
+  private annotationHeightUm = 1000;
   private currentDocName = '';
   private storageBannerTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -197,6 +199,9 @@ export class App {
               ? (this.activeTool.getRendererExtras().dimDraft ?? undefined)
               : undefined,
         selectedDimIds: new Set(state.selection.filter((s) => s.type === 'dimension').map((s) => s.shapeId)),
+        selectedAnnotationIds: new Set(state.selection.filter((s) => s.type === 'annotation').map((s) => s.shapeId)),
+        annotationPreviewPt: this.activeTool instanceof AnnotationTool
+          ? (this.activeTool.getPreviewPt() ?? undefined) : undefined,
         textPreviewPolys: this.activeTool instanceof TextTool
           ? (this.activeTool.getTextPreviewPolys() ?? undefined)
           : undefined,
@@ -262,6 +267,16 @@ export class App {
     };
     textSizeInput?.addEventListener('input', syncTextParams);
     textSpacingInput?.addEventListener('input', syncTextParams);
+
+    // Annotation panel
+    const annSizeInput = document.getElementById('ann-size') as HTMLInputElement | null;
+    const syncAnnParams = () => {
+      this.annotationHeightUm = UnitConverter.parseInput(annSizeInput?.value ?? '5', this.history.state.displayUnit);
+      if (this.activeTool instanceof AnnotationTool) {
+        this.activeTool.setHeightUm(this.annotationHeightUm);
+      }
+    };
+    annSizeInput?.addEventListener('input', syncAnnParams);
 
     // Fillet panel
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
@@ -421,11 +436,33 @@ export class App {
     if (this.diffStep === 0) this.activeTool.onMouseUp(worldPt, canvasPt, e.shiftKey, this.history.state);
   }
 
-  private onDblClick(_e: MouseEvent): void {
-    if (!(this.activeTool instanceof PolygonTool)) return;
-    // Double-click fires mousedown twice before dblclick; the second mousedown already
-    // added a duplicate vertex — remove it, then commit with what we have.
-    (this.activeTool as PolygonTool).commitFromDblClick(this.history.state);
+  private onDblClick(e: MouseEvent): void {
+    if (this.activeTool instanceof PolygonTool) {
+      // Double-click fires mousedown twice before dblclick; the second mousedown already
+      // added a duplicate vertex — remove it, then commit with what we have.
+      (this.activeTool as PolygonTool).commitFromDblClick(this.history.state);
+      return;
+    }
+
+    // Double-click on annotation → switch to annotation tool and open editor
+    if (this.activeTool instanceof SelectTool) {
+      const { canvasPt } = this.getCanvasPt(e);
+      const state = this.history.state;
+      const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+      const visibleAnns = state.annotations.filter((a) => {
+        const l = layerMap.get(a.layer);
+        return l && l.visible && !l.locked;
+      });
+      const hit = hitTestAnnotation(canvasPt.x, canvasPt.y, visibleAnns, state);
+      if (hit) {
+        const ann = state.annotations.find((a) => a.id === hit.id);
+        if (ann) {
+          this.setTool('annotation');
+          const tool = this.activeTool;
+          if (tool instanceof AnnotationTool) tool.startEdit(ann, canvasPt);
+        }
+      }
+    }
   }
 
   private setZoom(newZoom: number, anchorCanvasX?: number, anchorCanvasY?: number): void {
@@ -453,6 +490,8 @@ export class App {
   private onKeyDown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'z') {
+        // Let textarea handle Ctrl+Z natively when annotation is being typed
+        if (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing()) return;
         e.preventDefault();
         // During text editing Ctrl+Z deletes last character instead of undo
         if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) {
@@ -467,8 +506,9 @@ export class App {
         return;
       }
       if (e.key === 'y') {
-        // Block redo during text editing
+        // Block redo during text/annotation editing
         if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) return;
+        if (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing()) return;
         e.preventDefault(); this.redo(); return;
       }
       if (e.key === 's') { e.preventDefault(); if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state); return; }
@@ -486,6 +526,7 @@ export class App {
       if (e.key === 'l' || e.key === 'L') { this.setTool('centerline'); return; }
       if (e.key === 'a' || e.key === 'A') { this.setTool('arrow'); return; }
       if (e.key === 't' || e.key === 'T') { this.setTool('text'); return; }
+      if (e.key === 'n' || e.key === 'N') { this.setTool('annotation'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -527,6 +568,10 @@ export class App {
         const tt = new TextTool(toolCtx);
         tt.setParams(this.textCapHeightUm, this.textLetterSpacingUm);
         this.activeTool = tt;
+        break;
+      }
+      case 'annotation': {
+        this.activeTool = new AnnotationTool(toolCtx, this.annotationHeightUm);
         break;
       }
       default: this.activeTool = new SelectTool(toolCtx);
@@ -759,7 +804,7 @@ export class App {
     const viewW = this.canvas.width - RULER;
     const viewH = this.canvas.height - RULER;
 
-    if (state.shapes.length === 0 && state.dimensions.length === 0) {
+    if (state.shapes.length === 0 && state.dimensions.length === 0 && state.annotations.length === 0) {
       this.setZoom(0.5);
       state.panX = Math.round(RULER + viewW / 2);
       state.panY = Math.round(RULER + viewH / 2);
@@ -781,6 +826,9 @@ export class App {
       const { p1, p2 } = resolveDimension(d, state.shapes);
       expandBbox(p1.x, p1.y);
       expandBbox(p2.x, p2.y);
+    }
+    for (const a of state.annotations) {
+      expandBbox(a.origin.x, a.origin.y);
     }
 
     const contentW = maxX - minX || 1;
@@ -1494,6 +1542,10 @@ export class App {
     const textPanel = document.getElementById('text-panel');
     if (textPanel) textPanel.style.display = this.activeTool instanceof TextTool ? '' : 'none';
 
+    // Show/hide annotation panel
+    const annPanel = document.getElementById('annotation-panel');
+    if (annPanel) annPanel.style.display = this.activeTool instanceof AnnotationTool ? '' : 'none';
+
     // Show/hide fillet panel and sync its state
     const filletPanel = document.getElementById('fillet-panel');
     const isFilletActive = this.activeTool instanceof FilletTool;
@@ -1542,6 +1594,24 @@ export class App {
     const infoEl = document.getElementById('selection-info');
     const propsEl = document.getElementById('shape-props');
     if (!infoEl) return;
+
+    const annSels = sel.filter((s) => s.type === 'annotation');
+    if (annSels.length === 1 && sel.length === 1) {
+      const ann = state.annotations.find((a) => a.id === annSels[0].shapeId);
+      if (ann) {
+        const lines = ann.text.split('\n');
+        const preview = lines[0].length > 24 ? lines[0].slice(0, 24) + '…' : lines[0];
+        const layerColor = state.layers.find((l) => l.name === ann.layer)?.color ?? '#aabbdd';
+        infoEl.innerHTML = `<div class="shape-info">
+          <span style="color:${layerColor}">Note</span>
+          <span style="white-space:pre-wrap;word-break:break-all">${escHtml(preview)}</span>
+          <span style="color:var(--fg2)">Layer: ${ann.layer}</span>
+        </div>
+        <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del: delete · Dbl-click: edit</p>`;
+        if (propsEl) propsEl.style.display = 'none';
+        return;
+      }
+    }
 
     const dimSels = sel.filter((s) => s.type === 'dimension');
     if (dimSels.length === 1 && sel.length === 1) {
@@ -1675,6 +1745,8 @@ export class App {
     if (textSizeIn) textSizeIn.value = UnitConverter.formatOutput(this.textCapHeightUm, unit);
     const textSpacingIn = document.getElementById('text-spacing') as HTMLInputElement | null;
     if (textSpacingIn) textSpacingIn.value = UnitConverter.formatOutput(this.textLetterSpacingUm, unit);
+    const annSizeIn = document.getElementById('ann-size') as HTMLInputElement | null;
+    if (annSizeIn) annSizeIn.value = UnitConverter.formatOutput(this.annotationHeightUm, unit);
 
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
     if (filletRInput) filletRInput.value = UnitConverter.formatOutput(this.filletRadius, unit);

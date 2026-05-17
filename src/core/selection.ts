@@ -1,4 +1,4 @@
-import type { Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
+import type { Annotation, Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
 import { canvasToWorld } from '../types';
 import { pointInRing } from '../normalize';
 import { distSqPointToSegment, dist } from './geometry';
@@ -96,12 +96,46 @@ export function hitTestDimension(
   return null;
 }
 
+// ─── Annotation hit test ──────────────────────────────────────────────────────
+
+export interface AnnHit { id: string }
+
+/**
+ * Hit test for annotation bounding boxes.
+ * Uses a character-count heuristic for width (no canvas context available here).
+ */
+export function hitTestAnnotation(
+  px: number, py: number,
+  annotations: Annotation[],
+  vt: ViewTransform,
+): AnnHit | null {
+  const CHAR_ASPECT = 0.6; // approximate em width / height ratio
+  const LINE_RATIO = 1.2;
+  const wp = canvasToWorld(px, py, vt);
+  for (let i = annotations.length - 1; i >= 0; i--) {
+    const ann = annotations[i];
+    if (!ann.text.trim()) continue;
+    const lines = ann.text.split('\n');
+    const maxChars = Math.max(...lines.map((l) => l.length), 1);
+    const widthUm = maxChars * ann.heightUm * CHAR_ASPECT;
+    const heightUm = lines.length * ann.heightUm * LINE_RATIO;
+    if (
+      wp.x >= ann.origin.x && wp.x <= ann.origin.x + widthUm &&
+      wp.y >= ann.origin.y && wp.y <= ann.origin.y + heightUm
+    ) {
+      return { id: ann.id };
+    }
+  }
+  return null;
+}
+
 /** Get all shapes that are fully within the rubber-band selection box. */
 export function rubberBandSelect(
   x1: number, y1: number, x2: number, y2: number,
   shapes: Polygon[],
   dimensions: Dimension[],
-  vt: ViewTransform
+  vt: ViewTransform,
+  annotations: Annotation[] = [],
 ): Selection[] {
   const wp1 = canvasToWorld(Math.min(x1, x2), Math.min(y1, y2), vt);
   const wp2 = canvasToWorld(Math.max(x1, x2), Math.max(y1, y2), vt);
@@ -132,5 +166,18 @@ export function rubberBandSelect(
     })
     .map((dim) => ({ type: 'dimension' as const, shapeId: dim.id, index: -1, holeIndex: -1 }));
 
-  return [...shapeSels, ...dimSels];
+  const CHAR_ASPECT = 0.6;
+  const LINE_RATIO = 1.2;
+  const annSels: Selection[] = annotations
+    .filter((ann) => {
+      if (!ann.text.trim()) return false;
+      const lines = ann.text.split('\n');
+      const maxChars = Math.max(...lines.map((l) => l.length), 1);
+      const ox2 = ann.origin.x + maxChars * ann.heightUm * CHAR_ASPECT;
+      const oy2 = ann.origin.y + lines.length * ann.heightUm * LINE_RATIO;
+      return ann.origin.x >= wp1.x && ox2 <= wp2.x && ann.origin.y >= wp1.y && oy2 <= wp2.y;
+    })
+    .map((ann) => ({ type: 'annotation' as const, shapeId: ann.id, index: -1, holeIndex: -1 }));
+
+  return [...shapeSels, ...dimSels, ...annSels];
 }

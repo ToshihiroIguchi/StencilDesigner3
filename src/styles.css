@@ -421,3 +421,24 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 
 /* ── Storage full banner ─────────────────────────────────────────────────── */
 .storage-banner { position: fixed; bottom: var(--footer-h); left: 0; right: 0; background: var(--danger); color: #fff; font-size: 12px; text-align: center; padding: 4px 8px; z-index: 900; }
+
+/* ── Annotation overlay textarea ─────────────────────────────────────────── */
+#annotation-input {
+  position: absolute;
+  z-index: 20;
+  background: rgba(30,30,46,0.80);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  outline: none;
+  color: var(--accent);
+  font-family: 'Noto Sans JP', Meiryo, 'Yu Gothic', 'MS Gothic', sans-serif;
+  line-height: 1.2;
+  resize: none;
+  overflow: hidden;
+  min-width: 60px;
+  padding: 2px 4px;
+  pointer-events: all;
+}
+body.light #annotation-input {
+  background: rgba(245,245,240,0.88);
+}
