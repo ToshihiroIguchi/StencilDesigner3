@@ -291,9 +291,46 @@ body.light {
   user-select: none;
 }
 
-#footer .footer-item { display: flex; gap: 4px; }
+#footer .footer-item { display: flex; gap: 4px; align-items: center; }
 #footer .footer-key { color: var(--fg2); }
 #footer .footer-val { color: var(--fg); }
+
+.footer-zoom-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  font-family: monospace;
+}
+.footer-zoom-btn:hover { color: var(--fg); }
+
+.zoom-menu {
+  position: fixed;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 0;
+  z-index: 500;
+  min-width: 100px;
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.4);
+}
+.zoom-menu-item {
+  display: block;
+  width: 100%;
+  text-align: right;
+  padding: 4px 14px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: monospace;
+}
+.zoom-menu-item:hover { background: var(--bg3); color: var(--accent); }
+.zoom-menu-sep { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
 /* ── Buttons ───────────────────────────────────────────────────────────────── */
 button {

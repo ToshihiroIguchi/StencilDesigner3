@@ -248,7 +248,28 @@ export class App {
     document.getElementById('btn-clear')?.addEventListener('click', () => { void this.clearCurrentDoc(); });
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
     document.getElementById('btn-fit')?.addEventListener('click', () => this.fitToContent());
-    document.getElementById('footer-zoom')?.addEventListener('click', () => this.resetZoom());
+    document.getElementById('footer-zoom')?.addEventListener('click', (e) => this.toggleZoomMenu(e));
+    document.getElementById('btn-zoom-in')?.addEventListener('click', () => this.zoomStep(1));
+    document.getElementById('btn-zoom-out')?.addEventListener('click', () => this.zoomStep(-1));
+    document.querySelectorAll('.zoom-menu-item').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const val = (e.currentTarget as HTMLElement).dataset.zoom;
+        if (val === 'fit') {
+          this.fitToContent();
+        } else {
+          const cx = this.canvas.width / 2;
+          const cy = this.canvas.height / 2;
+          this.setZoom(parseFloat(val!), cx, cy);
+          this.requestRender();
+        }
+        this.closeZoomMenu();
+      });
+    });
+    document.addEventListener('click', (e) => {
+      if (!(e.target as HTMLElement).closest('#zoom-menu, #footer-zoom, #btn-zoom-in, #btn-zoom-out')) {
+        this.closeZoomMenu();
+      }
+    });
     document.getElementById('footer-unit')?.addEventListener('click', () => this.toggleUnit());
 
     // Layer panel buttons
@@ -520,6 +541,9 @@ export class App {
       if (e.key === 't' || e.key === 'T') { this.setTool('text'); return; }
       if (e.key === 'n' || e.key === 'N') { this.setTool('annotation'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); this.zoomStep(1); return; }
+      if (e.key === '-') { e.preventDefault(); this.zoomStep(-1); return; }
+      if (e.key === '0') { e.preventDefault(); this.resetZoom(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       // PolygonTool in progress consumes Backspace to pop the last vertex
@@ -830,6 +854,32 @@ export class App {
     state.panX = Math.round(RULER + viewW / 2 - ((minX + maxX) / 2) * z);
     state.panY = Math.round(RULER + viewH / 2 - ((minY + maxY) / 2) * z);
     this.requestRender();
+  }
+
+  private zoomStep(dir: 1 | -1): void {
+    const state = this.history.state;
+    const cx = this.canvas.width / 2;
+    const cy = this.canvas.height / 2;
+    this.setZoom(state.zoom * (dir > 0 ? 1.25 : 1 / 1.25), cx, cy);
+    this.requestRender();
+  }
+
+  private toggleZoomMenu(e: MouseEvent): void {
+    const menu = document.getElementById('zoom-menu');
+    if (!menu) return;
+    if (menu.hidden) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      menu.style.left = `${rect.left}px`;
+      menu.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+      menu.hidden = false;
+    } else {
+      menu.hidden = true;
+    }
+  }
+
+  private closeZoomMenu(): void {
+    const menu = document.getElementById('zoom-menu');
+    if (menu) menu.hidden = true;
   }
 
   private resetZoom(): void {

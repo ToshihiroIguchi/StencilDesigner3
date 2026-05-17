@@ -417,8 +417,24 @@
   <span class="footer-item"><span class="footer-key">Grid:</span><span class="footer-val" id="footer-grid">1000µm</span></span>
   <span class="footer-item"><span class="footer-key">Snap:</span><span class="footer-val" id="footer-snap">ON</span></span>
   <span class="footer-item"><span class="footer-key">Unit:</span><span class="footer-val" id="footer-unit" style="cursor:pointer;color:var(--accent)">mm</span></span>
-  <span class="footer-item"><span class="footer-key">Zoom:</span><span class="footer-val" id="footer-zoom" title="Click to reset zoom to 100%" style="cursor:pointer">50%</span></span>
+  <span class="footer-item">
+    <span class="footer-key">Zoom:</span>
+    <button class="footer-zoom-btn" id="btn-zoom-out" title="Zoom out (-)">−</button>
+    <span class="footer-val" id="footer-zoom" title="Click for zoom presets" style="cursor:pointer">50%</span>
+    <button class="footer-zoom-btn" id="btn-zoom-in" title="Zoom in (+)">+</button>
+  </span>
 </footer>
+
+<!-- ── Zoom preset menu ──────────────────────────────────────────────────────── -->
+<div id="zoom-menu" class="zoom-menu" hidden>
+  <button class="zoom-menu-item" data-zoom="0.25">25%</button>
+  <button class="zoom-menu-item" data-zoom="0.5">50%</button>
+  <button class="zoom-menu-item" data-zoom="1">100%</button>
+  <button class="zoom-menu-item" data-zoom="2">200%</button>
+  <button class="zoom-menu-item" data-zoom="4">400%</button>
+  <hr class="zoom-menu-sep">
+  <button class="zoom-menu-item" data-zoom="fit">Fit (Home)</button>
+</div>
 
 
 <script type="module" src="/src/main.ts"></script>
