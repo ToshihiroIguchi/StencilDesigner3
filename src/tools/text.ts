@@ -92,7 +92,8 @@ export class TextTool extends BaseTool {
     this.editPolys = null;
     if (this.ghostInput) {
       this.ghostInput.value = '';
-      this.ghostInput.focus();
+      // Defer focus so the canvas mousedown/mouseup cycle doesn't steal it back
+      setTimeout(() => this.ghostInput?.focus(), 0);
     }
     const hint = document.getElementById('text-hint');
     if (hint) hint.textContent = 'Editing… (Enter: confirm, Esc: cancel)';
