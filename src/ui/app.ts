@@ -231,6 +231,7 @@ export class App {
     document.getElementById('btn-export-pdf')?.addEventListener('click', () => { void this.exportPdf(); });
     document.getElementById('btn-files')?.addEventListener('click', () => { void this.showFileManager(); });
     document.getElementById('btn-theme')?.addEventListener('click', () => this.toggleTheme());
+    document.getElementById('btn-clear')?.addEventListener('click', () => { void this.clearCurrentDoc(); });
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
     document.getElementById('btn-fit')?.addEventListener('click', () => this.fitToContent());
     document.getElementById('footer-zoom')?.addEventListener('click', () => this.resetZoom());
@@ -1230,6 +1231,19 @@ export class App {
     await Promise.all(docs.map((d) => deleteDoc(d.id)));
     await setCurrentDocId(null);
     await this.newDoc();
+  }
+
+  async clearCurrentDoc(): Promise<void> {
+    const ok = await this.showMessageModal({ title: 'Clear All', message: 'Remove all shapes from this document?', okText: 'Clear', cancelText: 'Cancel', danger: true });
+    if (!ok) return;
+    this.cancelDiffMode();
+    const prev = this.history.state;
+    this.history.loadState(createDefaultState());
+    // Preserve display unit and snap preference from the current session
+    this.history.state.displayUnit = prev.displayUnit;
+    this.history.state.snapEnabled = prev.snapEnabled;
+    markDirty();
+    this.requestRender();
   }
 
   toggleTheme(): void {
