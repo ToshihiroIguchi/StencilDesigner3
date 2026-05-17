@@ -490,18 +490,10 @@ export class App {
   private onKeyDown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'z') {
-        // Let textarea handle Ctrl+Z natively when annotation is being typed
+        // Let textarea handle Ctrl+Z natively when text/annotation is being typed
+        if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) return;
         if (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing()) return;
         e.preventDefault();
-        // During text editing Ctrl+Z deletes last character instead of undo
-        if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) {
-          const ghost = document.getElementById('text-ghost-input') as HTMLInputElement | null;
-          if (ghost && ghost.value.length > 0) {
-            ghost.value = ghost.value.slice(0, -1);
-            ghost.dispatchEvent(new Event('input'));
-          }
-          return;
-        }
         this.undo();
         return;
       }

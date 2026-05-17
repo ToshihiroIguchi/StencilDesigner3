@@ -178,6 +178,10 @@
   <!-- ── Canvas ─────────────────────────────────────────────────────────────── -->
   <div id="canvas-container">
     <canvas id="main-canvas"></canvas>
+    <!-- Text tool inline editor: single-line input, shown on canvas click when Text tool is active -->
+    <textarea id="text-input" rows="1" wrap="off"
+      autocomplete="off" spellcheck="false"
+      style="display:none"></textarea>
     <!-- Annotation inline editor: shown on canvas click when Note tool is active -->
     <textarea id="annotation-input" rows="1" wrap="soft"
       autocomplete="off" spellcheck="false"
@@ -416,10 +420,6 @@
   <span class="footer-item"><span class="footer-key">Zoom:</span><span class="footer-val" id="footer-zoom" title="Click to reset zoom to 100%" style="cursor:pointer">50%</span></span>
 </footer>
 
-<!-- Ghost input: captures keyboard for TextTool WYSIWYG editing -->
-<input id="text-ghost-input" type="text" maxlength="100"
-       autocomplete="off" spellcheck="false"
-       style="position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none" />
 
 <script type="module" src="/src/main.ts"></script>
 </body>

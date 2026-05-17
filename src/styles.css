@@ -422,6 +422,27 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 /* ── Storage full banner ─────────────────────────────────────────────────── */
 .storage-banner { position: fixed; bottom: var(--footer-h); left: 0; right: 0; background: var(--danger); color: #fff; font-size: 12px; text-align: center; padding: 4px 8px; z-index: 900; }
 
+/* ── Text tool overlay textarea (single-line) ────────────────────────────── */
+#text-input {
+  position: absolute;
+  z-index: 20;
+  background: rgba(30,30,46,0.80);
+  border: 1px solid var(--accent2);
+  border-radius: 3px;
+  outline: none;
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.0;
+  resize: none;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 30px;
+  padding: 0 3px;
+  pointer-events: all;
+}
+body.light #text-input {
+  background: rgba(245,245,240,0.88);
+}
+
 /* ── Annotation overlay textarea ─────────────────────────────────────────── */
 #annotation-input {
   position: absolute;
