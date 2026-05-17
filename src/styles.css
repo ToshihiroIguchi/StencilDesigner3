@@ -382,14 +382,6 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 
 /* ── Text Tool Panel ─────────────────────────────────────────────────────── */
 .text-font-note { font-size: 11px; color: var(--fg2); margin-bottom: 8px; }
-.text-input-wrap { margin-bottom: 10px; }
-.text-input-wrap input[type=text] {
-  width: 100%; background: var(--bg3); border: 1px solid var(--border);
-  color: var(--fg); padding: 5px 7px; border-radius: 3px;
-  font-size: 13px; font-family: monospace; outline: none;
-}
-.text-input-wrap input[type=text]:focus { border-color: var(--accent); }
-.text-warn { color: var(--danger); font-size: 11px; margin-top: 4px; }
 .text-opt-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 6px; }
 .text-opt-row label { color: var(--fg2); flex-shrink: 0; min-width: 70px; }
 .text-opt-row input[type=number] {

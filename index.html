@@ -178,24 +178,17 @@
     <div id="text-panel" class="panel-section" style="display:none">
       <div class="panel-title">Text</div>
       <p class="text-font-note">Big Shoulders Stencil · ASCII only</p>
-      <div class="text-input-wrap">
-        <input id="text-input" type="text"
-               placeholder="e.g. HELLO 123"
-               inputmode="latin" autocomplete="off" spellcheck="false"
-               maxlength="100" />
-        <span id="text-ascii-warn" class="text-warn" style="display:none">Non-ASCII characters are not supported</span>
-      </div>
       <div class="text-opt-row">
-        <label>Cap height</label>
-        <input id="text-size" type="number" min="0.1" step="0.1" value="5" />
+        <label>Size</label>
+        <input id="text-size" type="number" min="0.1" step="0.5" value="5" />
         <span class="unit-label">mm</span>
       </div>
       <div class="text-opt-row">
         <label>Spacing</label>
-        <input id="text-spacing" type="number" min="0" step="0.1" value="0" />
+        <input id="text-spacing" type="number" min="0" step="0.5" value="0" />
         <span class="unit-label">mm</span>
       </div>
-      <p class="text-place-hint">Click canvas to place</p>
+      <p class="text-place-hint" id="text-hint">Click canvas to type</p>
     </div>
 
     <!-- Fillet options (visible only when Fillet tool is active) -->
@@ -398,6 +391,11 @@
   <span class="footer-item"><span class="footer-key">Unit:</span><span class="footer-val" id="footer-unit" style="cursor:pointer;color:var(--accent)">mm</span></span>
   <span class="footer-item"><span class="footer-key">Zoom:</span><span class="footer-val" id="footer-zoom" title="Click to reset zoom to 100%" style="cursor:pointer">50%</span></span>
 </footer>
+
+<!-- Ghost input: captures keyboard for TextTool WYSIWYG editing -->
+<input id="text-ghost-input" type="text" maxlength="100"
+       autocomplete="off" spellcheck="false"
+       style="position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none" />
 
 <script type="module" src="/src/main.ts"></script>
 </body>

@@ -199,6 +199,9 @@ export class App {
         textPreviewPolys: this.activeTool instanceof TextTool
           ? (this.activeTool.getTextPreviewPolys() ?? undefined)
           : undefined,
+        textCursor: this.activeTool instanceof TextTool
+          ? (this.activeTool.getTextCursor() ?? undefined)
+          : undefined,
       },
     );
     this.updateFooter(state);
@@ -247,22 +250,15 @@ export class App {
     document.getElementById('btn-layer-move-shapes')?.addEventListener('click', () => this.moveSelectedToActiveLayer());
 
     // Text panel
-    const textInput = document.getElementById('text-input') as HTMLInputElement | null;
     const textSizeInput = document.getElementById('text-size') as HTMLInputElement | null;
     const textSpacingInput = document.getElementById('text-spacing') as HTMLInputElement | null;
-    const textAsciiWarn = document.getElementById('text-ascii-warn');
-    const ASCII_RE = /^[\x20-\x7E]+$/;
     const syncTextParams = () => {
-      const text = textInput?.value ?? '';
-      const isValid = ASCII_RE.test(text);
-      if (textAsciiWarn) textAsciiWarn.style.display = (text.length > 0 && !isValid) ? 'block' : 'none';
       this.textCapHeightUm = UnitConverter.parseInput(textSizeInput?.value ?? '5', this.history.state.displayUnit);
       this.textLetterSpacingUm = UnitConverter.parseInput(textSpacingInput?.value ?? '0', this.history.state.displayUnit);
       if (this.activeTool instanceof TextTool) {
-        this.activeTool.setParams(text, this.textCapHeightUm, this.textLetterSpacingUm);
+        this.activeTool.setParams(this.textCapHeightUm, this.textLetterSpacingUm);
       }
     };
-    textInput?.addEventListener('input', syncTextParams);
     textSizeInput?.addEventListener('input', syncTextParams);
     textSpacingInput?.addEventListener('input', syncTextParams);
 
@@ -455,8 +451,25 @@ export class App {
 
   private onKeyDown(e: KeyboardEvent): void {
     if (e.ctrlKey || e.metaKey) {
-      if (e.key === 'z') { e.preventDefault(); this.undo(); return; }
-      if (e.key === 'y') { e.preventDefault(); this.redo(); return; }
+      if (e.key === 'z') {
+        e.preventDefault();
+        // During text editing Ctrl+Z deletes last character instead of undo
+        if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) {
+          const ghost = document.getElementById('text-ghost-input') as HTMLInputElement | null;
+          if (ghost && ghost.value.length > 0) {
+            ghost.value = ghost.value.slice(0, -1);
+            ghost.dispatchEvent(new Event('input'));
+          }
+          return;
+        }
+        this.undo();
+        return;
+      }
+      if (e.key === 'y') {
+        // Block redo during text editing
+        if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) return;
+        e.preventDefault(); this.redo(); return;
+      }
       if (e.key === 's') { e.preventDefault(); if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state); return; }
     }
     const target = e.target as HTMLElement;
@@ -511,11 +524,7 @@ export class App {
       case 'arrow': this.activeTool = new ArrowTool(toolCtx); break;
       case 'text': {
         const tt = new TextTool(toolCtx);
-        tt.setParams(
-          (document.getElementById('text-input') as HTMLInputElement | null)?.value ?? '',
-          this.textCapHeightUm,
-          this.textLetterSpacingUm,
-        );
+        tt.setParams(this.textCapHeightUm, this.textLetterSpacingUm);
         this.activeTool = tt;
         break;
       }
@@ -1649,6 +1658,12 @@ export class App {
         el.step = isMm ? '0.01' : '10';
       } else if (el.id === 'fillet-r' || el.id.includes('pitch') || el.id.includes('modal-x') || el.id.includes('modal-y')) {
         el.step = isMm ? '0.1' : '100';
+      } else if (el.id === 'text-size') {
+        el.step = isMm ? '0.5' : '500';
+        el.min = isMm ? '0.1' : '100';
+      } else if (el.id === 'text-spacing') {
+        el.step = isMm ? '0.1' : '100';
+        el.min = '0';
       } else {
         el.step = isMm ? '0.001' : '1';
       }

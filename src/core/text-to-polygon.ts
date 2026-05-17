@@ -13,6 +13,32 @@ export function isAsciiPrintable(text: string): boolean {
 }
 
 /**
+ * Compute the total advance width of a text string in µm, matching textToPolygons layout.
+ * Useful for positioning a cursor at the end of the text.
+ */
+export function computeTextAdvance(
+  text: string,
+  font: Font,
+  capHeightUm: number,
+  letterSpacingUm: number,
+): number {
+  if (text.length === 0) return 0;
+  const capHeightFU: number =
+    (font.tables.os2?.sCapHeight ?? 0) > 0
+      ? font.tables.os2!.sCapHeight
+      : Math.round(font.unitsPerEm * 0.7);
+  const scale = capHeightUm / capHeightFU;
+  let advance = 0;
+  for (let i = 0; i < text.length; i++) {
+    const glyph: Glyph = font.charToGlyph(text[i]);
+    const nextGlyph: Glyph | null = i + 1 < text.length ? font.charToGlyph(text[i + 1]) : null;
+    const kern = nextGlyph ? font.getKerningValue(glyph, nextGlyph) : 0;
+    advance += Math.round((glyph.advanceWidth + kern) * scale) + letterSpacingUm;
+  }
+  return advance;
+}
+
+/**
  * Convert a text string to Polygon[] using the given opentype.js Font.
  * Each glyph may produce one or more Polygons (e.g. 'i' → dot + body).
  * Placement origin is the baseline start in world µm coordinates.
