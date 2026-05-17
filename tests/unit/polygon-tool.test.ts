@@ -10,7 +10,7 @@ function makeCtx() {
   const history = new History(createDefaultState());
   const ctx: ToolContext = {
     history,
-    getSnapPoint: (p: Point) => p,
+    getSnap: (p: Point) => ({ point: p, kind: 'grid' as const }),
     requestRender: vi.fn(),
   };
   return { ctx, history };

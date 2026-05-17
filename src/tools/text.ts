@@ -157,14 +157,15 @@ export class TextTool extends BaseTool {
 
   onMouseMove(worldPt: Point, _cp: Point, _shift: boolean, _state: AppState): void {
     if (this.mode === 'editing') return;
-    this.cursorOrigin = this.ctx.getSnapPoint(worldPt);
-    this.snapPoint = this.cursorOrigin;
+    const s = this.ctx.getSnap(worldPt);
+    this.cursorOrigin = s.point;
+    this.snap = s;
     this.rebuildPolys();
     this.ctx.requestRender();
   }
 
   onMouseDown(worldPt: Point, _cp: Point, _shift: boolean, _state: AppState): void {
-    const origin = this.ctx.getSnapPoint(worldPt);
+    const origin = this.ctx.getSnap(worldPt).point;
     if (this.mode === 'editing') {
       this.commitEdit();
     }

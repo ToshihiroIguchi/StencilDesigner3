@@ -76,7 +76,8 @@ export type DimensionAnchor =
       ringIndex: number;
       edgeStartId: string; // Vertex.id of edge start
       edgeEndId: string;   // Vertex.id of edge end
-      cachedPoint: Point;  // for centerline: the centerline endpoint; for linear: edge midpoint
+      t: number;           // parametric position [0,1] along the edge
+      cachedPoint: Point;  // last resolved position (fallback when shape deleted)
     }
   | {
       kind: 'free';

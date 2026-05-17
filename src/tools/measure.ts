@@ -13,24 +13,24 @@ export class MeasureTool extends BaseTool {
   }
 
   onMouseDown(worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {
-    this.p1 = this.ctx.getSnapPoint(worldPt);
+    this.p1 = this.ctx.getSnap(worldPt).point;
     this.ctx.requestRender();
   }
 
   onMouseMove(worldPt: Point, _canvasPt: Point, shift: boolean, _state: AppState): void {
-    let snapped = this.ctx.getSnapPoint(worldPt);
-    if (shift && this.p1) {
-      snapped = constrainAngle(this.p1, snapped, MeasureTool.ANGLE_SNAP_DEG);
-    }
-    this.snapPoint = snapped;
+    const s = this.ctx.getSnap(worldPt);
+    const pt = (shift && this.p1)
+      ? constrainAngle(this.p1, s.point, MeasureTool.ANGLE_SNAP_DEG)
+      : s.point;
+    this.snap = { ...s, point: pt };
     this.ctx.requestRender();
   }
 
   onMouseUp(_worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {}
 
   getMeasureOverlay(): MeasureOverlay | null {
-    if (!this.p1 || !this.snapPoint) return null;
-    return { p1: this.p1, p2: this.snapPoint };
+    if (!this.p1 || !this.snap) return null;
+    return { p1: this.p1, p2: this.snap.point };
   }
 
   getP1(): Point | null { return this.p1; }

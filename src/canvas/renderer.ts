@@ -1,5 +1,6 @@
 import type { AppState, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
+import type { SnapResult } from '../core/snap';
 import { selectedIds } from '../core/transform';
 import { UnitConverter } from '../core/format';
 import { resolveDimension } from '../core/dimension-resolve';
@@ -106,7 +107,7 @@ export class CanvasRenderer {
   render(
     state: AppState,
     draft?: DraftShape,
-    snapPt?: { x: number; y: number },
+    snap?: SnapResult,
     showAllVertices = false,
     rubberBand?: { start: { x: number; y: number }; end: { x: number; y: number } },
     filletStatuses?: Map<string, FilletVertexStatus>,
@@ -172,13 +173,8 @@ export class CanvasRenderer {
     }
 
     // Snap indicator
-    if (snapPt && state.snapEnabled) {
-      const cp = worldToCanvas(snapPt.x, snapPt.y, vt);
-      ctx.beginPath();
-      ctx.arc(cp.x, cp.y, 5, 0, Math.PI * 2);
-      ctx.strokeStyle = COLORS.snapIndicator;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+    if (snap && state.snapEnabled) {
+      this.drawSnapIndicator(snap, vt);
     }
 
     // Dimensions
@@ -205,6 +201,42 @@ export class CanvasRenderer {
 
     // Rulers (drawn on top, outside clip)
     this.drawRulers(state, vt);
+  }
+
+  private drawSnapIndicator(snap: SnapResult, vt: ViewTransform): void {
+    const ctx = this.ctx;
+    const cp = worldToCanvas(snap.point.x, snap.point.y, vt);
+    ctx.strokeStyle = COLORS.snapIndicator;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    switch (snap.kind) {
+      case 'vertex':
+        // Square
+        ctx.rect(cp.x - 4, cp.y - 4, 8, 8);
+        break;
+      case 'midpoint':
+        // Triangle (pointing up)
+        ctx.moveTo(cp.x, cp.y - 5);
+        ctx.lineTo(cp.x + 4.5, cp.y + 3.5);
+        ctx.lineTo(cp.x - 4.5, cp.y + 3.5);
+        ctx.closePath();
+        break;
+      case 'center':
+        // Concentric circle with crosshair
+        ctx.arc(cp.x, cp.y, 5, 0, Math.PI * 2);
+        ctx.moveTo(cp.x - 7, cp.y); ctx.lineTo(cp.x + 7, cp.y);
+        ctx.moveTo(cp.x, cp.y - 7); ctx.lineTo(cp.x, cp.y + 7);
+        break;
+      case 'edge':
+        // Two parallel lines (‖)
+        ctx.moveTo(cp.x - 4, cp.y - 4); ctx.lineTo(cp.x - 4, cp.y + 4);
+        ctx.moveTo(cp.x + 4, cp.y - 4); ctx.lineTo(cp.x + 4, cp.y + 4);
+        break;
+      default:
+        // Grid: circle
+        ctx.arc(cp.x, cp.y, 5, 0, Math.PI * 2);
+    }
+    ctx.stroke();
   }
 
   private drawGrid(state: AppState, vt: ViewTransform): void {

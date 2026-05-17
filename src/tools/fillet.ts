@@ -85,7 +85,7 @@ export class FilletTool extends BaseTool {
   }
 
   onMouseMove(worldPt: Point, canvasPt: Point, _shift: boolean, state: AppState): void {
-    this.snapPoint = this.ctx.getSnapPoint(worldPt);
+    this.snap = this.ctx.getSnap(worldPt);
 
     const hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
 

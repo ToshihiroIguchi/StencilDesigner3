@@ -1,7 +1,7 @@
 import type { Dimension, Point, Polygon, Selection, ViewTransform } from '../types';
 import { canvasToWorld } from '../types';
 import { pointInRing } from '../normalize';
-import { distSqPointToSegment, midpoint, dist, isRingCircleLike, ringCentroid } from './geometry';
+import { distSqPointToSegment, dist } from './geometry';
 import { resolveDimension } from './dimension-resolve';
 
 /**
@@ -60,54 +60,6 @@ export function hitTest(
 
   return null;
 }
-
-/** Find the nearest snap point in world coordinates. Priority: endpoint > midpoint > grid. */
-export function findSnapPoint(
-  worldPt: Point,
-  shapes: Polygon[],
-  gridSize: number,
-  snapRadius: number, // world units
-  excludeShapeId?: string
-): Point {
-  let best: Point = { x: worldPt.x, y: worldPt.y };
-  let bestDist = snapRadius;
-
-  for (const shape of shapes) {
-    if (shape.id === excludeShapeId) continue;
-    const rings = [shape.outer, ...shape.holes];
-    for (const ring of rings) {
-      // Center snap for circular rings (circleToPolygon-style n-gons with n >= 12)
-      if (isRingCircleLike(ring)) {
-        const c = ringCentroid(ring);
-        const d = dist(worldPt, c);
-        if (d < bestDist) { bestDist = d; best = c; }
-      }
-      // Endpoints
-      for (const p of ring) {
-        const d = dist(worldPt, p);
-        if (d < bestDist) { bestDist = d; best = p; }
-      }
-      // Midpoints
-      for (let i = 0; i < ring.length; i++) {
-        const mp = midpoint(ring[i], ring[(i + 1) % ring.length]);
-        const d = dist(worldPt, mp);
-        if (d < bestDist) { bestDist = d; best = mp; }
-      }
-    }
-  }
-
-  // Grid snap: always round to nearest grid when no vertex/midpoint is closer
-  if (bestDist === snapRadius) {
-    best = {
-      x: Math.round(worldPt.x / gridSize) * gridSize,
-      y: Math.round(worldPt.y / gridSize) * gridSize,
-    };
-  }
-
-  return best;
-}
-
-// ─── Annotation hit test ──────────────────────────────────────────────────────
 
 // ─── Dimension hit test ───────────────────────────────────────────────────────
 

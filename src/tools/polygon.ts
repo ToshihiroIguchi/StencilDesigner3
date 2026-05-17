@@ -6,10 +6,12 @@ import { AddShapeCommand } from '../state/commands';
 import { markDirty } from '../state/docStore';
 import { segmentsIntersect, constrainAngle } from '../core/geometry';
 import { vertex } from '../core/vertex';
+import type { SnapResult } from '../core/snap';
 
 export class PolygonTool extends BaseTool {
   private vertices: Vertex[] = [];
   private hoverPt: Point | null = null;
+  private hoverSnap: SnapResult | null = null;
   private willClose = false;
   private hasSelfIntersect = false;
 
@@ -25,7 +27,8 @@ export class PolygonTool extends BaseTool {
   vertexCount(): number { return this.vertices.length; }
 
   onMouseDown(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void {
-    const snapped = this.ctx.getSnapPoint(worldPt);
+    const snap = this.ctx.getSnap(worldPt);
+    const snapped = snap.point;
     const pt = shift && this.vertices.length > 0
       ? constrainAngle(this.vertices[this.vertices.length - 1], snapped, PolygonTool.ANGLE_SNAP_DEG)
       : snapped;
@@ -44,14 +47,16 @@ export class PolygonTool extends BaseTool {
 
     this.vertices.push(vertex(pt.x, pt.y));
     this.updateDraft();
-    void canvasPt; // unused but kept for interface consistency
+    void canvasPt;
   }
 
   onMouseMove(worldPt: Point, _canvasPt: Point, shift: boolean, state: AppState): void {
-    const snapped = this.ctx.getSnapPoint(worldPt);
+    const snap = this.ctx.getSnap(worldPt);
+    const snapped = snap.point;
     this.hoverPt = shift && this.vertices.length > 0
       ? constrainAngle(this.vertices[this.vertices.length - 1], snapped, PolygonTool.ANGLE_SNAP_DEG)
       : snapped;
+    this.hoverSnap = { ...snap, point: this.hoverPt };
 
     // willClose: world-space distance to first vertex ≤ snap threshold
     this.willClose = false;
@@ -95,6 +100,7 @@ export class PolygonTool extends BaseTool {
   cancel(): void {
     this.vertices = [];
     this.hoverPt = null;
+    this.hoverSnap = null;
     this.willClose = false;
     this.hasSelfIntersect = false;
     super.cancel();
@@ -102,7 +108,6 @@ export class PolygonTool extends BaseTool {
 
   private commit(state: AppState): void {
     if (this.vertices.length < 3) return;
-    // Final validation uses committed vertices only — independent of hover state
     if (hasSelfIntersection(this.vertices)) return;
     try {
       const poly = normalize({
@@ -130,7 +135,7 @@ export class PolygonTool extends BaseTool {
   private updateDraft(): void {
     if (this.vertices.length === 0) {
       this.draft = null;
-      this.snapPoint = this.hoverPt;
+      this.snap = this.hoverSnap;
       this.ctx.requestRender();
       return;
     }
@@ -144,34 +149,28 @@ export class PolygonTool extends BaseTool {
       selfIntersects: this.hasSelfIntersect,
       willClose: this.willClose,
     };
-    this.snapPoint = this.hoverPt;
+    this.snap = this.hoverSnap;
     this.ctx.requestRender();
   }
-
 
   private detectSelfIntersect(): boolean {
     const verts = this.vertices;
     const hover = this.hoverPt;
     if (verts.length < 2 || !hover) return false;
 
-    // Skip if hover equals last vertex (no pending edge to check)
     const last = verts[verts.length - 1];
     if (hover.x === last.x && hover.y === last.y) return false;
 
-    // Pending edge: last committed vertex → hover
     const p1 = last;
     const p2 = hover;
 
-    // Check pending edge against all non-adjacent committed edges
     for (let i = 0; i < verts.length - 2; i++) {
       if (segmentsIntersect(p1, p2, verts[i], verts[i + 1])) return true;
     }
 
-    // Check closing edge (hover → vertex[0]) against interior edges
     if (verts.length >= 3) {
       const q1 = hover;
       const q2 = verts[0];
-      // Skip edges adjacent to q2 (vertex[0]) and q1 (hover-side, last edge)
       for (let i = 1; i < verts.length - 1; i++) {
         if (segmentsIntersect(q1, q2, verts[i], verts[i + 1])) return true;
       }

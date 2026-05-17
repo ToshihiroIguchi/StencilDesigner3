@@ -7,7 +7,7 @@ function getRing(shape: Polygon, ringIndex: number): import('../types').Ring | n
   return null;
 }
 
-/** Returns the live Point for 'vertex' and 'free' anchors. Returns null for 'edge'. */
+/** Returns the live Point for all anchor kinds. */
 export function resolveAnchor(anchor: DimensionAnchor, shapes: Polygon[]): Point | null {
   if (anchor.kind === 'free') return anchor.point;
   if (anchor.kind === 'vertex') {
@@ -18,7 +18,16 @@ export function resolveAnchor(anchor: DimensionAnchor, shapes: Polygon[]): Point
     const v = ring.find((p) => p.id === anchor.vertexId);
     return v ?? null;
   }
-  return null; // 'edge' — handled by resolveEdge
+  if (anchor.kind === 'edge') {
+    const edge = resolveEdge(anchor, shapes);
+    if (!edge) return null;
+    const [a, b] = edge;
+    return {
+      x: Math.round(a.x + anchor.t * (b.x - a.x)),
+      y: Math.round(a.y + anchor.t * (b.y - a.y)),
+    };
+  }
+  return null;
 }
 
 /** Returns [edgeStart, edgeEnd] for 'edge' anchors. Returns null otherwise. */

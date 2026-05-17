@@ -12,21 +12,20 @@ export class RectTool extends BaseTool {
   }
 
   onMouseDown(worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {
-    const snapped = this.ctx.getSnapPoint(worldPt);
-    this.startPt = { ...snapped };
-    this.draft = { type: 'rect', points: [snapped, snapped] };
+    const snap = this.ctx.getSnap(worldPt);
+    this.startPt = { ...snap.point };
+    this.draft = { type: 'rect', points: [snap.point, snap.point] };
     this.ctx.requestRender();
   }
 
   onMouseMove(worldPt: Point, _canvasPt: Point, shift: boolean, _state: AppState): void {
     if (!this.startPt) return;
-    const snapped = this.ctx.getSnapPoint(worldPt);
+    const snap = this.ctx.getSnap(worldPt);
 
-    let dx = snapped.x - this.startPt.x;
-    let dy = snapped.y - this.startPt.y;
+    let dx = snap.point.x - this.startPt.x;
+    let dy = snap.point.y - this.startPt.y;
 
     if (shift) {
-      // Square constraint
       const size = Math.max(Math.abs(dx), Math.abs(dy));
       dx = Math.sign(dx) * size;
       dy = Math.sign(dy) * size;
@@ -34,16 +33,16 @@ export class RectTool extends BaseTool {
 
     const end = { x: this.startPt.x + dx, y: this.startPt.y + dy };
     this.draft = { type: 'rect', points: [this.startPt, end] };
-    this.snapPoint = snapped;
+    this.snap = snap;
     this.ctx.requestRender();
   }
 
   onMouseUp(worldPt: Point, _canvasPt: Point, shift: boolean, state: AppState): void {
     if (!this.startPt) return;
-    const snapped = this.ctx.getSnapPoint(worldPt);
+    const snap = this.ctx.getSnap(worldPt);
 
-    let dx = snapped.x - this.startPt.x;
-    let dy = snapped.y - this.startPt.y;
+    let dx = snap.point.x - this.startPt.x;
+    let dy = snap.point.y - this.startPt.y;
 
     if (shift) {
       const size = Math.max(Math.abs(dx), Math.abs(dy));
@@ -66,7 +65,7 @@ export class RectTool extends BaseTool {
 
     this.startPt = null;
     this.draft = null;
-    this.snapPoint = null;
+    this.snap = null;
     this.ctx.requestRender();
   }
 }

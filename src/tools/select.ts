@@ -62,7 +62,7 @@ export class SelectTool extends BaseTool {
       this.savedSelection = [...cur.selection];
 
       // Snap the origin for movement reference
-      this.moveOrigin = this.ctx.getSnapPoint(worldPt);
+      this.moveOrigin = this.ctx.getSnap(worldPt).point;
     } else {
       this.isDragging = false;
       if (!shift) {
@@ -76,10 +76,11 @@ export class SelectTool extends BaseTool {
   }
 
   onMouseMove(worldPt: Point, canvasPt: Point, shift: boolean, _state: AppState): void {
-    this.snapPoint = this.ctx.getSnapPoint(worldPt);
+    this.snap = this.ctx.getSnap(worldPt);
+    const snapPt = this.snap.point;
     const state = this.ctx.history.state;
 
-    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.moveOrigin && this.snapPoint) {
+    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.moveOrigin && snapPt) {
       if (!this.dragThresholdReached) {
         const dxPx = canvasPt.x - this.dragStartCanvas.x;
         const dyPx = canvasPt.y - this.dragStartCanvas.y;
@@ -89,8 +90,8 @@ export class SelectTool extends BaseTool {
       }
 
       if (this.dragThresholdReached) {
-        let dx = this.snapPoint.x - this.moveOrigin.x;
-        let dy = this.snapPoint.y - this.moveOrigin.y;
+        let dx = snapPt.x - this.moveOrigin.x;
+        let dy = snapPt.y - this.moveOrigin.y;
 
         if (shift) {
           // Ortho lock: constrain movement to the dominant axis

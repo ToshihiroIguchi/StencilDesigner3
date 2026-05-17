@@ -6,27 +6,35 @@ import {
   AddDimensionCommand,
 } from '../../src/state/commands';
 import { rectToPolygon } from '../../src/core/geometry';
-import { findVertexAnchor, findEdgeAnchor } from '../../src/core/anchor-pick';
 import { resolveDimension } from '../../src/core/dimension-resolve';
 import { centerlineEndpoints } from '../../src/core/centerline-geometry';
 import { newId } from '../../src/types';
-import type { Dimension } from '../../src/types';
+import type { Dimension, Polygon } from '../../src/types';
+
+function vertexAt(shape: Polygon, x: number, y: number) {
+  const v = shape.outer.find((p) => p.x === x && p.y === y);
+  if (!v) throw new Error(`vertex not found at (${x},${y})`);
+  return v;
+}
+
+function edgeAt(shape: Polygon, x1: number, y1: number, x2: number, y2: number) {
+  const a = vertexAt(shape, x1, y1);
+  const b = vertexAt(shape, x2, y2);
+  return { a, b };
+}
 
 /**
- * Build a linear-h dimension that anchors to two vertices of a rectangle.
- * rect = rectToPolygon(0, 0, 2000, 1000, '0')  → 4 vertices at corners
+ * Build a linear-h dimension anchored to two vertices of a rectangle.
  */
 function buildLinearDim(state: ReturnType<typeof createDefaultState>): Dimension {
-  const shapes = state.shapes;
-  // top-left corner (0,0) and top-right corner (2000,0)
-  const a1 = findVertexAnchor({ x: 0, y: 0 }, shapes, 100);
-  const a2 = findVertexAnchor({ x: 2000, y: 0 }, shapes, 100);
-  if (!a1 || !a2) throw new Error('vertex anchor not found');
+  const shape = state.shapes[0];
+  const v1 = vertexAt(shape, 0, 0);
+  const v2 = vertexAt(shape, 2000, 0);
   return {
     id: newId(),
     kind: 'linear-h',
-    anchor1: a1,
-    anchor2: a2,
+    anchor1: { kind: 'vertex', shapeId: shape.id, ringIndex: -1, vertexId: v1.id, cachedPoint: { x: 0, y: 0 } },
+    anchor2: { kind: 'vertex', shapeId: shape.id, ringIndex: -1, vertexId: v2.id, cachedPoint: { x: 2000, y: 0 } },
     offset: -500,
     layer: 'DIMENSIONS',
     frozen: false,
@@ -35,26 +43,18 @@ function buildLinearDim(state: ReturnType<typeof createDefaultState>): Dimension
 
 /**
  * Build a centerline dimension between bottom edge of rect1 and top edge of rect2.
- * rect1 = (0,0)→(2000,1000), rect2 = (0,1200)→(2000,2000)
  */
 function buildCenterlineDim(state: ReturnType<typeof createDefaultState>): Dimension {
-  const shapes = state.shapes;
-  // bottom edge of rect1: midpoint at (1000, 1000)
-  const a1 = findEdgeAnchor({ x: 1000, y: 1000 }, shapes, 200);
-  // top edge of rect2: midpoint at (1000, 1200)
-  const a2 = findEdgeAnchor({ x: 1000, y: 1200 }, shapes, 200);
-  if (!a1 || !a2) throw new Error('edge anchor not found');
-  // Compute initial cachedPoint for centerline endpoints
-  const e1 = [shapes.find(s => s.id === (a1 as any).shapeId)!.outer.find(v => v.id === (a1 as any).edgeStartId)!, shapes.find(s => s.id === (a1 as any).shapeId)!.outer.find(v => v.id === (a1 as any).edgeEndId)!] as [import('../../src/types').Point, import('../../src/types').Point];
-  const e2 = [shapes.find(s => s.id === (a2 as any).shapeId)!.outer.find(v => v.id === (a2 as any).edgeStartId)!, shapes.find(s => s.id === (a2 as any).shapeId)!.outer.find(v => v.id === (a2 as any).edgeEndId)!] as [import('../../src/types').Point, import('../../src/types').Point];
-  const cl = centerlineEndpoints(e1, e2);
-  const cached1 = cl?.p1 ?? { x: 0, y: 1000 };
-  const cached2 = cl?.p2 ?? { x: 2000, y: 1000 };
+  const rect1 = state.shapes[0];
+  const rect2 = state.shapes[1];
+  const { a: r1a, b: r1b } = edgeAt(rect1, 0, 1000, 2000, 1000);
+  const { a: r2a, b: r2b } = edgeAt(rect2, 0, 1200, 2000, 1200);
+  const cl = centerlineEndpoints([r1a, r1b], [r2a, r2b]);
   return {
     id: newId(),
     kind: 'centerline',
-    anchor1: { ...a1, kind: 'edge', cachedPoint: cached1 } as any,
-    anchor2: { ...a2, kind: 'edge', cachedPoint: cached2 } as any,
+    anchor1: { kind: 'edge', shapeId: rect1.id, ringIndex: -1, edgeStartId: r1a.id, edgeEndId: r1b.id, t: 0.5, cachedPoint: cl?.p1 ?? { x: 0, y: 1000 } },
+    anchor2: { kind: 'edge', shapeId: rect2.id, ringIndex: -1, edgeStartId: r2a.id, edgeEndId: r2b.id, t: 0.5, cachedPoint: cl?.p2 ?? { x: 0, y: 1200 } },
     offset: 0,
     layer: 'DIMENSIONS',
     frozen: false,
@@ -83,7 +83,6 @@ describe('Freeze mechanism — linear dimension', () => {
     const dim = buildLinearDim(s);
     s = new AddDimensionCommand(dim).do(s);
 
-    // Delete the shape
     const sel = [{ type: 'polygon' as const, shapeId: rect.id, index: -1, holeIndex: -1 }];
     const deleteCmd = new DeleteCommand(sel);
     s = deleteCmd.do(s);
@@ -93,7 +92,6 @@ describe('Freeze mechanism — linear dimension', () => {
 
     const resolved = resolveDimension(s.dimensions[0], s.shapes);
     expect(resolved.frozen).toBe(true);
-    // Frozen: should still have the last known positions
     expect(resolved.p1).toMatchObject({ x: 0, y: 0 });
     expect(resolved.p2).toMatchObject({ x: 2000, y: 0 });
   });
@@ -110,7 +108,6 @@ describe('Freeze mechanism — linear dimension', () => {
     s = deleteCmd.do(s);
     expect(s.dimensions[0].frozen).toBe(true);
 
-    // Undo delete → shape restored, dimension unfreezes
     s = deleteCmd.undo(s);
     expect(s.shapes).toHaveLength(1);
     expect(s.dimensions[0].frozen).toBe(false);

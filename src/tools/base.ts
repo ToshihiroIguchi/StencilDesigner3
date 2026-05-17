@@ -1,24 +1,25 @@
 import type { AppState, Point } from '../types';
 import type { DraftShape } from '../canvas/renderer';
 import type { History } from '../state/history';
+import type { SnapResult } from '../core/snap';
 
 export interface ToolContext {
   history: History;
-  getSnapPoint: (worldPt: Point) => Point;
+  getSnap: (worldPt: Point) => SnapResult;
   requestRender: () => void;
 }
 
 export abstract class BaseTool {
   protected ctx: ToolContext;
   protected draft: DraftShape | null = null;
-  protected snapPoint: Point | null = null;
+  protected snap: SnapResult | null = null;
 
   constructor(ctx: ToolContext) {
     this.ctx = ctx;
   }
 
   getDraft(): DraftShape | null { return this.draft; }
-  getSnapPoint(): Point | null { return this.snapPoint; }
+  getSnap(): SnapResult | null { return this.snap; }
   showsAllVertices(): boolean { return false; }
 
   abstract onMouseDown(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void;
@@ -29,7 +30,7 @@ export abstract class BaseTool {
 
   cancel(): void {
     this.draft = null;
-    this.snapPoint = null;
+    this.snap = null;
     this.ctx.requestRender();
   }
 }

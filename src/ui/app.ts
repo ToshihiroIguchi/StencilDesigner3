@@ -12,7 +12,8 @@ import { DimensionTool } from '../tools/dimension';
 import { CenterlineTool } from '../tools/centerline';
 import { ArrowTool } from '../tools/arrow';
 import { TextTool } from '../tools/text';
-import { findSnapPoint, hitTest } from '../core/selection';
+import { hitTest } from '../core/selection';
+import { findSnap, type SnapResult } from '../core/snap';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
   ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand,
@@ -82,7 +83,7 @@ export class App {
 
     const toolCtx = {
       history: this.history,
-      getSnapPoint: (worldPt: Point) => this.getSnapPoint(worldPt),
+      getSnap: (worldPt: Point) => this.getSnap(worldPt),
       requestRender: () => this.requestRender(),
     };
     this.activeTool = new SelectTool(toolCtx);
@@ -140,9 +141,9 @@ export class App {
     }
   }
 
-  private getSnapPoint(worldPt: Point): Point {
+  private getSnap(worldPt: Point): SnapResult {
     const state = this.history.state;
-    if (!state.snapEnabled) return worldPt;
+    if (!state.snapEnabled) return { point: worldPt, kind: 'grid' };
     const layerMap = new Map(state.layers.map((l) => [l.name, l]));
     const interactiveShapes = state.shapes.filter((s) => {
       const l = layerMap.get(s.layer);
@@ -150,7 +151,7 @@ export class App {
     });
     const subGs = state.gridSize / 5;
     const effectiveGrid = subGs * state.zoom >= 8 ? subGs : state.gridSize;
-    return findSnapPoint(
+    return findSnap(
       worldPt,
       interactiveShapes,
       effectiveGrid,
@@ -179,7 +180,7 @@ export class App {
     this.renderer.render(
       state,
       this.activeTool.getDraft() ?? undefined,
-      this.activeTool.getSnapPoint() ?? undefined,
+      this.activeTool.getSnap() ?? undefined,
       this.activeTool.showsAllVertices(),
       rubberBand,
       filletStatuses,
@@ -504,7 +505,7 @@ export class App {
     this.activeTool.cancel();
     const toolCtx = {
       history: this.history,
-      getSnapPoint: (worldPt: Point) => this.getSnapPoint(worldPt),
+      getSnap: (worldPt: Point) => this.getSnap(worldPt),
       requestRender: () => this.requestRender(),
     };
 
