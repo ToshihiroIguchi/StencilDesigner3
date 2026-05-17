@@ -11,6 +11,7 @@ import { MeasureTool } from '../tools/measure';
 import { DimensionTool } from '../tools/dimension';
 import { CenterlineTool } from '../tools/centerline';
 import { ArrowTool } from '../tools/arrow';
+import { TextTool, type TextDialogParams } from '../tools/text';
 import { findSnapPoint, hitTest } from '../core/selection';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
@@ -34,7 +35,7 @@ import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
 import { UnitConverter } from '../core/format';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool | TextTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -444,6 +445,7 @@ export class App {
       if (e.key === 'd' || e.key === 'D') { this.setTool('dimension'); return; }
       if (e.key === 'l' || e.key === 'L') { this.setTool('centerline'); return; }
       if (e.key === 'a' || e.key === 'A') { this.setTool('arrow'); return; }
+      if (e.key === 't' || e.key === 'T') { this.setTool('text'); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -481,6 +483,7 @@ export class App {
       case 'dimension': this.activeTool = new DimensionTool(toolCtx); break;
       case 'centerline': this.activeTool = new CenterlineTool(toolCtx); break;
       case 'arrow': this.activeTool = new ArrowTool(toolCtx); break;
+      case 'text': this.activeTool = new TextTool(toolCtx, (wp, cb) => this.showTextDialog(wp, cb)); break;
       default: this.activeTool = new SelectTool(toolCtx);
     }
 
@@ -1051,6 +1054,66 @@ export class App {
     a.download = `${name}.stencil`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  private showTextDialog(
+    _worldPt: Point,
+    callback: (params: TextDialogParams | null) => void,
+  ): void {
+    const modal = document.getElementById('text-modal') as HTMLElement | null;
+    const input = document.getElementById('text-input') as HTMLInputElement | null;
+    const sizeInput = document.getElementById('text-size') as HTMLInputElement | null;
+    const sizeUnit = document.getElementById('text-size-unit') as HTMLElement | null;
+    const warnEl = document.getElementById('text-ascii-warn') as HTMLElement | null;
+    const okBtn = document.getElementById('text-ok') as HTMLButtonElement | null;
+    const cancelBtn = document.getElementById('text-cancel') as HTMLButtonElement | null;
+    if (!modal || !input || !sizeInput || !okBtn || !cancelBtn) return;
+
+    const unit = this.history.state.displayUnit;
+    if (sizeInput) sizeInput.value = unit === 'mm' ? '5' : '5000';
+    if (sizeUnit) sizeUnit.textContent = unit === 'mm' ? 'mm' : 'µm';
+    input.value = '';
+    if (warnEl) warnEl.style.display = 'none';
+    okBtn.disabled = true;
+    modal.style.display = 'flex';
+    input.focus();
+
+    const ASCII_RE = /^[\x20-\x7E]+$/;
+
+    const validate = () => {
+      const v = input.value;
+      const ok = ASCII_RE.test(v);
+      if (warnEl) warnEl.style.display = v.length > 0 && !ok ? 'block' : 'none';
+      okBtn.disabled = !ok;
+    };
+
+    const confirm = () => {
+      if (okBtn.disabled) return;
+      cleanup();
+      const raw = parseFloat(sizeInput.value);
+      const capHeightUm = unit === 'mm' ? Math.round(raw * 1000) : Math.round(raw);
+      callback({ text: input.value, capHeightUm: Math.max(100, capHeightUm), letterSpacingUm: 0 });
+    };
+
+    const cancel = () => { cleanup(); callback(null); };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    };
+
+    const cleanup = () => {
+      modal.style.display = 'none';
+      input.removeEventListener('input', validate);
+      okBtn.removeEventListener('click', confirm);
+      cancelBtn.removeEventListener('click', cancel);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+
+    input.addEventListener('input', validate);
+    okBtn.addEventListener('click', confirm);
+    cancelBtn.addEventListener('click', cancel);
+    document.addEventListener('keydown', onKeyDown);
   }
 
   private async showFileManager(forceOpen = false): Promise<void> {

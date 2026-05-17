@@ -81,6 +81,24 @@ export class AddShapeCommand implements Command {
   }
 }
 
+// ─── Add Shapes (multiple in one undo step) ──────────────────────────────────
+
+export class AddShapesCommand implements Command {
+  private addedIds: string[];
+  constructor(private polygons: Polygon[]) {
+    this.addedIds = polygons.map(p => p.id);
+  }
+  do(state: AppState): AppState {
+    let shapes = state.shapes;
+    for (const p of this.polygons) shapes = addShape(shapes, p);
+    return { ...state, shapes, selection: [] };
+  }
+  undo(state: AppState): AppState {
+    const ids = new Set(this.addedIds);
+    return { ...state, shapes: state.shapes.filter(s => !ids.has(s.id)), selection: [] };
+  }
+}
+
 // ─── Move ────────────────────────────────────────────────────────────────────
 
 export class MoveCommand implements Command {

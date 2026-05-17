@@ -34,7 +34,8 @@ export type ToolType =
   | 'measure'
   | 'dimension'
   | 'centerline'
-  | 'arrow';
+  | 'arrow'
+  | 'text';
 
 export interface Selection {
   type: 'vertex' | 'edge' | 'polygon' | 'dimension';
