@@ -437,13 +437,18 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 .fm-doc-item:hover { background: var(--btn-hover); }
 .fm-doc-item.fm-active { border-color: var(--accent); background: var(--btn-active); }
 .fm-doc-info { flex: 1; overflow: hidden; }
-.fm-doc-name { font-weight: 500; font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-doc-name-row { display: flex; align-items: center; gap: 4px; overflow: hidden; }
+.fm-doc-name { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .fm-doc-meta { font-size: 11px; color: var(--fg2); }
-.fm-doc-actions { display: flex; gap: 4px; flex-shrink: 0; }
-.fm-btn { padding: 2px 8px; font-size: 11px; background: none; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; color: var(--fg2); }
-.fm-btn:hover { background: var(--btn-hover); color: var(--fg); }
-.fm-btn.danger { color: var(--danger); }
-.fm-btn.danger:hover { border-color: var(--danger); }
+.fm-doc-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.fm-icon-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; background: none; border: 1px solid transparent; border-radius: 3px; cursor: pointer; color: var(--fg2); padding: 0; flex-shrink: 0; }
+.fm-icon-btn svg.icon { width: 14px; height: 14px; }
+.fm-icon-btn:hover { background: var(--btn-hover); color: var(--fg); border-color: var(--border); }
+.fm-icon-btn.danger { color: var(--danger); }
+.fm-icon-btn.danger:hover { border-color: var(--danger); background: var(--btn-hover); }
+.fm-rename-btn { opacity: 0; transition: opacity 0.1s; }
+.fm-doc-item:hover .fm-rename-btn, .fm-doc-item.fm-active .fm-rename-btn { opacity: 1; }
+.fm-name-input { font-size: 13px; font-weight: 500; color: var(--fg); background: var(--bg3); border: 1px solid var(--accent); border-radius: 3px; padding: 0 4px; height: 20px; font-family: inherit; outline: none; flex: 1; min-width: 0; }
 .fm-empty { color: var(--fg2); font-size: 12px; padding: 8px; text-align: center; }
 .fm-storage-bar { display: flex; align-items: center; gap: 8px; }
 .fm-storage-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }

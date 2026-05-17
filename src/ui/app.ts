@@ -1228,14 +1228,24 @@ export class App {
         const sz = fmtBytes(doc.sizeBytes);
         li.innerHTML = `
           <div class="fm-doc-info">
-            <span class="fm-doc-name">${escHtml(doc.name)}</span>
+            <div class="fm-doc-name-row">
+              <span class="fm-doc-name">${escHtml(doc.name)}</span>
+              <button class="fm-icon-btn fm-rename-btn fm-rename" data-id="${doc.id}" title="Rename">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+            </div>
             <span class="fm-doc-meta">${dt} · ${sz}</span>
           </div>
           <div class="fm-doc-actions">
-            <button class="fm-btn fm-open" data-id="${doc.id}">Open</button>
-            <button class="fm-btn fm-rename" data-id="${doc.id}">Rename</button>
-            <button class="fm-btn fm-download" data-id="${doc.id}">Download</button>
-            <button class="fm-btn fm-delete danger" data-id="${doc.id}">Delete</button>
+            <button class="fm-icon-btn fm-open" data-id="${doc.id}" title="Open">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            </button>
+            <button class="fm-icon-btn fm-download" data-id="${doc.id}" title="Download">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+            <button class="fm-icon-btn fm-delete danger" data-id="${doc.id}" title="Delete">
+              <svg class="icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+            </button>
           </div>`;
         listEl.appendChild(li);
       }
@@ -1281,17 +1291,38 @@ export class App {
         await this.openDoc(id);
         close();
       } else if (btn.classList.contains('fm-rename')) {
-        const docs = await listDocs();
-        const meta = docs.find((d) => d.id === id);
-        const newName = await this.showInputModal({ title: 'Rename', label: 'New name:', defaultValue: meta?.name ?? '' });
-        if (newName && newName.trim()) {
-          await renameDoc(id, newName.trim());
-          if (id === this.currentDocId) {
-            this.currentDocName = newName.trim();
-            this.updateDocNameLabel();
+        const li = btn.closest('.fm-doc-item') as HTMLElement | null;
+        const nameSpan = li?.querySelector('.fm-doc-name') as HTMLElement | null;
+        if (!nameSpan || nameSpan.tagName === 'INPUT') return;
+        const currentName = nameSpan.textContent ?? '';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'fm-name-input';
+        input.value = currentName;
+        nameSpan.replaceWith(input);
+        input.focus();
+        input.select();
+        let committed = false;
+        const commit = async () => {
+          if (committed) return;
+          committed = true;
+          const newName = input.value.trim();
+          if (newName && newName !== currentName) {
+            await renameDoc(id, newName);
+            if (id === this.currentDocId) {
+              this.currentDocName = newName;
+              this.updateDocNameLabel();
+            }
+            await renderList();
+          } else {
+            input.replaceWith(nameSpan);
           }
-          await renderList();
-        }
+        };
+        input.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter') { e.preventDefault(); void commit(); }
+          if (e.key === 'Escape') { committed = true; input.replaceWith(nameSpan); }
+        });
+        input.addEventListener('blur', () => void commit());
       } else if (btn.classList.contains('fm-download')) {
         const state = await loadDoc(id);
         if (!state) return;
