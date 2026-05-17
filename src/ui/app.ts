@@ -1689,30 +1689,38 @@ export class App {
 
     const ids = new Set(sel.map((s) => s.shapeId));
     const shapes = state.shapes.filter((s) => ids.has(s.id));
-    let totalArea = 0;
-    let html = `<p><strong>${shapes.length} shape(s)</strong></p>`;
 
     const unit = state.displayUnit;
     const f = (v: number) => UnitConverter.formatOutput(v, unit, true);
 
-    for (const shape of shapes) {
-      const bb = polygonBbox(shape);
-      const a = polygonArea(shape);
-      totalArea += a;
+    if (shapes.length === 1) {
+      const bb = polygonBbox(shapes[0]);
+      const a = polygonArea(shapes[0]);
       const areaStr = unit === 'mm' ? (a / 1000000).toFixed(4) + ' mm²' : Math.round(a).toLocaleString() + ' µm²';
-      html += `<div class="shape-info">
+      infoEl.innerHTML = `<div class="shape-info">
         <span>W: ${f(bb.maxX - bb.minX)}</span>
         <span>H: ${f(bb.maxY - bb.minY)}</span>
         <span>Area: ${areaStr}</span>
       </div>`;
-    }
-
-    if (shapes.length > 1) {
+    } else {
+      let totalArea = 0;
+      let combinedMinX = Infinity, combinedMinY = Infinity, combinedMaxX = -Infinity, combinedMaxY = -Infinity;
+      for (const shape of shapes) {
+        const bb = polygonBbox(shape);
+        totalArea += polygonArea(shape);
+        if (bb.minX < combinedMinX) combinedMinX = bb.minX;
+        if (bb.minY < combinedMinY) combinedMinY = bb.minY;
+        if (bb.maxX > combinedMaxX) combinedMaxX = bb.maxX;
+        if (bb.maxY > combinedMaxY) combinedMaxY = bb.maxY;
+      }
       const totalAreaStr = unit === 'mm' ? (totalArea / 1000000).toFixed(4) + ' mm²' : Math.round(totalArea).toLocaleString() + ' µm²';
-      html += `<p>Total area: ${totalAreaStr}</p>`;
+      infoEl.innerHTML = `<p><strong>${shapes.length} shapes</strong></p>
+        <div class="shape-info">
+          <span>W: ${f(combinedMaxX - combinedMinX)}</span>
+          <span>H: ${f(combinedMaxY - combinedMinY)}</span>
+          <span>Total area: ${totalAreaStr}</span>
+        </div>`;
     }
-
-    infoEl.innerHTML = html;
 
     // Show numeric inputs for single-shape selection
     if (propsEl) {
