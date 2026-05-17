@@ -210,13 +210,13 @@
     <!-- Annotation tool panel (visible only when Note tool is active) -->
     <div id="annotation-panel" class="panel-section" style="display:none">
       <div class="panel-title">Note</div>
-      <p class="text-font-note">Noto Sans JP · Japanese supported · display only</p>
+      <p class="text-font-note">display only</p>
       <div class="text-opt-row">
         <label>Size</label>
-        <input id="ann-size" type="number" min="0.1" step="0.5" value="1" />
+        <input id="ann-size" type="number" min="0.1" step="0.5" value="3" />
         <span class="unit-label">mm</span>
       </div>
-      <p class="text-place-hint">Click canvas to place · Enter: confirm · Shift+Enter: newline · Esc: cancel</p>
+      <p class="text-place-hint" id="ann-hint">Click to place</p>
     </div>
 
     <!-- Fillet options (visible only when Fillet tool is active) -->
@@ -420,18 +420,18 @@
   <span class="footer-item">
     <span class="footer-key">Zoom:</span>
     <button class="footer-zoom-btn" id="btn-zoom-out" title="Zoom out (-)">−</button>
-    <span class="footer-val" id="footer-zoom" title="Click for zoom presets" style="cursor:pointer">50%</span>
+    <span class="footer-val" id="footer-zoom" title="Click for zoom presets" style="cursor:pointer">10.0 px/mm</span>
     <button class="footer-zoom-btn" id="btn-zoom-in" title="Zoom in (+)">+</button>
   </span>
 </footer>
 
 <!-- ── Zoom preset menu ──────────────────────────────────────────────────────── -->
 <div id="zoom-menu" class="zoom-menu" hidden>
-  <button class="zoom-menu-item" data-zoom="0.25">25%</button>
-  <button class="zoom-menu-item" data-zoom="0.5">50%</button>
-  <button class="zoom-menu-item" data-zoom="1">100%</button>
-  <button class="zoom-menu-item" data-zoom="2">200%</button>
-  <button class="zoom-menu-item" data-zoom="4">400%</button>
+  <button class="zoom-menu-item" data-zoom="0.005">5 px/mm</button>
+  <button class="zoom-menu-item" data-zoom="0.01">10 px/mm</button>
+  <button class="zoom-menu-item" data-zoom="0.05">50 px/mm</button>
+  <button class="zoom-menu-item" data-zoom="0.1">100 px/mm</button>
+  <button class="zoom-menu-item" data-zoom="0.5">500 px/mm</button>
   <hr class="zoom-menu-sep">
   <button class="zoom-menu-item" data-zoom="fit">Fit (Home)</button>
 </div>

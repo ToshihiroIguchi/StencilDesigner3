@@ -4,7 +4,7 @@ import { BaseTool, type ToolContext } from './base';
 import { AddShapesCommand } from '../state/commands';
 import { markDirty } from '../state/docStore';
 import { loadFont, getCachedFont } from '../core/font-loader';
-import { textToPolygons, isAsciiPrintable, computeTextAdvance } from '../core/text-to-polygon';
+import { textToPolygons, isAsciiPrintable } from '../core/text-to-polygon';
 import { union } from '../core/boolean';
 
 export class TextTool extends BaseTool {
@@ -45,18 +45,6 @@ export class TextTool extends BaseTool {
     return this.mode === 'editing' ? this.editPolys : this.previewPolys;
   }
 
-  getTextCursor(): { x: number; topY: number; bottomY: number } | null {
-    if (this.mode !== 'editing' || !this.editOrigin) return null;
-    const font = getCachedFont();
-    if (!font) return null;
-    const advance = computeTextAdvance(this.text, font, this.capHeightUm, this.letterSpacingUm);
-    return {
-      x: this.editOrigin.x + advance,
-      topY: this.editOrigin.y,
-      bottomY: this.editOrigin.y + this.capHeightUm,
-    };
-  }
-
   // ── Textarea lifecycle ───────────────────────────────────────────────────────
 
   private openTextarea(canvasPt: Point, worldPt: Point): void {
@@ -95,8 +83,7 @@ export class TextTool extends BaseTool {
   private syncTextareaStyle(): void {
     if (!this.textarea) return;
     const state = this.ctx.history.state;
-    // Cap at 80px so the input box stays usable regardless of zoom/size
-    const sizePx = Math.min(80, Math.max(12, this.capHeightUm * state.zoom));
+    const sizePx = Math.max(8, this.capHeightUm * state.zoom);
     const layerColor = state.layers.find((l) => l.name === state.activeLayerName)?.color ?? '#ffffff';
     this.textarea.style.fontSize = `${sizePx}px`;
     this.textarea.style.lineHeight = '1.0';

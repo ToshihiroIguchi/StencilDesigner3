@@ -74,7 +74,6 @@ export interface RendererExtras {
   dimDraft?: DimDraft;
   selectedDimIds?: Set<string>;
   textPreviewPolys?: Polygon[];
-  textCursor?: { x: number; topY: number; bottomY: number };
   annotationPreviewPt?: Point;
   selectedAnnotationIds?: Set<string>;
 }
@@ -167,11 +166,6 @@ export class CanvasRenderer {
     // Text tool live preview
     if (extras?.textPreviewPolys) {
       this.drawTextPreview(extras.textPreviewPolys, vt);
-    }
-
-    // Text cursor (shown while editing)
-    if (extras?.textCursor) {
-      this.drawTextCursor(extras.textCursor, vt);
     }
 
     // Snap indicator
@@ -537,21 +531,6 @@ export class CanvasRenderer {
       ctx.fill('evenodd');
       ctx.stroke();
     }
-    ctx.restore();
-  }
-
-  private drawTextCursor(cursor: { x: number; topY: number; bottomY: number }, vt: ViewTransform): void {
-    const top = worldToCanvas(cursor.x, cursor.topY, vt);
-    const bottom = worldToCanvas(cursor.x, cursor.bottomY, vt);
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.strokeStyle = COLORS.draftShape;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(top.x, top.y);
-    ctx.lineTo(bottom.x, bottom.y);
-    ctx.stroke();
     ctx.restore();
   }
 

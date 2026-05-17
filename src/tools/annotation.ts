@@ -88,6 +88,9 @@ export class AnnotationTool extends BaseTool {
     this.textarea.addEventListener('blur', onBlur, { once: true });
 
     setTimeout(() => { this.textarea?.focus(); this.textarea?.select(); }, 0);
+
+    const hint = document.getElementById('ann-hint');
+    if (hint) hint.textContent = 'Shift+Enter: newline';
     this.ctx.requestRender();
   }
 
@@ -160,6 +163,8 @@ export class AnnotationTool extends BaseTool {
     this.isOpen = false;
     this.placePt = null;
     this.editingId = null;
+    const hint = document.getElementById('ann-hint');
+    if (hint) hint.textContent = 'Click to place';
   }
 
   override cancel(): void {

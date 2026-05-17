@@ -74,7 +74,7 @@ export class App {
   private currentDocId: string | null = null;
   private textCapHeightUm = 5000;
   private textLetterSpacingUm = 0;
-  private annotationHeightUm = 1000;
+  private annotationHeightUm = 3000;
   private currentDocName = '';
   private storageBannerTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -204,9 +204,6 @@ export class App {
           ? (this.activeTool.getPreviewPt() ?? undefined) : undefined,
         textPreviewPolys: this.activeTool instanceof TextTool
           ? (this.activeTool.getTextPreviewPolys() ?? undefined)
-          : undefined,
-        textCursor: this.activeTool instanceof TextTool
-          ? (this.activeTool.getTextCursor() ?? undefined)
           : undefined,
       },
     );
@@ -488,7 +485,7 @@ export class App {
 
   private setZoom(newZoom: number, anchorCanvasX?: number, anchorCanvasY?: number): void {
     const state = this.history.state;
-    const z = Math.max(0.01, Math.min(50, newZoom));
+    const z = Math.max(0.001, Math.min(50, newZoom));
     if (anchorCanvasX !== undefined && anchorCanvasY !== undefined) {
       state.panX = anchorCanvasX - (anchorCanvasX - state.panX) * (z / state.zoom);
       state.panY = anchorCanvasY - (anchorCanvasY - state.panY) * (z / state.zoom);
@@ -814,6 +811,20 @@ export class App {
     this.requestRender();
   }
 
+  private setDefaultEmptyView(): void {
+    const RULER = 24;
+    const viewW = this.canvas.width - RULER;
+    const viewH = this.canvas.height - RULER;
+    const TARGET_UM_X = 100_000; // 100 mm
+    const TARGET_UM_Y = 70_000;  // 70 mm
+    const zoomX = viewW / TARGET_UM_X;
+    const zoomY = viewH / TARGET_UM_Y;
+    this.setZoom(Math.min(zoomX, zoomY));
+    const state = this.history.state;
+    state.panX = Math.round(RULER + 20);
+    state.panY = Math.round(RULER + viewH / 2);
+  }
+
   fitToContent(): void {
     const state = this.history.state;
     const RULER = 24;
@@ -821,9 +832,7 @@ export class App {
     const viewH = this.canvas.height - RULER;
 
     if (state.shapes.length === 0 && state.dimensions.length === 0 && state.annotations.length === 0) {
-      this.setZoom(0.5);
-      state.panX = Math.round(RULER + viewW / 2);
-      state.panY = Math.round(RULER + viewH / 2);
+      this.setDefaultEmptyView();
       this.requestRender();
       return;
     }
@@ -883,9 +892,12 @@ export class App {
   }
 
   private resetZoom(): void {
-    const cx = this.canvas.width / 2;
-    const cy = this.canvas.height / 2;
-    this.setZoom(1, cx, cy);
+    const state = this.history.state;
+    if (state.shapes.length === 0 && state.dimensions.length === 0 && state.annotations.length === 0) {
+      this.setDefaultEmptyView();
+    } else {
+      this.fitToContent();
+    }
     this.requestRender();
   }
 
@@ -1080,7 +1092,11 @@ export class App {
     if (!state) return;
     this.cancelDiffMode();
     this.history.loadState(state);
-    this.history.state.gridSize = computeNiceGridSize(this.history.state.zoom);
+    const s = this.history.state;
+    s.gridSize = computeNiceGridSize(s.zoom);
+    if (s.shapes.length === 0 && s.dimensions.length === 0 && s.annotations.length === 0) {
+      this.setDefaultEmptyView();
+    }
     this.currentDocId = id;
     const docs = await listDocs();
     const meta = docs.find((d) => d.id === id);
@@ -1576,7 +1592,15 @@ export class App {
 
     if (el('footer-grid')) el('footer-grid')!.textContent = UnitConverter.formatOutput(state.gridSize, unit, true);
     if (el('footer-snap')) el('footer-snap')!.textContent = state.snapEnabled ? 'ON' : 'OFF';
-    if (el('footer-zoom')) el('footer-zoom')!.textContent = `${(state.zoom * 100).toFixed(0)}%`;
+    if (el('footer-zoom')) {
+      const pxPerMm = state.zoom * 1000;
+      const zoomLabel = pxPerMm >= 100
+        ? `${pxPerMm.toFixed(0)} px/mm`
+        : pxPerMm >= 10
+          ? `${pxPerMm.toFixed(1)} px/mm`
+          : `${pxPerMm.toFixed(2)} px/mm`;
+      el('footer-zoom')!.textContent = zoomLabel;
+    }
   }
 
   private updateRightPanel(state: AppState): void {

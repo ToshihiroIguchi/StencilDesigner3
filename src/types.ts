@@ -193,7 +193,7 @@ export function createDefaultState(): AppState {
     shapes: [],
     activeTool: 'select',
     selection: [],
-    zoom: 0.5,
+    zoom: 0.01,
     panX: 50,
     panY: 50,
     snapEnabled: true,

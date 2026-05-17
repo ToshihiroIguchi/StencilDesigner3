@@ -170,26 +170,28 @@ test.describe('4. Zoom and pan', () => {
 
   test('4-2 zoom in increases zoom value', async ({ page }) => {
     const box = await canvasBox(page);
+    const zoomBefore = parseFloat(await page.locator('#footer-zoom').textContent() ?? '0');
     await page.mouse.move(box.x + 300, box.y + 300);
     for (let i = 0; i < 5; i++) {
       await page.mouse.wheel(0, -120);
       await page.waitForTimeout(30);
     }
     const zoom = await page.locator('#footer-zoom').textContent();
-    const pct = parseInt(zoom ?? '0', 10);
-    expect(pct).toBeGreaterThan(50);
+    const pct = parseFloat(zoom ?? '0');
+    expect(pct).toBeGreaterThan(zoomBefore);
   });
 
   test('4-3 zoom out decreases zoom value', async ({ page }) => {
     const box = await canvasBox(page);
+    const zoomBefore = parseFloat(await page.locator('#footer-zoom').textContent() ?? '100');
     await page.mouse.move(box.x + 300, box.y + 300);
     for (let i = 0; i < 5; i++) {
       await page.mouse.wheel(0, 120);
       await page.waitForTimeout(30);
     }
     const zoom = await page.locator('#footer-zoom').textContent();
-    const pct = parseInt(zoom ?? '100', 10);
-    expect(pct).toBeLessThan(50);
+    const pct = parseFloat(zoom ?? '100');
+    expect(pct).toBeLessThan(zoomBefore);
   });
 
   test('4-4 right-drag pans canvas', async ({ page }) => {
@@ -901,15 +903,15 @@ test.describe('20. Fit to content and zoom reset', () => {
     expect(zoomBefore).not.toBe(zoomAfter);
   });
 
-  test('20-4 Fit with no shapes resets to 50%', async ({ page }) => {
-    // No shapes — fit should reset to default
+  test('20-4 Fit with no shapes resets to default view', async ({ page }) => {
+    // No shapes — fit should reset to default (shows px/mm)
     await page.click('#btn-fit');
     await page.waitForTimeout(100);
     const zoom = await page.locator('#footer-zoom').textContent();
-    expect(zoom).toMatch(/50%/);
+    expect(zoom).toMatch(/px\/mm/);
   });
 
-  test('20-5 clicking zoom display opens preset menu and selecting 100% sets zoom', async ({ page }) => {
+  test('20-5 clicking zoom display opens preset menu and selecting 10 px/mm sets zoom', async ({ page }) => {
     const box = await canvasBox(page);
     // Zoom in first
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -926,11 +928,11 @@ test.describe('20. Fit to content and zoom reset', () => {
     const menu = page.locator('#zoom-menu');
     await expect(menu).toBeVisible();
 
-    // Click 100% preset
-    await page.click('.zoom-menu-item[data-zoom="1"]');
+    // Click 10 px/mm preset
+    await page.click('.zoom-menu-item[data-zoom="0.01"]');
     await page.waitForTimeout(100);
     const zoomAfter = await page.locator('#footer-zoom').textContent();
-    expect(zoomAfter).toMatch(/100%/);
+    expect(zoomAfter).toMatch(/10\.0 px\/mm/);
     await expect(menu).toBeHidden();
   });
 
