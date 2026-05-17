@@ -909,7 +909,7 @@ test.describe('20. Fit to content and zoom reset', () => {
     expect(zoom).toMatch(/50%/);
   });
 
-  test('20-5 clicking zoom display resets to 100%', async ({ page }) => {
+  test('20-5 clicking zoom display opens preset menu and selecting 100% sets zoom', async ({ page }) => {
     const box = await canvasBox(page);
     // Zoom in first
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -920,11 +920,18 @@ test.describe('20. Fit to content and zoom reset', () => {
     const zoomBefore = await page.locator('#footer-zoom').textContent();
     expect(parseInt(zoomBefore ?? '0', 10)).toBeGreaterThan(50);
 
-    // Click zoom display to reset
+    // Click zoom display to open preset menu
     await page.click('#footer-zoom');
+    await page.waitForTimeout(100);
+    const menu = page.locator('#zoom-menu');
+    await expect(menu).toBeVisible();
+
+    // Click 100% preset
+    await page.click('.zoom-menu-item[data-zoom="1"]');
     await page.waitForTimeout(100);
     const zoomAfter = await page.locator('#footer-zoom').textContent();
     expect(zoomAfter).toMatch(/100%/);
+    await expect(menu).toBeHidden();
   });
 
   test('20-6 auto-grid changes with zoom level', async ({ page }) => {
