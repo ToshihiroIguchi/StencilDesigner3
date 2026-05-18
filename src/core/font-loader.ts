@@ -8,7 +8,7 @@ export function getCachedFont(): Font | null { return cached; }
 export async function loadFont(): Promise<Font> {
   if (cached) return cached;
   if (pending) return pending;
-  pending = fetch('/fonts/BigShouldersStencilDisplay-Regular.ttf')
+  pending = fetch(`${import.meta.env.BASE_URL}fonts/BigShouldersStencilDisplay-Regular.ttf`)
     .then(r => {
       if (!r.ok) throw new Error(`Font load failed: ${r.status}`);
       return r.arrayBuffer();
