@@ -77,6 +77,7 @@ export class App {
   private annotationHeightUm = 3000;
   private currentDocName = '';
   private storageBannerTimer: ReturnType<typeof setTimeout> | null = null;
+  private dragCounter = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -393,6 +394,44 @@ export class App {
         void this.importStencilFile(file).then(() => { stencilFileInput.value = ''; });
       }
     });
+
+    // Drag-and-drop file import
+    const dropOverlay = document.getElementById('drop-overlay') as HTMLElement | null;
+    document.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      if (this.isAnyModalOpen()) return;
+      this.dragCounter++;
+      if (dropOverlay) dropOverlay.hidden = false;
+    });
+    document.addEventListener('dragover', (e) => { e.preventDefault(); });
+    document.addEventListener('dragleave', () => {
+      this.dragCounter--;
+      if (this.dragCounter <= 0) {
+        this.dragCounter = 0;
+        if (dropOverlay) dropOverlay.hidden = true;
+      }
+    });
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      this.dragCounter = 0;
+      if (dropOverlay) dropOverlay.hidden = true;
+      if (this.isAnyModalOpen()) return;
+      const file = e.dataTransfer?.files[0];
+      if (!file) return;
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (ext === 'dxf') {
+        this.loadDxfFile(file);
+      } else if (ext === 'stencil' || ext === 'json') {
+        void this.importStencilFile(file);
+      } else {
+        void this.showMessageModal({ title: 'Import', message: `Unsupported file type: .${ext}\nDrop a .dxf or .stencil file.` });
+      }
+    });
+  }
+
+  private isAnyModalOpen(): boolean {
+    return [...document.querySelectorAll<HTMLElement>('.modal-overlay')]
+      .some((el) => el.style.display !== 'none');
   }
 
   private getCanvasPt(e: MouseEvent): { canvasPt: Point; worldPt: Point } {
