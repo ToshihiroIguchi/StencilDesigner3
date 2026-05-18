@@ -130,17 +130,19 @@ export class App {
       if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state);
     });
 
-    // Restore last opened doc, or show file manager
+    // Restore last opened doc, or auto-create an initial Untitled
     try {
       const lastId = await getCurrentDocId();
       const docs = await listDocs();
       if (lastId && docs.some((d) => d.id === lastId)) {
         await this.openDoc(lastId);
+      } else if (docs.length > 0) {
+        await this.openDoc(docs[0].id);
       } else {
-        await this.showFileManager(true);
+        await this.newDoc();
       }
     } catch {
-      await this.showFileManager(true);
+      await this.newDoc();
     }
   }
 
@@ -238,10 +240,20 @@ export class App {
     document.getElementById('btn-difference')?.addEventListener('click', () => this.doDifference());
     document.getElementById('btn-copy-btn')?.addEventListener('click', () => this.doCopy());
     document.getElementById('btn-array')?.addEventListener('click', () => this.doArray());
-    document.getElementById('btn-import')?.addEventListener('click', () => this.importDxf());
-    document.getElementById('btn-export')?.addEventListener('click', () => this.exportDxf());
-    document.getElementById('btn-export-pdf')?.addEventListener('click', () => { void this.exportPdf(); });
-    document.getElementById('btn-files')?.addEventListener('click', () => { void this.showFileManager(); });
+    document.getElementById('btn-file-menu')?.addEventListener('click', (e) => this.toggleFileMenu(e));
+    document.getElementById('file-menu')?.addEventListener('click', (e) => {
+      const item = (e.target as HTMLElement).closest('.file-menu-item') as HTMLElement | null;
+      if (!item) return;
+      this.closeFileMenu();
+      switch (item.dataset.action) {
+        case 'new-doc':        void this.newDoc(); break;
+        case 'open-doc':       void this.showFileManager(); break;
+        case 'open-from-disk': document.getElementById('stencil-file-input')?.click(); break;
+        case 'import-dxf':     void this.importDxf(); break;
+        case 'export-dxf':     this.exportDxf(); break;
+        case 'export-pdf':     void this.exportPdf(); break;
+      }
+    });
     document.getElementById('btn-theme')?.addEventListener('click', () => this.toggleTheme());
     document.getElementById('btn-clear')?.addEventListener('click', () => { void this.clearCurrentDoc(); });
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
@@ -264,8 +276,12 @@ export class App {
       });
     });
     document.addEventListener('click', (e) => {
-      if (!(e.target as HTMLElement).closest('#zoom-menu, #footer-zoom, #btn-zoom-in, #btn-zoom-out')) {
+      const t = e.target as HTMLElement;
+      if (!t.closest('#zoom-menu, #footer-zoom, #btn-zoom-in, #btn-zoom-out')) {
         this.closeZoomMenu();
+      }
+      if (!t.closest('#file-menu, #btn-file-menu')) {
+        this.closeFileMenu();
       }
     });
     document.getElementById('footer-unit')?.addEventListener('click', () => this.toggleUnit());
@@ -386,8 +402,8 @@ export class App {
       if (file) this.loadDxfFile(file);
     });
 
-    // Stencil file input (from file manager "Open from disk")
-    const stencilFileInput = document.getElementById('fm-stencil-input') as HTMLInputElement | null;
+    // Stencil file input (File > Open from Disk…)
+    const stencilFileInput = document.getElementById('stencil-file-input') as HTMLInputElement | null;
     stencilFileInput?.addEventListener('change', (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -930,6 +946,24 @@ export class App {
     if (menu) menu.hidden = true;
   }
 
+  private toggleFileMenu(e: MouseEvent): void {
+    const menu = document.getElementById('file-menu');
+    if (!menu) return;
+    if (menu.hidden) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      menu.style.left = `${rect.left}px`;
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.hidden = false;
+    } else {
+      menu.hidden = true;
+    }
+  }
+
+  private closeFileMenu(): void {
+    const menu = document.getElementById('file-menu');
+    if (menu) menu.hidden = true;
+  }
+
   private resetZoom(): void {
     const state = this.history.state;
     if (state.shapes.length === 0 && state.dimensions.length === 0 && state.annotations.length === 0) {
@@ -1246,7 +1280,7 @@ export class App {
     URL.revokeObjectURL(url);
   }
 
-  private async showFileManager(forceOpen = false): Promise<void> {
+  private async showFileManager(): Promise<void> {
     const modal = document.getElementById('file-manager-modal') as HTMLElement | null;
     if (!modal) return;
 
@@ -1257,7 +1291,7 @@ export class App {
       if (!listEl) return;
       listEl.innerHTML = '';
       if (docs.length === 0) {
-        listEl.innerHTML = '<li class="fm-empty">No documents yet. Create one below.</li>';
+        listEl.innerHTML = '<li class="fm-empty">No documents yet. Use File ▸ New Document to create one.</li>';
         return;
       }
       for (const doc of docs) {
@@ -1303,20 +1337,9 @@ export class App {
     modal.style.display = '';
 
     const closeBtn = document.getElementById('fm-close') as HTMLButtonElement | null;
-    if (closeBtn) closeBtn.style.display = forceOpen && !this.currentDocId ? 'none' : '';
-
     const close = () => { modal.style.display = 'none'; };
 
-    if (closeBtn) closeBtn.onclick = () => { if (this.currentDocId) close(); };
-
-    const newBtn = document.getElementById('fm-new');
-    if (newBtn) newBtn.onclick = async () => {
-      await this.newDoc();
-      close();
-    };
-
-    const importBtn = document.getElementById('fm-import-stencil');
-    if (importBtn) importBtn.onclick = () => { document.getElementById('fm-stencil-input')?.click(); };
+    if (closeBtn) closeBtn.onclick = () => close();
 
     const listEl = document.getElementById('fm-doc-list');
     if (listEl) listEl.onclick = async (e: MouseEvent) => {

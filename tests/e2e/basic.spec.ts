@@ -718,7 +718,10 @@ test.describe('16. DXF export', () => {
   test('16-1 export triggers file download', async ({ page }) => {
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.click('#btn-export'),
+      (async () => {
+        await page.click('#btn-file-menu');
+        await page.click('.file-menu-item[data-action="export-dxf"]');
+      })(),
     ]);
     expect(download.suggestedFilename()).toMatch(/\.dxf$/i);
   });
@@ -726,7 +729,10 @@ test.describe('16. DXF export', () => {
   test('16-2 exported DXF contains LWPOLYLINE', async ({ page }) => {
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.click('#btn-export'),
+      (async () => {
+        await page.click('#btn-file-menu');
+        await page.click('.file-menu-item[data-action="export-dxf"]');
+      })(),
     ]);
     const path = await download.path();
     const fs = await import('fs');
