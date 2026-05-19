@@ -69,6 +69,9 @@ export interface DimDraft {
   offset?: number;
 }
 
+/** HUD label shown near the cursor during draw-tool drag. */
+export interface DrawHud { label: string; worldPt: Point; }
+
 export interface RendererExtras {
   measureOverlay?: MeasureOverlay;
   dimDraft?: DimDraft;
@@ -76,6 +79,7 @@ export interface RendererExtras {
   textPreviewPolys?: Polygon[];
   annotationPreviewPt?: Point;
   selectedAnnotationIds?: Set<string>;
+  drawHud?: DrawHud;
 }
 
 export class CanvasRenderer {
@@ -201,6 +205,11 @@ export class CanvasRenderer {
     // Rubber-band selection rectangle
     if (rubberBand) {
       this.drawRubberBand(rubberBand.start, rubberBand.end);
+    }
+
+    // Draw-tool HUD (dimensions near cursor during freehand drag)
+    if (extras?.drawHud) {
+      this.drawHud(extras.drawHud, vt);
     }
 
     ctx.restore();
@@ -627,6 +636,26 @@ export class CanvasRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, mx, my);
+    ctx.restore();
+  }
+
+  private drawHud(hud: DrawHud, vt: ViewTransform): void {
+    const ctx = this.ctx;
+    const cp = worldToCanvas(hud.worldPt.x, hud.worldPt.y, vt);
+    const color = 'rgba(100,200,100,0.95)';
+    const label = hud.label;
+    ctx.save();
+    ctx.font = 'bold 11px monospace';
+    const tw = ctx.measureText(label).width;
+    const padX = 5, padY = 3;
+    const bx = cp.x + 10;
+    const by = cp.y + 10;
+    ctx.fillStyle = 'rgba(0,20,10,0.82)';
+    ctx.fillRect(bx - padX, by - 9 - padY, tw + padX * 2, 18 + padY * 2);
+    ctx.fillStyle = color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, bx, by);
     ctx.restore();
   }
 

@@ -208,6 +208,9 @@ export class App {
         textPreviewPolys: this.activeTool instanceof TextTool
           ? (this.activeTool.getTextPreviewPolys() ?? undefined)
           : undefined,
+        drawHud: (this.activeTool instanceof RectTool || this.activeTool instanceof CircleTool)
+          ? (this.activeTool.getDrawHud(state.displayUnit) ?? undefined)
+          : undefined,
       },
     );
     this.updateFooter(state);
@@ -312,6 +315,57 @@ export class App {
       }
     };
     annSizeInput?.addEventListener('input', syncAnnParams);
+
+    // Rect draw panel
+    const rectXInput = document.getElementById('rect-x') as HTMLInputElement | null;
+    const rectYInput = document.getElementById('rect-y') as HTMLInputElement | null;
+    const rectWInput = document.getElementById('rect-w') as HTMLInputElement | null;
+    const rectHInput = document.getElementById('rect-h') as HTMLInputElement | null;
+    const syncRectParams = () => {
+      if (!(this.activeTool instanceof RectTool)) return;
+      const unit = this.history.state.displayUnit;
+      this.activeTool.setPlaceX(UnitConverter.parseInput(rectXInput?.value ?? '0', unit));
+      this.activeTool.setPlaceY(UnitConverter.parseInput(rectYInput?.value ?? '0', unit));
+      this.activeTool.setWidth(UnitConverter.parseInput(rectWInput?.value ?? '10', unit));
+      this.activeTool.setHeight(UnitConverter.parseInput(rectHInput?.value ?? '10', unit));
+    };
+    const placeRect = () => {
+      if (!(this.activeTool instanceof RectTool)) return;
+      syncRectParams();
+      this.activeTool.placeFromPanel(this.history.state);
+    };
+    rectXInput?.addEventListener('input', syncRectParams);
+    rectYInput?.addEventListener('input', syncRectParams);
+    rectWInput?.addEventListener('input', syncRectParams);
+    rectHInput?.addEventListener('input', syncRectParams);
+    for (const el of [rectXInput, rectYInput, rectWInput, rectHInput]) {
+      el?.addEventListener('keydown', (e) => { if (e.key === 'Enter') placeRect(); });
+    }
+    document.getElementById('btn-place-rect')?.addEventListener('click', placeRect);
+
+    // Circle draw panel
+    const circleXInput = document.getElementById('circle-x') as HTMLInputElement | null;
+    const circleYInput = document.getElementById('circle-y') as HTMLInputElement | null;
+    const circleDInput = document.getElementById('circle-d') as HTMLInputElement | null;
+    const syncCircleParams = () => {
+      if (!(this.activeTool instanceof CircleTool)) return;
+      const unit = this.history.state.displayUnit;
+      this.activeTool.setPlaceX(UnitConverter.parseInput(circleXInput?.value ?? '0', unit));
+      this.activeTool.setPlaceY(UnitConverter.parseInput(circleYInput?.value ?? '0', unit));
+      this.activeTool.setDiameter(UnitConverter.parseInput(circleDInput?.value ?? '5', unit));
+    };
+    const placeCircle = () => {
+      if (!(this.activeTool instanceof CircleTool)) return;
+      syncCircleParams();
+      this.activeTool.placeFromPanel(this.history.state);
+    };
+    circleXInput?.addEventListener('input', syncCircleParams);
+    circleYInput?.addEventListener('input', syncCircleParams);
+    circleDInput?.addEventListener('input', syncCircleParams);
+    for (const el of [circleXInput, circleYInput, circleDInput]) {
+      el?.addEventListener('keydown', (e) => { if (e.key === 'Enter') placeCircle(); });
+    }
+    document.getElementById('btn-place-circle')?.addEventListener('click', placeCircle);
 
     // Fillet panel
     const filletRInput = document.getElementById('fillet-r') as HTMLInputElement | null;
@@ -1698,6 +1752,38 @@ export class App {
   }
 
   private updateRightPanel(state: AppState): void {
+    const unit = state.displayUnit;
+
+    // Show/hide rect draw panel and sync values
+    const rectPanel = document.getElementById('rect-panel');
+    const isRectActive = this.activeTool instanceof RectTool;
+    if (rectPanel) rectPanel.style.display = isRectActive ? '' : 'none';
+    if (isRectActive) {
+      const rt = this.activeTool as RectTool;
+      const xIn = document.getElementById('rect-x') as HTMLInputElement | null;
+      const yIn = document.getElementById('rect-y') as HTMLInputElement | null;
+      const wIn = document.getElementById('rect-w') as HTMLInputElement | null;
+      const hIn = document.getElementById('rect-h') as HTMLInputElement | null;
+      if (xIn && document.activeElement !== xIn) xIn.value = UnitConverter.formatOutput(rt.getPlaceX(), unit);
+      if (yIn && document.activeElement !== yIn) yIn.value = UnitConverter.formatOutput(rt.getPlaceY(), unit);
+      if (wIn && document.activeElement !== wIn) wIn.value = UnitConverter.formatOutput(rt.getWidth(), unit);
+      if (hIn && document.activeElement !== hIn) hIn.value = UnitConverter.formatOutput(rt.getHeight(), unit);
+    }
+
+    // Show/hide circle draw panel and sync values
+    const circlePanel = document.getElementById('circle-panel');
+    const isCircleActive = this.activeTool instanceof CircleTool;
+    if (circlePanel) circlePanel.style.display = isCircleActive ? '' : 'none';
+    if (isCircleActive) {
+      const ct = this.activeTool as CircleTool;
+      const xIn = document.getElementById('circle-x') as HTMLInputElement | null;
+      const yIn = document.getElementById('circle-y') as HTMLInputElement | null;
+      const dIn = document.getElementById('circle-d') as HTMLInputElement | null;
+      if (xIn && document.activeElement !== xIn) xIn.value = UnitConverter.formatOutput(ct.getPlaceX(), unit);
+      if (yIn && document.activeElement !== yIn) yIn.value = UnitConverter.formatOutput(ct.getPlaceY(), unit);
+      if (dIn && document.activeElement !== dIn) dIn.value = UnitConverter.formatOutput(ct.getDiameter(), unit);
+    }
+
     // Show/hide text panel
     const textPanel = document.getElementById('text-panel');
     if (textPanel) textPanel.style.display = this.activeTool instanceof TextTool ? '' : 'none';
@@ -1808,7 +1894,6 @@ export class App {
     const ids = new Set(sel.map((s) => s.shapeId));
     const shapes = state.shapes.filter((s) => ids.has(s.id));
 
-    const unit = state.displayUnit;
     const f = (v: number) => UnitConverter.formatOutput(v, unit, true);
 
     if (shapes.length === 1) {
@@ -1897,6 +1982,10 @@ export class App {
         el.step = isMm ? '0.01' : '10';
       } else if (el.id === 'fillet-r' || el.id.includes('pitch') || el.id.includes('modal-x') || el.id.includes('modal-y')) {
         el.step = isMm ? '0.1' : '100';
+      } else if (el.id === 'rect-x' || el.id === 'rect-y' || el.id === 'rect-w' || el.id === 'rect-h'
+               || el.id === 'circle-x' || el.id === 'circle-y' || el.id === 'circle-d') {
+        el.step = isMm ? '0.1' : '100';
+        el.min = isMm ? '0.001' : '1';
       } else if (el.id === 'text-size') {
         el.step = isMm ? '0.5' : '500';
         el.min = isMm ? '0.1' : '100';
@@ -1909,6 +1998,27 @@ export class App {
     });
 
     // Refresh existing values in visible inputs to match new unit
+    if (this.activeTool instanceof RectTool) {
+      const rt = this.activeTool;
+      const rxIn = document.getElementById('rect-x') as HTMLInputElement | null;
+      if (rxIn) rxIn.value = UnitConverter.formatOutput(rt.getPlaceX(), unit);
+      const ryIn = document.getElementById('rect-y') as HTMLInputElement | null;
+      if (ryIn) ryIn.value = UnitConverter.formatOutput(rt.getPlaceY(), unit);
+      const rwIn = document.getElementById('rect-w') as HTMLInputElement | null;
+      if (rwIn) rwIn.value = UnitConverter.formatOutput(rt.getWidth(), unit);
+      const rhIn = document.getElementById('rect-h') as HTMLInputElement | null;
+      if (rhIn) rhIn.value = UnitConverter.formatOutput(rt.getHeight(), unit);
+    }
+    if (this.activeTool instanceof CircleTool) {
+      const ct = this.activeTool;
+      const cxIn = document.getElementById('circle-x') as HTMLInputElement | null;
+      if (cxIn) cxIn.value = UnitConverter.formatOutput(ct.getPlaceX(), unit);
+      const cyIn = document.getElementById('circle-y') as HTMLInputElement | null;
+      if (cyIn) cyIn.value = UnitConverter.formatOutput(ct.getPlaceY(), unit);
+      const cdIn = document.getElementById('circle-d') as HTMLInputElement | null;
+      if (cdIn) cdIn.value = UnitConverter.formatOutput(ct.getDiameter(), unit);
+    }
+
     const textSizeIn = document.getElementById('text-size') as HTMLInputElement | null;
     if (textSizeIn) textSizeIn.value = UnitConverter.formatOutput(this.textCapHeightUm, unit);
     const textSpacingIn = document.getElementById('text-spacing') as HTMLInputElement | null;
