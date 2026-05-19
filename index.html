@@ -139,11 +139,6 @@
         <svg class="icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       </button>
       <span class="tool-label">Copy</span>
-
-      <button class="tool-btn" id="btn-array" title="Repeat shapes in a grid">
-        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      </button>
-      <span class="tool-label">Grid</span>
     </div>
 
     <!-- Boolean ops -->
@@ -345,53 +340,31 @@
 </div>
 
 <!-- Copy Modal -->
-<div id="copy-modal" class="modal-overlay" style="display:none">
+<!-- Duplicate (Copy/Array) Modal -->
+<div id="duplicate-modal" class="modal-overlay" style="display:none">
   <div class="modal-box">
     <div class="modal-title">Copy</div>
-    <div style="display:flex;flex-direction:column;gap:8px;font-size:12px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="min-width:90px" class="copy-modal-x-label">Offset X (µm)</label>
-        <input id="copy-modal-x" type="number" value="1000" step="100"
-          style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px">
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="min-width:90px" class="copy-modal-y-label">Offset Y (µm)</label>
-        <input id="copy-modal-y" type="number" value="0" step="100"
-          style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px">
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-      <button id="copy-modal-cancel" class="hdr-btn">Cancel</button>
-      <button id="copy-modal-ok" class="hdr-btn">OK</button>
-    </div>
-  </div>
-</div>
-
-<!-- Array Copy Modal -->
-<div id="array-modal" class="modal-overlay" style="display:none">
-  <div class="modal-box">
-    <div class="modal-title">Array Copy</div>
     <div style="display:grid;grid-template-columns:16px 70px 16px 100px;gap:6px 12px;align-items:center;font-size:12px">
       <div></div>
       <div style="text-align:center;font-weight:bold;color:var(--fg2)">Count</div>
       <div></div>
-      <div style="text-align:center;font-weight:bold;color:var(--fg2)" class="array-modal-pitch-label">Pitch (µm)</div>
+      <div style="text-align:center;font-weight:bold;color:var(--fg2)" class="duplicate-modal-pitch-label">Pitch (µm)</div>
       <label>X</label>
-      <input id="array-modal-nx" type="number" value="3" min="1" step="1"
+      <input id="duplicate-modal-nx" type="number" value="1" min="1" step="1"
         style="background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px;width:100%;box-sizing:border-box">
       <label>X</label>
-      <input id="array-modal-px" type="number" value="2000" step="100"
+      <input id="duplicate-modal-px" type="number" value="2000" step="100"
         style="background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px;width:100%;box-sizing:border-box">
       <label>Y</label>
-      <input id="array-modal-ny" type="number" value="3" min="1" step="1"
+      <input id="duplicate-modal-ny" type="number" value="1" min="1" step="1"
         style="background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px;width:100%;box-sizing:border-box">
       <label>Y</label>
-      <input id="array-modal-py" type="number" value="2000" step="100"
+      <input id="duplicate-modal-py" type="number" value="2000" step="100"
         style="background:var(--bg3);border:1px solid var(--border);color:var(--fg);padding:4px 6px;border-radius:3px;font-size:13px;width:100%;box-sizing:border-box">
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-      <button id="array-modal-cancel" class="hdr-btn">Cancel</button>
-      <button id="array-modal-ok" class="hdr-btn">OK</button>
+      <button id="duplicate-modal-cancel" class="hdr-btn">Cancel</button>
+      <button id="duplicate-modal-ok" class="hdr-btn">OK</button>
     </div>
   </div>
 </div>

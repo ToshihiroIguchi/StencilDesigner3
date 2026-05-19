@@ -17,7 +17,7 @@ import { hitTest, hitTestAnnotation } from '../core/selection';
 import { findSnap, type SnapResult } from '../core/snap';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
-  ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand,
+  DuplicateCommand, MoveCommand, ResizeCommand,
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
   UpdateLayerStyleCommand, MoveShapesToLayerCommand, PasteCommand,
 } from '../state/commands';
@@ -63,11 +63,11 @@ export class App {
   private animFrame: number | null = null;
   private pendingRender = false;
   private filletRadius = 500;
-  private copyOffsetX = 1000;   // µm — last-used Copy X offset
-  private copyOffsetY = 0;      // µm — last-used Copy Y offset
   private clipboard: import('../types').Polygon[] = [];
-  private arrayPitchX = 2000;   // µm — last-used Array pitch X
-  private arrayPitchY = 2000;   // µm — last-used Array pitch Y
+  private duplicateCountX = 1;  // µm — last-used Duplicate count X
+  private duplicateCountY = 1;  // µm — last-used Duplicate count Y
+  private duplicatePitchX = 2000;   // µm — last-used Duplicate pitch X
+  private duplicatePitchY = 2000;   // µm — last-used Duplicate pitch Y
   private drcConfig: DrcConfig = { ...DEFAULT_DRC_CONFIG };
   private drcErrors: DrcError[] = [];
   private diffStep: 0 | 1 | 2 = 0;
@@ -242,8 +242,7 @@ export class App {
     document.getElementById('btn-delete')?.addEventListener('click', () => this.deleteSelected());
     document.getElementById('btn-union')?.addEventListener('click', () => this.doUnion());
     document.getElementById('btn-difference')?.addEventListener('click', () => this.doDifference());
-    document.getElementById('btn-copy-btn')?.addEventListener('click', () => this.doCopy());
-    document.getElementById('btn-array')?.addEventListener('click', () => this.doArray());
+    document.getElementById('btn-copy-btn')?.addEventListener('click', () => this.doDuplicate());
     document.getElementById('btn-file-menu')?.addEventListener('click', (e) => this.toggleFileMenu(e));
     document.getElementById('file-menu')?.addEventListener('click', (e) => {
       const item = (e.target as HTMLElement).closest('.file-menu-item') as HTMLElement | null;
@@ -825,9 +824,7 @@ export class App {
   duplicateSelected(): void {
     const state = this.history.state;
     if (state.selection.length === 0) return;
-    const dx = this.copyOffsetX || 1000;
-    const dy = this.copyOffsetY || 1000;
-    this.history.execute(new CopyCommand(state.selection, dx, dy));
+    this.history.execute(new DuplicateCommand(state.selection, 1, 1, this.duplicatePitchX, this.duplicatePitchY));
     markDirty();
     this.requestRender();
   }
@@ -845,9 +842,7 @@ export class App {
 
   pasteFromClipboard(): void {
     if (this.clipboard.length === 0) return;
-    const dx = this.copyOffsetX || 1000;
-    const dy = this.copyOffsetY || 1000;
-    const pasted = this.clipboard.map((p) => translatePolygon(p, dx, dy));
+    const pasted = this.clipboard.map((p) => translatePolygon(p, this.duplicatePitchX, this.duplicatePitchY));
     this.clipboard = pasted.map((p) => clonePolygon(p));
     this.history.execute(new PasteCommand(pasted));
     markDirty();
@@ -859,25 +854,12 @@ export class App {
     this.deleteSelected();
   }
 
-  async doCopy(): Promise<void> {
+  async doDuplicate(): Promise<void> {
     const state = this.history.state;
     if (state.selection.length === 0) return;
-    const result = await this.showCopyModal();
+    const result = await this.showDuplicateModal();
     if (result === null) return;
-    this.history.execute(new CopyCommand(state.selection, result.dx, result.dy));
-    markDirty();
-    this.requestRender();
-  }
-
-  async doArray(): Promise<void> {
-    const state = this.history.state;
-    if (state.selection.length === 0) {
-      await this.showMessageModal({ title: 'Array Copy', message: 'Select shapes first.' });
-      return;
-    }
-    const result = await this.showArrayModal();
-    if (result === null) return;
-    this.history.execute(new ArrayCopyCommand(state.selection, result.nx, result.ny, result.pitchX, result.pitchY));
+    this.history.execute(new DuplicateCommand(state.selection, result.nx, result.ny, result.pitchX, result.pitchY));
     markDirty();
     this.requestRender();
   }
@@ -1170,56 +1152,20 @@ export class App {
     });
   }
 
-  private showCopyModal(): Promise<{ dx: number; dy: number } | null> {
+  private showDuplicateModal(): Promise<{ nx: number; ny: number; pitchX: number; pitchY: number } | null> {
     return new Promise((resolve) => {
-      const modal = document.getElementById('copy-modal') as HTMLElement;
-      const xInput = document.getElementById('copy-modal-x') as HTMLInputElement;
-      const yInput = document.getElementById('copy-modal-y') as HTMLInputElement;
-      const okBtn = document.getElementById('copy-modal-ok') as HTMLButtonElement;
-      const cancelBtn = document.getElementById('copy-modal-cancel') as HTMLButtonElement;
+      const modal = document.getElementById('duplicate-modal') as HTMLElement;
+      const nxInput = document.getElementById('duplicate-modal-nx') as HTMLInputElement;
+      const nyInput = document.getElementById('duplicate-modal-ny') as HTMLInputElement;
+      const pxInput = document.getElementById('duplicate-modal-px') as HTMLInputElement;
+      const pyInput = document.getElementById('duplicate-modal-py') as HTMLInputElement;
+      const okBtn = document.getElementById('duplicate-modal-ok') as HTMLButtonElement;
+      const cancelBtn = document.getElementById('duplicate-modal-cancel') as HTMLButtonElement;
       const unit = this.history.state.displayUnit;
-      xInput.value = UnitConverter.formatOutput(this.copyOffsetX, unit);
-      yInput.value = UnitConverter.formatOutput(this.copyOffsetY, unit);
-      modal.style.display = '';
-      xInput.focus();
-      xInput.select();
-      const close = (result: { dx: number; dy: number } | null) => {
-        modal.style.display = 'none';
-        okBtn.removeEventListener('click', onOk);
-        cancelBtn.removeEventListener('click', onCancel);
-        modal.removeEventListener('keydown', onKey);
-        resolve(result);
-      };
-      const onOk = () => {
-        const dx = UnitConverter.parseInput(xInput.value, this.history.state.displayUnit);
-        const dy = UnitConverter.parseInput(yInput.value, this.history.state.displayUnit);
-        this.copyOffsetX = dx;
-        this.copyOffsetY = dy;
-        close({ dx, dy });
-      };
-      const onCancel = () => close(null);
-      const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Enter') onOk();
-        if (e.key === 'Escape') close(null);
-      };
-      okBtn.addEventListener('click', onOk);
-      cancelBtn.addEventListener('click', onCancel);
-      modal.addEventListener('keydown', onKey);
-    });
-  }
-
-  private showArrayModal(): Promise<{ nx: number; ny: number; pitchX: number; pitchY: number } | null> {
-    return new Promise((resolve) => {
-      const modal = document.getElementById('array-modal') as HTMLElement;
-      const nxInput = document.getElementById('array-modal-nx') as HTMLInputElement;
-      const nyInput = document.getElementById('array-modal-ny') as HTMLInputElement;
-      const pxInput = document.getElementById('array-modal-px') as HTMLInputElement;
-      const pyInput = document.getElementById('array-modal-py') as HTMLInputElement;
-      const okBtn = document.getElementById('array-modal-ok') as HTMLButtonElement;
-      const cancelBtn = document.getElementById('array-modal-cancel') as HTMLButtonElement;
-      const unit = this.history.state.displayUnit;
-      pxInput.value = UnitConverter.formatOutput(this.arrayPitchX, unit);
-      pyInput.value = UnitConverter.formatOutput(this.arrayPitchY, unit);
+      nxInput.value = String(this.duplicateCountX);
+      nyInput.value = String(this.duplicateCountY);
+      pxInput.value = UnitConverter.formatOutput(this.duplicatePitchX, unit);
+      pyInput.value = UnitConverter.formatOutput(this.duplicatePitchY, unit);
       modal.style.display = '';
       nxInput.focus();
       nxInput.select();
@@ -1236,8 +1182,10 @@ export class App {
         const pitchX = UnitConverter.parseInput(pxInput.value, this.history.state.displayUnit);
         const pitchY = UnitConverter.parseInput(pyInput.value, this.history.state.displayUnit);
         if (isNaN(nx) || isNaN(ny) || nx < 1 || ny < 1) return;
-        this.arrayPitchX = pitchX;
-        this.arrayPitchY = pitchY;
+        this.duplicateCountX = nx;
+        this.duplicateCountY = ny;
+        this.duplicatePitchX = pitchX;
+        this.duplicatePitchY = pitchY;
         close({ nx, ny, pitchX, pitchY });
       };
       const onCancel = () => close(null);
@@ -2045,9 +1993,7 @@ export class App {
 
     const displayUnitLabel = unit === 'um' ? 'µm' : unit;
     // Update input modal labels
-    document.querySelectorAll('.copy-modal-x-label').forEach((el) => { el.textContent = `Offset X (${displayUnitLabel})`; });
-    document.querySelectorAll('.copy-modal-y-label').forEach((el) => { el.textContent = `Offset Y (${displayUnitLabel})`; });
-    document.querySelectorAll('.array-modal-pitch-label').forEach((el) => { el.textContent = `Pitch (${displayUnitLabel})`; });
+    document.querySelectorAll('.duplicate-modal-pitch-label').forEach((el) => { el.textContent = `Pitch (${displayUnitLabel})`; });
 
     // Update input attributes (step) to allow decimals in mm mode
     const inputs = document.querySelectorAll('input[type="number"]');
@@ -2111,14 +2057,10 @@ export class App {
     const drcSInput = document.getElementById('drc-min-spacing') as HTMLInputElement | null;
     if (drcSInput) drcSInput.value = UnitConverter.formatOutput(this.drcConfig.minSpacingUm, unit);
 
-    const copyXIn = document.getElementById('copy-modal-x') as HTMLInputElement | null;
-    if (copyXIn) copyXIn.value = UnitConverter.formatOutput(this.copyOffsetX, unit);
-    const copyYIn = document.getElementById('copy-modal-y') as HTMLInputElement | null;
-    if (copyYIn) copyYIn.value = UnitConverter.formatOutput(this.copyOffsetY, unit);
-    const arrayPxIn = document.getElementById('array-modal-px') as HTMLInputElement | null;
-    if (arrayPxIn) arrayPxIn.value = UnitConverter.formatOutput(this.arrayPitchX, unit);
-    const arrayPyIn = document.getElementById('array-modal-py') as HTMLInputElement | null;
-    if (arrayPyIn) arrayPyIn.value = UnitConverter.formatOutput(this.arrayPitchY, unit);
+    const dupPxIn = document.getElementById('duplicate-modal-px') as HTMLInputElement | null;
+    if (dupPxIn) dupPxIn.value = UnitConverter.formatOutput(this.duplicatePitchX, unit);
+    const dupPyIn = document.getElementById('duplicate-modal-py') as HTMLInputElement | null;
+    if (dupPyIn) dupPyIn.value = UnitConverter.formatOutput(this.duplicatePitchY, unit);
 
     // Refresh selection props if visible
     this.updateRightPanel(state);

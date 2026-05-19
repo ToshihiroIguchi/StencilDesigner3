@@ -1,6 +1,6 @@
 import type { AppState, Command, Selection, Polygon, Ring, Layer, Dimension, DimensionAnchor, Point, Annotation } from '../types';
 import { DIMENSIONS_LAYER } from '../types';
-import { addShape, moveShapes, copyShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
+import { addShape, moveShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
 import { normalize, normalizeAll } from '../normalize';
 import { resolveAnchor, resolveEdge } from '../core/dimension-resolve';
@@ -123,27 +123,26 @@ export class MoveCommand implements Command {
   }
 }
 
-// ─── Copy ────────────────────────────────────────────────────────────────────
+// ─── Duplicate (Copy/Array) ──────────────────────────────────────────────────
 
-export class CopyCommand implements Command {
+export class DuplicateCommand implements Command {
   private copiedIds: string[] = [];
   constructor(
     private selection: Selection[],
-    private dx: number,
-    private dy: number
+    private nx: number,
+    private ny: number,
+    private pitchX: number,
+    private pitchY: number
   ) {}
   do(state: AppState): AppState {
     const before = new Set(state.shapes.map((s) => s.id));
-    const nextShapes = copyShapes(state.shapes, this.selection, this.dx, this.dy);
+    const nextShapes = arrayCopyShapes(state.shapes, this.selection, this.nx, this.ny, this.pitchX, this.pitchY);
     this.copiedIds = nextShapes.filter((s) => !before.has(s.id)).map((s) => s.id);
-    const newSel: Selection[] = this.copiedIds.map((id) => ({
-      type: 'polygon', shapeId: id, index: -1, holeIndex: -1,
-    }));
-    return { ...state, shapes: nextShapes, selection: newSel };
+    return { ...state, shapes: nextShapes, selection: this.selection };
   }
   undo(state: AppState): AppState {
     const ids = new Set(this.copiedIds);
-    return { ...state, shapes: state.shapes.filter((s) => !ids.has(s.id)), selection: [] };
+    return { ...state, shapes: state.shapes.filter((s) => !ids.has(s.id)), selection: this.selection };
   }
 }
 
@@ -203,28 +202,6 @@ export class PasteCommand implements Command {
   }
 }
 
-// ─── Array Copy ──────────────────────────────────────────────────────────────
-
-export class ArrayCopyCommand implements Command {
-  private copiedIds: string[] = [];
-  constructor(
-    private selection: Selection[],
-    private nx: number,
-    private ny: number,
-    private pitchX: number,
-    private pitchY: number
-  ) {}
-  do(state: AppState): AppState {
-    const before = new Set(state.shapes.map((s) => s.id));
-    const nextShapes = arrayCopyShapes(state.shapes, this.selection, this.nx, this.ny, this.pitchX, this.pitchY);
-    this.copiedIds = nextShapes.filter((s) => !before.has(s.id)).map((s) => s.id);
-    return { ...state, shapes: nextShapes, selection: this.selection };
-  }
-  undo(state: AppState): AppState {
-    const ids = new Set(this.copiedIds);
-    return { ...state, shapes: state.shapes.filter((s) => !ids.has(s.id)), selection: this.selection };
-  }
-}
 
 // ─── Boolean Union ───────────────────────────────────────────────────────────
 
