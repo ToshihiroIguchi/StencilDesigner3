@@ -611,13 +611,6 @@ export class CanvasRenderer {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Endpoint dots
-    for (const cp of [c1, c2]) {
-      ctx.beginPath();
-      ctx.arc(cp.x, cp.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
     const mx = (c1.x + c2.x) / 2;
     const my = (c1.y + c2.y) / 2;
     const dx = Math.abs(ov.p2.x - ov.p1.x);
@@ -641,7 +634,7 @@ export class CanvasRenderer {
 
   private static readonly DIM_ARROW = 8;
   private static readonly DIM_ANGLE = Math.PI / 6;
-  private static readonly DIM_EXT_GAP = 3;
+  private static readonly DIM_EXT_GAP = 4;
   private static readonly DIM_EXT_OVER = 5;
   private static readonly DIM_TEXT_GAP = 7;
 
@@ -773,14 +766,6 @@ export class CanvasRenderer {
       ctx.restore();
     }
 
-    // Reference point dots
-    for (const p of [p1, p2]) {
-      const cp = worldToCanvas(p.x, p.y, vt);
-      ctx.beginPath();
-      ctx.arc(cp.x, cp.y, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
     ctx.restore();
   }
 
@@ -819,9 +804,6 @@ export class CanvasRenderer {
     ctx.setLineDash([4, 4]);
 
     const c1 = worldToCanvas(draft.p1.x, draft.p1.y, vt);
-    ctx.beginPath();
-    ctx.arc(c1.x, c1.y, 4, 0, Math.PI * 2);
-    ctx.fill();
 
     if (!draft.p2) { ctx.restore(); return; }
     const c2 = worldToCanvas(draft.p2.x, draft.p2.y, vt);
@@ -829,9 +811,6 @@ export class CanvasRenderer {
     ctx.moveTo(c1.x, c1.y);
     ctx.lineTo(c2.x, c2.y);
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(c2.x, c2.y, 4, 0, Math.PI * 2);
-    ctx.fill();
 
     if (draft.kind === 'centerline' || draft.kind === 'arrow') {
       ctx.restore();
