@@ -19,7 +19,7 @@ import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
   ArrayCopyCommand, CopyCommand, MoveCommand, ResizeCommand,
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
-  UpdateLayerStyleCommand, MoveShapesToLayerCommand,
+  UpdateLayerStyleCommand, MoveShapesToLayerCommand, PasteCommand,
 } from '../state/commands';
 import { loadPrefs, savePrefs } from '../state/autosave';
 import {
@@ -30,7 +30,7 @@ import {
 import { importDxf, type ImportResult } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { downloadPdf } from '../pdf/exporter';
-import { polygonArea, polygonBbox } from '../core/geometry';
+import { polygonArea, polygonBbox, clonePolygon, translatePolygon } from '../core/geometry';
 import { resizePolygon } from '../core/transform';
 import { resolveDimension } from '../core/dimension-resolve';
 import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
@@ -65,6 +65,7 @@ export class App {
   private filletRadius = 500;
   private copyOffsetX = 1000;   // µm — last-used Copy X offset
   private copyOffsetY = 0;      // µm — last-used Copy Y offset
+  private clipboard: import('../types').Polygon[] = [];
   private arrayPitchX = 2000;   // µm — last-used Array pitch X
   private arrayPitchY = 2000;   // µm — last-used Array pitch Y
   private drcConfig: DrcConfig = { ...DEFAULT_DRC_CONFIG };
@@ -615,25 +616,35 @@ export class App {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
+    const target = e.target as HTMLElement;
+    const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+    const editingText = (this.activeTool instanceof TextTool && this.activeTool.isEditing())
+      || (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing());
+
     if (e.ctrlKey || e.metaKey) {
+      // Ctrl+Shift+Z must be checked before plain Ctrl+Z
+      if (e.key === 'z' && e.shiftKey) {
+        if (editingText) return;
+        e.preventDefault(); this.redo(); return;
+      }
       if (e.key === 'z') {
-        // Let textarea handle Ctrl+Z natively when text/annotation is being typed
-        if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) return;
-        if (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing()) return;
-        e.preventDefault();
-        this.undo();
-        return;
+        if (editingText) return;
+        e.preventDefault(); this.undo(); return;
       }
       if (e.key === 'y') {
-        // Block redo during text/annotation editing
-        if (this.activeTool instanceof TextTool && this.activeTool.isEditing()) return;
-        if (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing()) return;
+        if (editingText) return;
         e.preventDefault(); this.redo(); return;
       }
       if (e.key === 's') { e.preventDefault(); if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state); return; }
+      // Clipboard / selection shortcuts — skip when focus is in an input or text tool is editing
+      if (!inInput && !editingText) {
+        if (e.key === 'a') { e.preventDefault(); this.selectAll(); return; }
+        if (e.key === 'c') { e.preventDefault(); this.copySelectedToClipboard(); return; }
+        if (e.key === 'x') { e.preventDefault(); this.cutSelected(); return; }
+        if (e.key === 'v') { e.preventDefault(); this.pasteFromClipboard(); return; }
+        if (e.key === 'd') { e.preventDefault(); this.duplicateSelected(); return; }
+      }
     }
-    const target = e.target as HTMLElement;
-    const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
     if (!inInput && !e.ctrlKey && !e.metaKey) {
       if (e.key === 'v' || e.key === 'V') { this.setTool('select'); return; }
       if (e.key === 'r' || e.key === 'R') { this.setTool('rect'); return; }
@@ -650,6 +661,20 @@ export class App {
       if (e.key === '+' || e.key === '=') { e.preventDefault(); this.zoomStep(1); return; }
       if (e.key === '-') { e.preventDefault(); this.zoomStep(-1); return; }
       if (e.key === '0') { e.preventDefault(); this.resetZoom(); return; }
+      // Arrow key nudge — active only in select tool with a selection
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const state = this.history.state;
+        if (state.selection.length > 0 && state.activeTool === 'select') {
+          e.preventDefault();
+          const step = state.gridSize * (e.shiftKey ? 10 : 1);
+          const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+          const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+          this.history.execute(new MoveCommand(state.selection, dx, dy));
+          markDirty();
+          this.requestRender();
+          return;
+        }
+      }
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       // PolygonTool in progress consumes Backspace to pop the last vertex
@@ -781,6 +806,57 @@ export class App {
       document.getElementById('btn-difference')?.classList.remove('active');
       this.requestRender();
     }
+  }
+
+  selectAll(): void {
+    const state = this.history.state;
+    const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+    const selectable = state.shapes.filter((s) => {
+      const l = layerMap.get(s.layer);
+      return l && l.visible && !l.locked;
+    });
+    if (selectable.length === 0) return;
+    state.selection = selectable.map((s) => ({
+      type: 'polygon' as const, shapeId: s.id, index: -1, holeIndex: -1,
+    }));
+    this.requestRender();
+  }
+
+  duplicateSelected(): void {
+    const state = this.history.state;
+    if (state.selection.length === 0) return;
+    const dx = this.copyOffsetX || 1000;
+    const dy = this.copyOffsetY || 1000;
+    this.history.execute(new CopyCommand(state.selection, dx, dy));
+    markDirty();
+    this.requestRender();
+  }
+
+  copySelectedToClipboard(): void {
+    const state = this.history.state;
+    const ids = new Set(
+      state.selection.filter((s) => s.type === 'polygon').map((s) => s.shapeId),
+    );
+    if (ids.size === 0) return;
+    this.clipboard = state.shapes
+      .filter((s) => ids.has(s.id))
+      .map((s) => clonePolygon(s));
+  }
+
+  pasteFromClipboard(): void {
+    if (this.clipboard.length === 0) return;
+    const dx = this.copyOffsetX || 1000;
+    const dy = this.copyOffsetY || 1000;
+    const pasted = this.clipboard.map((p) => translatePolygon(p, dx, dy));
+    this.clipboard = pasted.map((p) => clonePolygon(p));
+    this.history.execute(new PasteCommand(pasted));
+    markDirty();
+    this.requestRender();
+  }
+
+  cutSelected(): void {
+    this.copySelectedToClipboard();
+    this.deleteSelected();
   }
 
   async doCopy(): Promise<void> {

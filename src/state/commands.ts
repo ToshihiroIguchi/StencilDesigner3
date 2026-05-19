@@ -182,6 +182,27 @@ export class DeleteCommand implements Command {
   }
 }
 
+// ─── Paste ───────────────────────────────────────────────────────────────────
+
+export class PasteCommand implements Command {
+  private pastedIds: string[];
+  constructor(private polygons: Polygon[]) {
+    this.pastedIds = polygons.map((p) => p.id);
+  }
+  do(state: AppState): AppState {
+    let shapes = state.shapes;
+    for (const p of this.polygons) shapes = addShape(shapes, p);
+    const newSel: Selection[] = this.pastedIds.map((id) => ({
+      type: 'polygon', shapeId: id, index: -1, holeIndex: -1,
+    }));
+    return { ...state, shapes, selection: newSel };
+  }
+  undo(state: AppState): AppState {
+    const ids = new Set(this.pastedIds);
+    return { ...state, shapes: state.shapes.filter((s) => !ids.has(s.id)), selection: [] };
+  }
+}
+
 // ─── Array Copy ──────────────────────────────────────────────────────────────
 
 export class ArrayCopyCommand implements Command {
