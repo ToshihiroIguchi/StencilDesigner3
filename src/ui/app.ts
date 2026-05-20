@@ -1162,8 +1162,8 @@ export class App {
       const okBtn = document.getElementById('duplicate-modal-ok') as HTMLButtonElement;
       const cancelBtn = document.getElementById('duplicate-modal-cancel') as HTMLButtonElement;
       const unit = this.history.state.displayUnit;
-      nxInput.value = String(this.duplicateCountX);
-      nyInput.value = String(this.duplicateCountY);
+      nxInput.value = String(Math.max(1, this.duplicateCountX));
+      nyInput.value = String(Math.max(1, this.duplicateCountY));
       pxInput.value = UnitConverter.formatOutput(this.duplicatePitchX, unit);
       pyInput.value = UnitConverter.formatOutput(this.duplicatePitchY, unit);
       modal.style.display = '';
