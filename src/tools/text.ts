@@ -6,30 +6,30 @@ import { markDirty } from '../state/docStore';
 import { loadFont, getCachedFont } from '../core/font-loader';
 import { textToPolygons, isAsciiPrintable } from '../core/text-to-polygon';
 import { union } from '../core/boolean';
+import { TextareaOverlay } from './textarea-overlay';
 
 export class TextTool extends BaseTool {
-  private mode: 'idle' | 'editing' = 'idle';
-  private text = '';
   private capHeightUm = 5000;
   private letterSpacingUm = 0;
 
   private previewPolys: Polygon[] | null = null;
-  private cursorOrigin: Point | null = null;
   private editOrigin: Point | null = null;
   private editPolys: Polygon[] | null = null;
 
-  // Textarea overlay
-  private textarea: HTMLTextAreaElement | null = null;
-  private blurTimer: ReturnType<typeof setTimeout> | null = null;
-  private boundOnInput: () => void;
-  private boundOnKeyDown: (e: KeyboardEvent) => void;
+  private readonly textarea: HTMLTextAreaElement | null;
+  private readonly overlay: TextareaOverlay;
 
   constructor(ctx: ToolContext) {
     super(ctx);
     void loadFont();
     this.textarea = document.getElementById('text-input') as HTMLTextAreaElement | null;
-    this.boundOnInput = () => this.onTextareaInput();
-    this.boundOnKeyDown = (e) => this.onTextareaKeyDown(e);
+    this.overlay = new TextareaOverlay({
+      elementId: 'text-input',
+      hintElementId: 'text-hint',
+      hintEditing: 'Editing… (Enter: confirm, Esc: cancel)',
+      hintIdle: 'Click canvas to type',
+      filterInput: (raw) => raw.replace(/[^\x20-\x7E]/g, ''),
+    });
   }
 
   setParams(capHeightUm: number, letterSpacingUm: number): void {
@@ -39,48 +39,64 @@ export class TextTool extends BaseTool {
     this.ctx.requestRender();
   }
 
-  isEditing(): boolean { return this.mode === 'editing'; }
+  isEditing(): boolean { return this.overlay.isOpen; }
 
   getTextPreviewPolys(): Polygon[] | null {
-    return this.mode === 'editing' ? this.editPolys : this.previewPolys;
+    return this.overlay.isOpen ? this.editPolys : this.previewPolys;
   }
 
-  // ── Textarea lifecycle ───────────────────────────────────────────────────────
+  // ── Canvas events ────────────────────────────────────────────────────────────
 
-  private openTextarea(canvasPt: Point, worldPt: Point): void {
-    if (!this.textarea) return;
-    this.editOrigin = worldPt;
-    this.text = '';
-    this.editPolys = null;
-
-    this.textarea.value = '';
-    this.syncTextareaStyle();
-    this.textarea.style.left = `${canvasPt.x}px`;
-    this.textarea.style.top = `${canvasPt.y}px`;
-    this.textarea.style.display = '';
-    this.mode = 'editing';
-
-    this.autoResizeWidth();
-    this.textarea.addEventListener('input', this.boundOnInput);
-    this.textarea.addEventListener('keydown', this.boundOnKeyDown);
-
-    // Blur auto-commits with a small delay so canvas mousedown can cancel it first
-    const onBlur = () => {
-      this.blurTimer = setTimeout(() => {
-        this.blurTimer = null;
-        this.commitEdit();
-      }, 80);
-    };
-    this.textarea.addEventListener('blur', onBlur, { once: true });
-
-    setTimeout(() => { this.textarea?.focus(); }, 0);
-
-    const hint = document.getElementById('text-hint');
-    if (hint) hint.textContent = 'Editing… (Enter: confirm, Esc: cancel)';
+  onMouseMove(worldPt: Point, _cp: Point, _shift: boolean, _state: AppState): void {
+    if (this.overlay.isOpen) return;
+    const s = this.ctx.getSnap(worldPt);
+    this.snap = s;
     this.ctx.requestRender();
   }
 
-  private syncTextareaStyle(): void {
+  onMouseDown(worldPt: Point, canvasPt: Point, _shift: boolean, _state: AppState): void {
+    const origin = this.ctx.getSnap(worldPt).point;
+    if (this.overlay.isOpen) {
+      this.overlay.cancelBlurTimer();
+      this.overlay.commit();
+    }
+    this.openEditor(canvasPt, origin);
+  }
+
+  onMouseUp(): void {}
+
+  // ── Editor lifecycle ─────────────────────────────────────────────────────────
+
+  private openEditor(canvasPt: Point, worldPt: Point): void {
+    this.editOrigin = worldPt;
+    this.editPolys = null;
+    this.overlay.open(canvasPt, '', {
+      syncStyle: () => this.syncStyle(),
+      onInput: (text, el) => {
+        this.autoResizeWidth(el, text);
+        this.rebuildPolys();
+        this.ctx.requestRender();
+      },
+      onCommit: (text) => {
+        const placePt = this.editOrigin;
+        this.editOrigin = null;
+        this.editPolys = null;
+        if (!text.trim() || !placePt || !isAsciiPrintable(text)) return;
+        const font = getCachedFont();
+        if (font) this.placeSync(placePt, text, font);
+        else void this.placeAsync(placePt, text);
+      },
+      onDiscard: () => {
+        this.editOrigin = null;
+        this.editPolys = null;
+        this.ctx.requestRender();
+      },
+    });
+    this.rebuildPolys();
+    this.ctx.requestRender();
+  }
+
+  private syncStyle(): void {
     if (!this.textarea) return;
     const state = this.ctx.history.state;
     const sizePx = Math.max(8, this.capHeightUm * state.zoom);
@@ -91,105 +107,19 @@ export class TextTool extends BaseTool {
     this.textarea.style.height = `${sizePx + 4}px`;
   }
 
-  private autoResizeWidth(): void {
-    if (!this.textarea) return;
-    const sizePx = parseFloat(this.textarea.style.fontSize) || 16;
-    // Monospace: char width ≈ 0.6× font size
+  private autoResizeWidth(el: HTMLTextAreaElement, text: string): void {
+    const sizePx = parseFloat(el.style.fontSize) || 16;
     const minWidth = sizePx * 2;
-    this.textarea.style.width = `${Math.max(minWidth, this.text.length * sizePx * 0.6 + sizePx)}px`;
+    el.style.width = `${Math.max(minWidth, text.length * sizePx * 0.6 + sizePx)}px`;
   }
-
-  private hideTextarea(): void {
-    if (!this.textarea) return;
-    this.textarea.removeEventListener('input', this.boundOnInput);
-    this.textarea.removeEventListener('keydown', this.boundOnKeyDown);
-    this.textarea.style.display = 'none';
-    this.textarea.value = '';
-    this.mode = 'idle';
-    this.editOrigin = null;
-    this.editPolys = null;
-    this.text = '';
-    const hint = document.getElementById('text-hint');
-    if (hint) hint.textContent = 'Click canvas to type';
-  }
-
-  // ── Input handlers ───────────────────────────────────────────────────────────
-
-  private onTextareaInput(): void {
-    if (!this.textarea) return;
-    const raw = this.textarea.value;
-    // Strip non-ASCII and prevent newlines
-    const ascii = raw.replace(/[^\x20-\x7E]/g, '');
-    if (ascii !== raw) this.textarea.value = ascii;
-    this.text = ascii;
-    this.autoResizeWidth();
-    this.rebuildPolys();
-    this.ctx.requestRender();
-  }
-
-  private onTextareaKeyDown(e: KeyboardEvent): void {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      this.commitEdit();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      this.cancelEdit();
-    }
-  }
-
-  private commitEdit(): void {
-    if (this.mode !== 'editing') return;
-    // Save before hideTextarea() clears them
-    const text = this.textarea?.value.replace(/[^\x20-\x7E]/g, '') ?? '';
-    const placePt = this.editOrigin;
-    this.hideTextarea();
-    if (!text.trim() || !placePt || !isAsciiPrintable(text)) return;
-    const font = getCachedFont();
-    if (font) {
-      this.placeSync(placePt, text, font);
-    } else {
-      void this.placeAsync(placePt, text);
-    }
-  }
-
-  private cancelEdit(): void {
-    this.hideTextarea();
-    this.ctx.requestRender();
-  }
-
-  // ── Canvas events ────────────────────────────────────────────────────────────
-
-  onMouseMove(worldPt: Point, _cp: Point, _shift: boolean, _state: AppState): void {
-    if (this.mode === 'editing') return;
-    const s = this.ctx.getSnap(worldPt);
-    this.cursorOrigin = s.point;
-    this.snap = s;
-    this.rebuildPolys();
-    this.ctx.requestRender();
-  }
-
-  onMouseDown(worldPt: Point, canvasPt: Point, _shift: boolean, _state: AppState): void {
-    const origin = this.ctx.getSnap(worldPt).point;
-    if (this.mode === 'editing') {
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      this.commitEdit();
-    }
-    this.openTextarea(canvasPt, origin);
-  }
-
-  onMouseUp(): void {}
 
   // ── Polygon building ─────────────────────────────────────────────────────────
 
   private rebuildPolys(): void {
-    if (this.mode === 'editing') {
-      this.editPolys = this.buildPolys(this.editOrigin, this.text);
+    if (this.overlay.isOpen) {
+      this.editPolys = this.buildPolys(this.editOrigin, this.overlay.value);
     } else {
-      this.previewPolys = this.buildPolys(this.cursorOrigin, this.text);
+      this.previewPolys = null;
     }
   }
 
@@ -220,13 +150,12 @@ export class TextTool extends BaseTool {
   }
 
   override cancel(): void {
-    if (this.mode === 'editing') {
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      const hasText = this.text.trim().length > 0;
-      if (hasText) this.commitEdit(); else this.cancelEdit();
+    if (this.overlay.isOpen) {
+      this.overlay.cancelBlurTimer();
+      const hasText = this.overlay.value.trim().length > 0;
+      if (hasText) this.overlay.commit(); else this.overlay.discard();
     }
     this.previewPolys = null;
-    this.cursorOrigin = null;
     super.cancel();
   }
 }

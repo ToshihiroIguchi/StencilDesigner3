@@ -3,52 +3,51 @@ import { newId } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import { AddAnnotationCommand, EditAnnotationCommand } from '../state/commands';
 import { markDirty } from '../state/docStore';
+import { TextareaOverlay } from './textarea-overlay';
 
 export class AnnotationTool extends BaseTool {
   private previewPt: Point | null = null;
   private heightUm: number;
 
-  // Textarea overlay managed by this tool
-  private textarea: HTMLTextAreaElement | null;
-  private isOpen = false;
-  private placePt: Point | null = null;
-  private editingId: string | null = null;
-  private blurTimer: ReturnType<typeof setTimeout> | null = null;
-  private boundKeyDown: (e: KeyboardEvent) => void;
-  private boundInput: () => void;
+  private readonly textarea: HTMLTextAreaElement | null;
+  private readonly overlay: TextareaOverlay;
 
   constructor(ctx: ToolContext, heightUm = 1000) {
     super(ctx);
     this.heightUm = heightUm;
     this.textarea = document.getElementById('annotation-input') as HTMLTextAreaElement | null;
-    this.boundKeyDown = (e) => this.onTextareaKeyDown(e);
-    this.boundInput = () => this.autoResize();
+    this.overlay = new TextareaOverlay({
+      elementId: 'annotation-input',
+      hintElementId: 'ann-hint',
+      hintEditing: 'Shift+Enter: newline',
+      hintIdle: 'Click to place',
+      allowNewlines: true,
+    });
   }
 
   setHeightUm(h: number): void {
     this.heightUm = h;
-    if (this.isOpen) this.syncTextareaStyle();
+    if (this.overlay.isOpen) this.syncStyle();
   }
 
-  isEditing(): boolean { return this.isOpen; }
+  isEditing(): boolean { return this.overlay.isOpen; }
   getPreviewPt(): Point | null { return this.previewPt; }
 
   // ── Public: open in edit mode for an existing annotation (dbl-click) ────────
 
   startEdit(ann: Annotation, canvasPt: Point): void {
-    this.openTextarea(canvasPt, ann.origin, ann.id, ann.text);
+    this.openOverlay(canvasPt, ann.origin, ann.id, ann.text);
   }
 
   // ── Mouse handlers ───────────────────────────────────────────────────────────
 
   onMouseDown(worldPt: Point, canvasPt: Point, _shift: boolean, _state: AppState): void {
     const snapped = this.ctx.getSnap(worldPt).point;
-    if (this.isOpen) {
-      // Cancel the blur-based commit (we handle it here)
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      this.commit();
+    if (this.overlay.isOpen) {
+      this.overlay.cancelBlurTimer();
+      this.overlay.commit();
     }
-    this.openTextarea(canvasPt, snapped, null, '');
+    this.openOverlay(canvasPt, snapped, null, '');
   }
 
   onMouseMove(worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {
@@ -60,41 +59,45 @@ export class AnnotationTool extends BaseTool {
 
   onMouseUp(): void {}
 
-  // ── Textarea lifecycle ───────────────────────────────────────────────────────
+  // ── Overlay lifecycle ────────────────────────────────────────────────────────
 
-  private openTextarea(canvasPt: Point, worldPt: Point, editId: string | null, initialText: string): void {
-    if (!this.textarea) return;
-    this.placePt = worldPt;
-    this.editingId = editId;
-
-    this.textarea.value = initialText;
-    this.syncTextareaStyle();
-    this.textarea.style.left = `${canvasPt.x}px`;
-    this.textarea.style.top = `${canvasPt.y}px`;
-    this.textarea.style.display = '';
-    this.isOpen = true;
-
-    this.autoResize();
-    this.textarea.addEventListener('keydown', this.boundKeyDown);
-    this.textarea.addEventListener('input', this.boundInput);
-
-    // Blur auto-commits with a small delay so canvas mousedown can cancel it first
-    const onBlur = () => {
-      this.blurTimer = setTimeout(() => {
-        this.blurTimer = null;
-        this.commit();
-      }, 80);
-    };
-    this.textarea.addEventListener('blur', onBlur, { once: true });
-
-    setTimeout(() => { this.textarea?.focus(); this.textarea?.select(); }, 0);
-
-    const hint = document.getElementById('ann-hint');
-    if (hint) hint.textContent = 'Shift+Enter: newline';
-    this.ctx.requestRender();
+  private openOverlay(
+    canvasPt: Point,
+    worldPt: Point,
+    editId: string | null,
+    initialText: string,
+  ): void {
+    const placePt = worldPt;
+    this.overlay.open(canvasPt, initialText, {
+      syncStyle: () => this.syncStyle(),
+      onInput: (_, el) => {
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+      },
+      onCommit: (text) => {
+        if (!text.trim()) return;
+        if (editId) {
+          this.ctx.history.execute(new EditAnnotationCommand(editId, { text }));
+        } else {
+          const ann: Annotation = {
+            id: newId(),
+            text,
+            origin: placePt,
+            heightUm: this.heightUm,
+            layer: 'DIMENSIONS',
+          };
+          this.ctx.history.execute(new AddAnnotationCommand(ann));
+        }
+        markDirty();
+        this.ctx.requestRender();
+      },
+      onDiscard: () => {
+        this.ctx.requestRender();
+      },
+    });
   }
 
-  private syncTextareaStyle(): void {
+  private syncStyle(): void {
     if (!this.textarea) return;
     const state = this.ctx.history.state;
     const sizePx = Math.max(8, this.heightUm * state.zoom);
@@ -103,76 +106,15 @@ export class AnnotationTool extends BaseTool {
     this.textarea.style.fontSize = `${sizePx}px`;
     this.textarea.style.lineHeight = '1.2';
     this.textarea.style.color = color;
-  }
-
-  private autoResize(): void {
-    if (!this.textarea) return;
     this.textarea.style.height = 'auto';
     this.textarea.style.height = `${this.textarea.scrollHeight}px`;
   }
 
-  private onTextareaKeyDown(e: KeyboardEvent): void {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      this.commit();
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      this.discard();
-    }
-  }
-
-  private commit(): void {
-    const text = this.textarea?.value ?? '';
-    const placePt = this.placePt;
-    const editingId = this.editingId;
-    this.hideTextarea();
-    if (!text.trim() || !placePt) return;
-
-    if (editingId) {
-      this.ctx.history.execute(new EditAnnotationCommand(editingId, { text }));
-    } else {
-      const ann: Annotation = {
-        id: newId(),
-        text,
-        origin: placePt,
-        heightUm: this.heightUm,
-        layer: 'DIMENSIONS',
-      };
-      this.ctx.history.execute(new AddAnnotationCommand(ann));
-    }
-    markDirty();
-    this.ctx.requestRender();
-  }
-
-  private discard(): void {
-    this.hideTextarea();
-    this.ctx.requestRender();
-  }
-
-  private hideTextarea(): void {
-    if (!this.textarea) return;
-    this.textarea.removeEventListener('keydown', this.boundKeyDown);
-    this.textarea.removeEventListener('input', this.boundInput);
-    this.textarea.style.display = 'none';
-    this.textarea.value = '';
-    this.isOpen = false;
-    this.placePt = null;
-    this.editingId = null;
-    const hint = document.getElementById('ann-hint');
-    if (hint) hint.textContent = 'Click to place';
-  }
-
   override cancel(): void {
-    if (this.isOpen) {
-      if (this.blurTimer !== null) { clearTimeout(this.blurTimer); this.blurTimer = null; }
-      // Commit if there's text, discard otherwise
-      const hasText = (this.textarea?.value ?? '').trim().length > 0;
-      if (hasText) this.commit(); else this.discard();
+    if (this.overlay.isOpen) {
+      this.overlay.cancelBlurTimer();
+      const hasText = this.overlay.value.trim().length > 0;
+      if (hasText) this.overlay.commit(); else this.overlay.discard();
     }
     this.previewPt = null;
     super.cancel();
