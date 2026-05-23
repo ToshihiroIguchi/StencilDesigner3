@@ -1752,7 +1752,7 @@ export class App {
       if (ct.hasP1()) {
         if (el('footer-w')) el('footer-w')!.textContent = 'Cut:';
         if (el('footer-h')) el('footer-h')!.textContent = 'Click p2';
-        if (el('footer-area')) el('footer-area')!.textContent = 'Shift=snap  Esc cancel';
+        if (el('footer-area')) el('footer-area')!.textContent = 'Shift=angle  Esc cancel';
       } else {
         if (el('footer-w')) el('footer-w')!.textContent = 'Cut:';
         if (el('footer-h')) el('footer-h')!.textContent = 'Click p1';
@@ -1773,7 +1773,7 @@ export class App {
       const n = (this.activeTool as PolygonTool).vertexCount();
       if (el('footer-w')) el('footer-w')!.textContent = `${n} pts`;
       if (el('footer-h')) el('footer-h')!.textContent = 'Enter/click①';
-      if (el('footer-area')) el('footer-area')!.textContent = '⌫ undo  Esc cancel';
+      if (el('footer-area')) el('footer-area')!.textContent = '⌫ undo  Shift=angle  Esc cancel';
     } else {
       const sel = state.selection;
       let w = 0, h = 0, a = 0;
