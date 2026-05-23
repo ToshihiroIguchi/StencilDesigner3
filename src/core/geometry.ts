@@ -127,6 +127,29 @@ export function segmentMinDistanceSq(a1: Point, a2: Point, b1: Point, b2: Point)
   );
 }
 
+/**
+ * Compute the intersection point of segment a1→a2 with segment b1→b2.
+ * Returns null if segments don't intersect or are collinear/parallel.
+ * Returns the parameter t along a1→a2 and the integer-rounded intersection point.
+ */
+export function segmentIntersectionPoint(
+  a1: Point, a2: Point, b1: Point, b2: Point,
+): { t: number; u: number; pt: Point } | null {
+  const dax = a2.x - a1.x, day = a2.y - a1.y;
+  const dbx = b2.x - b1.x, dby = b2.y - b1.y;
+  const denom = dax * dby - day * dbx;
+  if (denom === 0) return null; // parallel or collinear
+  const cx = b1.x - a1.x, cy = b1.y - a1.y;
+  const t = (cx * dby - cy * dbx) / denom;
+  const u = (cx * day - cy * dax) / denom;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return {
+    t,
+    u,
+    pt: { x: Math.round(a1.x + t * dax), y: Math.round(a1.y + t * day) },
+  };
+}
+
 /** Returns true if segment a1→a2 and b1→b2 properly intersect (strict sign change). */
 export function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
   const cross = (o: Point, p: Point, q: Point) =>

@@ -30,6 +30,7 @@ export type ToolType =
   | 'array'
   | 'union'
   | 'difference'
+  | 'cut'
   | 'fillet'
   | 'measure'
   | 'dimension'

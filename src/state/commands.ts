@@ -520,6 +520,49 @@ export class EditAnnotationCommand implements Command {
   }
 }
 
+// ─── Cut (split polygon by line segment) ─────────────────────────────────────
+
+export class CutCommand implements Command {
+  private removedIds: string[];
+  private addedIds: string[];
+  private dimsBefore: Dimension[] = [];
+
+  constructor(
+    private readonly originals: Polygon[],
+    private readonly pieces: Polygon[],
+  ) {
+    this.removedIds = originals.map((p) => p.id);
+    this.addedIds = pieces.map((p) => p.id);
+  }
+
+  do(state: AppState): AppState {
+    this.dimsBefore = state.dimensions;
+    const removedSet = new Set(this.removedIds);
+    const remaining = state.shapes.filter((s) => !removedSet.has(s.id));
+    const frozenDims = freezeDimsForRemovedShapes(state.dimensions, state.shapes, removedSet);
+    const newSel: Selection[] = this.addedIds.map((id) => ({
+      type: 'polygon', shapeId: id, index: -1, holeIndex: -1,
+    }));
+    return {
+      ...state,
+      shapes: normalizeAll([...remaining, ...this.pieces]),
+      dimensions: frozenDims,
+      selection: newSel,
+    };
+  }
+
+  undo(state: AppState): AppState {
+    const addedSet = new Set(this.addedIds);
+    const remaining = state.shapes.filter((s) => !addedSet.has(s.id));
+    return {
+      ...state,
+      shapes: normalizeAll([...remaining, ...this.originals]),
+      dimensions: this.dimsBefore,
+      selection: [],
+    };
+  }
+}
+
 export class MoveAnnotationCommand implements Command {
   private before: Point | null = null;
   constructor(private id: string, private newOrigin: Point) {}

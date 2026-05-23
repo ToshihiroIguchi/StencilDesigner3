@@ -7,6 +7,7 @@ export interface ToolContext {
   history: History;
   getSnap: (worldPt: Point) => SnapResult;
   requestRender: () => void;
+  notify: (msg: string) => void;
 }
 
 export abstract class BaseTool {

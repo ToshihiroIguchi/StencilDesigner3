@@ -13,6 +13,7 @@ import { CenterlineTool } from '../tools/centerline';
 import { ArrowTool } from '../tools/arrow';
 import { TextTool } from '../tools/text';
 import { AnnotationTool } from '../tools/annotation';
+import { CutTool } from '../tools/cut';
 import { hitTest, hitTestAnnotation } from '../core/selection';
 import { findSnap, type SnapResult } from '../core/snap';
 import {
@@ -37,7 +38,7 @@ import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
 import type { DrcError } from '../types';
 import { UnitConverter } from '../core/format';
 
-type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool | TextTool | AnnotationTool;
+type AnyTool = SelectTool | RectTool | CircleTool | FilletTool | PolygonTool | MeasureTool | DimensionTool | CenterlineTool | ArrowTool | TextTool | AnnotationTool | CutTool;
 
 function computeNiceGridSize(zoom: number): number {
   const targetPx = 60;
@@ -89,6 +90,7 @@ export class App {
       history: this.history,
       getSnap: (worldPt: Point) => this.getSnap(worldPt),
       requestRender: () => this.requestRender(),
+      notify: (msg: string) => this.showNotify(msg),
     };
     this.activeTool = new SelectTool(toolCtx);
   }
@@ -650,6 +652,7 @@ export class App {
       if (e.key === 'c' || e.key === 'C') { this.setTool('circle'); return; }
       if (e.key === 'p' || e.key === 'P') { this.setTool('polygon'); return; }
       if (e.key === 'f' || e.key === 'F') { this.setTool('fillet'); return; }
+      if (e.key === 'k' || e.key === 'K') { this.setTool('cut'); return; }
       if (e.key === 'm' || e.key === 'M') { this.setTool('measure'); return; }
       if (e.key === 'd' || e.key === 'D') { this.setTool('dimension'); return; }
       if (e.key === 'l' || e.key === 'L') { this.setTool('centerline'); return; }
@@ -694,6 +697,7 @@ export class App {
       history: this.history,
       getSnap: (worldPt: Point) => this.getSnap(worldPt),
       requestRender: () => this.requestRender(),
+      notify: (msg: string) => this.showNotify(msg),
     };
 
     // Update active tool state
@@ -706,6 +710,7 @@ export class App {
       case 'circle': this.activeTool = new CircleTool(toolCtx); break;
       case 'polygon': this.activeTool = new PolygonTool(toolCtx); break;
       case 'fillet': this.activeTool = new FilletTool(toolCtx, this.filletRadius); break;
+      case 'cut': this.activeTool = new CutTool(toolCtx); break;
       case 'measure': this.activeTool = new MeasureTool(toolCtx); break;
       case 'dimension': this.activeTool = new DimensionTool(toolCtx); break;
       case 'centerline': this.activeTool = new CenterlineTool(toolCtx); break;
@@ -1697,9 +1702,28 @@ export class App {
     this.requestRender();
   }
 
+  // ─── Notification ────────────────────────────────────────────────────────────
+
+  private notifyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private showNotify(msg: string): void {
+    const w = document.getElementById('footer-w');
+    const h = document.getElementById('footer-h');
+    const area = document.getElementById('footer-area');
+    if (w) w.textContent = msg;
+    if (h) h.textContent = '';
+    if (area) area.textContent = '';
+    if (this.notifyTimer !== null) clearTimeout(this.notifyTimer);
+    this.notifyTimer = setTimeout(() => {
+      this.notifyTimer = null;
+      this.requestRender();
+    }, 3000);
+  }
+
   // ─── Right panel ────────────────────────────────────────────────────────────
 
   private updateFooter(state: AppState): void {
+    if (this.notifyTimer !== null) return; // keep notification visible
     const el = (id: string) => document.getElementById(id);
     const unit = state.displayUnit;
     const f = (v: number) => UnitConverter.formatOutput(v, unit);
@@ -1722,6 +1746,17 @@ export class App {
         if (el('footer-w')) el('footer-w')!.textContent = 'Click p1';
         if (el('footer-h')) el('footer-h')!.textContent = '—';
         if (el('footer-area')) el('footer-area')!.textContent = 'Esc clear';
+      }
+    } else if (this.activeTool instanceof CutTool) {
+      const ct = this.activeTool as CutTool;
+      if (ct.hasP1()) {
+        if (el('footer-w')) el('footer-w')!.textContent = 'Cut:';
+        if (el('footer-h')) el('footer-h')!.textContent = 'Click p2';
+        if (el('footer-area')) el('footer-area')!.textContent = 'Shift=snap  Esc cancel';
+      } else {
+        if (el('footer-w')) el('footer-w')!.textContent = 'Cut:';
+        if (el('footer-h')) el('footer-h')!.textContent = 'Click p1';
+        if (el('footer-area')) el('footer-area')!.textContent = 'Esc cancel';
       }
     } else if (this.activeTool instanceof DimensionTool) {
       const steps = ['Click v1', 'Click v2', 'Click offset'];
