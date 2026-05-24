@@ -59,6 +59,10 @@
     <svg class="icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
     Clear
   </button>
+  <button id="btn-help" class="hdr-btn" title="Keyboard Shortcuts Help (?)">
+    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    Help
+  </button>
 </header>
 
 <!-- ── Main ─────────────────────────────────────────────────────────────────── -->
@@ -418,6 +422,38 @@
   </div>
 </div>
 
+<!-- Keyboard Shortcuts Help Modal -->
+<div id="shortcut-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="min-width:360px">
+    <div class="modal-title">Keyboard Shortcuts</div>
+    <div style="max-height:300px;overflow-y:auto;font-size:12px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:4px">
+        <strong>Action</strong><strong>Key</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between"><span>Select Tool</span><kbd>S</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Box Tool</span><kbd>R</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Circle Tool</span><kbd>C</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Polygon Tool</span><kbd>P</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Text Tool</span><kbd>T</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Note Tool</span><kbd>N</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Measure Tool</span><kbd>M</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Centerline Tool</span><kbd>L</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Arrow Tool</span><kbd>A</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Fillet Tool</span><kbd>F</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Delete Selection</span><kbd>Del</kbd> / <kbd>Backspace</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Copy Selection</span><kbd>Ctrl+C</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Array Duplicate</span><kbd>Ctrl+D</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Undo</span><kbd>Ctrl+Z</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Redo</span><kbd>Ctrl+Y</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Zoom Fit</span><kbd>Home</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Help</span><kbd>?</kbd></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button id="shortcut-close" class="hdr-btn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Footer ───────────────────────────────────────────────────────────────── -->
 <footer id="footer">
   <span class="footer-item"><span class="footer-key">X:</span><span class="footer-val" id="footer-cx">0</span></span>
@@ -425,6 +461,7 @@
   <span class="footer-item"><span class="footer-key">W:</span><span class="footer-val" id="footer-w">—</span></span>
   <span class="footer-item"><span class="footer-key">H:</span><span class="footer-val" id="footer-h">—</span></span>
   <span class="footer-item"><span class="footer-key">Area:</span><span class="footer-val" id="footer-area">—</span></span>
+  <span class="footer-item"><span class="footer-key">Sel:</span><span class="footer-val" id="footer-sel">0</span></span>
   <span class="footer-item"><span class="footer-key">Grid:</span><span class="footer-val" id="footer-grid">1000µm</span></span>
   <span class="footer-item"><span class="footer-key">Snap:</span><span class="footer-val" id="footer-snap">ON</span></span>
   <span class="footer-item"><span class="footer-key">Unit:</span><span class="footer-val" id="footer-unit" style="cursor:pointer;color:var(--accent)">mm</span></span>

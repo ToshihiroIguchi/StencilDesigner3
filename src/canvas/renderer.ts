@@ -102,12 +102,14 @@ export class CanvasRenderer {
   /** Resize canvas to fill its CSS container. */
   resize(): void {
     const rect = this.canvas.getBoundingClientRect();
-    this.canvas.width = rect.width;
-    this.canvas.height = rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  get width(): number { return this.canvas.width; }
-  get height(): number { return this.canvas.height; }
+  get width(): number { return this.canvas.clientWidth; }
+  get height(): number { return this.canvas.clientHeight; }
 
   render(
     state: AppState,
@@ -309,6 +311,25 @@ export class CanvasRenderer {
       if (cy < RULER_SIZE) continue;
       ctx.moveTo(RULER_SIZE, cy);
       ctx.lineTo(this.width, cy);
+    }
+    ctx.stroke();
+
+    // Origin axes (X=0, Y=0)
+    const originColor = this.isDark ? 'rgba(74, 158, 255, 0.4)' : 'rgba(74, 158, 255, 0.5)';
+    ctx.strokeStyle = originColor;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    // Y-axis (X = 0)
+    const originCx = vt.panX;
+    if (originCx >= RULER_SIZE && originCx <= this.width) {
+      ctx.moveTo(originCx, RULER_SIZE);
+      ctx.lineTo(originCx, this.height);
+    }
+    // X-axis (Y = 0)
+    const originCy = vt.panY;
+    if (originCy >= RULER_SIZE && originCy <= this.height) {
+      ctx.moveTo(RULER_SIZE, originCy);
+      ctx.lineTo(this.width, originCy);
     }
     ctx.stroke();
   }

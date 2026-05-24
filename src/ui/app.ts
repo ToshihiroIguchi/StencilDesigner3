@@ -263,6 +263,8 @@ export class App {
     document.getElementById('btn-clear')?.addEventListener('click', () => { void this.clearCurrentDoc(); });
     document.getElementById('btn-snap')?.addEventListener('click', () => this.toggleSnap());
     document.getElementById('btn-fit')?.addEventListener('click', () => this.fitToContent());
+    document.getElementById('btn-help')?.addEventListener('click', () => this.toggleHelpModal());
+    document.getElementById('shortcut-close')?.addEventListener('click', () => this.closeHelpModal());
     document.getElementById('footer-zoom')?.addEventListener('click', (e) => this.toggleZoomMenu(e));
     document.getElementById('btn-zoom-in')?.addEventListener('click', () => this.zoomStep(1));
     document.getElementById('btn-zoom-out')?.addEventListener('click', () => this.zoomStep(-1));
@@ -272,8 +274,8 @@ export class App {
         if (val === 'fit') {
           this.fitToContent();
         } else {
-          const cx = this.canvas.width / 2;
-          const cy = this.canvas.height / 2;
+          const cx = this.canvas.clientWidth / 2;
+          const cy = this.canvas.clientHeight / 2;
           this.setZoom(parseFloat(val!), cx, cy);
           this.requestRender();
         }
@@ -647,6 +649,7 @@ export class App {
       }
     }
     if (!inInput && !e.ctrlKey && !e.metaKey) {
+      if (e.key === '?' || e.key === 'h' || e.key === 'H') { e.preventDefault(); this.toggleHelpModal(); return; }
       if (e.key === 'v' || e.key === 'V') { this.setTool('select'); return; }
       if (e.key === 'r' || e.key === 'R') { this.setTool('rect'); return; }
       if (e.key === 'c' || e.key === 'C') { this.setTool('circle'); return; }
@@ -686,7 +689,11 @@ export class App {
         this.deleteSelected();
       }
     }
-    if (e.key === 'Escape') { this.cancelDiffMode(); this.activeTool.cancel(); }
+    if (e.key === 'Escape') {
+      this.cancelDiffMode();
+      this.closeHelpModal();
+      this.activeTool.cancel();
+    }
     this.activeTool.onKeyDown(e.key, this.history.state);
   }
 
@@ -978,15 +985,15 @@ export class App {
 
   private panToWorld(wx: number, wy: number): void {
     const state = this.history.state;
-    state.panX = Math.round(this.canvas.width / 2 - wx * state.zoom);
-    state.panY = Math.round(this.canvas.height / 2 - wy * state.zoom);
+    state.panX = Math.round(this.canvas.clientWidth / 2 - wx * state.zoom);
+    state.panY = Math.round(this.canvas.clientHeight / 2 - wy * state.zoom);
     this.requestRender();
   }
 
   private setDefaultEmptyView(): void {
     const RULER = 24;
-    const viewW = this.canvas.width - RULER;
-    const viewH = this.canvas.height - RULER;
+    const viewW = this.canvas.clientWidth - RULER;
+    const viewH = this.canvas.clientHeight - RULER;
     const TARGET_UM_X = 100_000; // 100 mm
     const TARGET_UM_Y = 70_000;  // 70 mm
     const zoomX = viewW / TARGET_UM_X;
@@ -1000,8 +1007,8 @@ export class App {
   fitToContent(): void {
     const state = this.history.state;
     const RULER = 24;
-    const viewW = this.canvas.width - RULER;
-    const viewH = this.canvas.height - RULER;
+    const viewW = this.canvas.clientWidth - RULER;
+    const viewH = this.canvas.clientHeight - RULER;
 
     if (state.shapes.length === 0 && state.dimensions.length === 0 && state.annotations.length === 0) {
       this.setDefaultEmptyView();
@@ -1039,8 +1046,8 @@ export class App {
 
   private zoomStep(dir: 1 | -1): void {
     const state = this.history.state;
-    const cx = this.canvas.width / 2;
-    const cy = this.canvas.height / 2;
+    const cx = this.canvas.clientWidth / 2;
+    const cy = this.canvas.clientHeight / 2;
     this.setZoom(state.zoom * (dir > 0 ? 1.25 : 1 / 1.25), cx, cy);
     this.requestRender();
   }
@@ -1901,6 +1908,9 @@ export class App {
     this.renderLayerPanel(state);
 
     const sel = state.selection;
+    const selEl = document.getElementById('footer-sel');
+    if (selEl) selEl.textContent = sel.length.toString();
+
     const infoEl = document.getElementById('selection-info');
     const propsEl = document.getElementById('shape-props');
     if (!infoEl) return;
@@ -2116,6 +2126,21 @@ export class App {
   destroy(): void {
     this.stopAutosave?.();
     if (this.animFrame !== null) cancelAnimationFrame(this.animFrame);
+  }
+
+  toggleHelpModal(): void {
+    const modal = document.getElementById('shortcut-modal');
+    if (!modal) return;
+    if (modal.style.display === 'none') {
+      modal.style.display = 'flex';
+    } else {
+      modal.style.display = 'none';
+    }
+  }
+
+  closeHelpModal(): void {
+    const modal = document.getElementById('shortcut-modal');
+    if (modal) modal.style.display = 'none';
   }
 }
 

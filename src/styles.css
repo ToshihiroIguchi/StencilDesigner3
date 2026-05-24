@@ -117,6 +117,9 @@ body.light {
   overflow: hidden;
   background: #181824;
 }
+body.light #canvas-container {
+  background: #e8e8e0;
+}
 
 #main-canvas {
   display: block;
@@ -565,4 +568,24 @@ body.light #annotation-input {
 .drop-overlay-sub {
   font-size: 12px;
   color: var(--fg2);
+}
+
+/* ── Keyboard Shortcuts Modal ────────────────────────────────────────────── */
+kbd {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.2), inset 0 0 0 1px var(--bg);
+  color: var(--fg);
+  display: inline-block;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0 .1em;
+  padding: .1em .6em;
+  text-shadow: 0 1px 0 var(--bg2);
+}
+body.light kbd {
+  background: var(--bg3);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.1);
 }
