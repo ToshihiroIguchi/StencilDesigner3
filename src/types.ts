@@ -101,7 +101,7 @@ export interface Dimension {
   frozen: boolean;
 }
 
-/** Display-only text annotation. Never exported to DXF. */
+/** Text annotation. Exported to DXF as MTEXT on visible layers. */
 export interface Annotation {
   id: string;
   text: string;      // newline-delimited for multi-line

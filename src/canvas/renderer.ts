@@ -177,7 +177,7 @@ export class CanvasRenderer {
       this.drawSnapIndicator(snap, vt);
     }
 
-    // Annotations (display-only notes, never exported to DXF)
+    // Annotations (notes exported to DXF as MTEXT on visible layers)
     if (state.annotations.length > 0) {
       this.drawAnnotations(state.annotations, layerMap, extras?.selectedAnnotationIds ?? new Set(), vt);
     }

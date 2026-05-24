@@ -133,7 +133,7 @@
       </button>
       <span class="tool-label">Arrow</span>
 
-      <button class="tool-btn" data-tool="annotation" title="Add a text note (N) — display only, not exported">
+      <button class="tool-btn" data-tool="annotation" title="Add a text note (N) — exported to DXF as MTEXT">
         <svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </button>
       <span class="tool-label">Note</span>
@@ -248,7 +248,7 @@
     <!-- Annotation tool panel (visible only when Note tool is active) -->
     <div id="annotation-panel" class="panel-section" style="display:none">
       <div class="panel-title">Note</div>
-      <p class="text-font-note">display only</p>
+      <p class="text-font-note">exported to DXF</p>
       <div class="text-opt-row">
         <label>Size</label>
         <input id="ann-size" type="number" min="0.1" step="0.5" value="3" />
