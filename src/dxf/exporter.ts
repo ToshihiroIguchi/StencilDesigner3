@@ -1,6 +1,43 @@
-import type { Polygon, Ring, Layer } from '../types';
+import type { Polygon, Ring, Layer, Annotation } from '../types';
 
 function umToMm(v: number): number { return v / 1000; }
+
+function escapeMtext(raw: string): string {
+  let out = '';
+  for (const ch of raw) {
+    if (ch === '\\') { out += '\\\\'; }
+    else if (ch === '{') { out += '\\{'; }
+    else if (ch === '}') { out += '\\}'; }
+    else if (ch === '\n') { out += '\\P'; }
+    else {
+      const cp = ch.codePointAt(0)!;
+      // BMP non-ASCII → \U+XXXX escape for AC1015 compatibility
+      if (cp > 0x7E && cp <= 0xFFFF) { out += `\\U+${cp.toString(16).toUpperCase().padStart(4, '0')}`; }
+      else { out += ch; }
+    }
+  }
+  return out;
+}
+
+function writeMtext(lines: string[], ann: Annotation): void {
+  const content = escapeMtext(ann.text);
+  lines.push('0\nMTEXT');
+  lines.push(`8\n${ann.layer}`);
+  lines.push(`10\n${umToMm(ann.origin.x).toFixed(6)}`);
+  lines.push(`20\n${umToMm(-ann.origin.y).toFixed(6)}`);
+  lines.push('30\n0.0');
+  lines.push(`40\n${umToMm(ann.heightUm).toFixed(6)}`);
+  lines.push('71\n1');    // attachment: Top Left
+  lines.push('73\n2');    // line spacing: Exactly
+  lines.push('44\n1.2'); // line spacing factor — matches renderer lineHeight * 1.2
+  // DXF group 3 holds continuation chunks (max 250 chars each), group 1 holds the final chunk
+  let remaining = content;
+  while (remaining.length > 250) {
+    lines.push(`3\n${remaining.slice(0, 250)}`);
+    remaining = remaining.slice(250);
+  }
+  lines.push(`1\n${remaining}`);
+}
 
 function cssToRgbInt(css: string): number {
   const r = parseInt(css.slice(1, 3), 16);
@@ -21,7 +58,8 @@ const LTYPE_DEFS: Record<string, string> = {
 export function exportDxf(
   polygons: Polygon[],
   layers: Layer[],
-  options: { aperturesOnly?: boolean } = { aperturesOnly: true }
+  annotations: Annotation[] = [],
+  options: { aperturesOnly?: boolean; includeAnnotations?: boolean } = { aperturesOnly: true, includeAnnotations: true }
 ): string {
   const lines: string[] = [];
 
@@ -61,11 +99,20 @@ export function exportDxf(
 
   // ENTITIES
   const apertureNames = new Set(layers.filter((l) => l.isAperture).map((l) => l.name));
+  const layerMap = new Map(layers.map((l) => [l.name, l]));
   lines.push('0\nSECTION\n2\nENTITIES');
   for (const poly of polygons) {
     if (options.aperturesOnly && !apertureNames.has(poly.layer)) continue;
     writeLwPolyline(lines, poly.outer, poly.layer, true);
     for (const hole of poly.holes) writeLwPolyline(lines, hole, poly.layer, true);
+  }
+  if (options.includeAnnotations !== false) {
+    for (const ann of annotations) {
+      if (!ann.text.trim()) continue;
+      const layer = layerMap.get(ann.layer);
+      if (layer && !layer.visible) continue;
+      writeMtext(lines, ann);
+    }
   }
   lines.push('0\nENDSEC');
   lines.push('0\nEOF');
@@ -84,8 +131,8 @@ function writeLwPolyline(lines: string[], ring: Ring, layer: string, closed: boo
 }
 
 /** Trigger browser download of the DXF text. */
-export function downloadDxf(polygons: Polygon[], layers: Layer[], filename = 'stencil.dxf'): void {
-  const content = exportDxf(polygons, layers);
+export function downloadDxf(polygons: Polygon[], layers: Layer[], annotations: Annotation[] = [], filename = 'stencil.dxf'): void {
+  const content = exportDxf(polygons, layers, annotations);
   const blob = new Blob([content], { type: 'application/dxf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

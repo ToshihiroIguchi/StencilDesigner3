@@ -1093,14 +1093,19 @@ export class App {
 
   exportDxf(): void {
     const state = this.history.state;
+    const hasAnnotations = state.annotations.some((a) => a.text.trim().length > 0);
+    if (state.shapes.length === 0 && !hasAnnotations) {
+      void this.showMessageModal({ title: 'Export', message: 'Nothing to export.' });
+      return;
+    }
     if (state.shapes.length > 0) {
       const apertureNames = new Set(state.layers.filter((l) => l.isAperture).map((l) => l.name));
-      if (!state.shapes.some((s) => apertureNames.has(s.layer))) {
+      if (!state.shapes.some((s) => apertureNames.has(s.layer)) && !hasAnnotations) {
         void this.showMessageModal({ title: 'Export', message: 'No shapes to export. Mark at least one layer as aperture using the "A" button in the Layers panel.' });
         return;
       }
     }
-    downloadDxf(state.shapes, state.layers);
+    downloadDxf(state.shapes, state.layers, state.annotations);
   }
 
   async exportPdf(): Promise<void> {

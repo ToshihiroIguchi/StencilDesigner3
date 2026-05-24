@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { exportDxf } from '../../src/dxf/exporter';
 import { rectToPolygon } from '../../src/core/geometry';
-import { defaultLayers } from '../../src/types';
-import type { Layer } from '../../src/types';
+import { defaultLayers, DIMENSIONS_LAYER } from '../../src/types';
+import type { Annotation, Layer } from '../../src/types';
 
 const layers = defaultLayers();
 const apertureLayer = layers.find((l) => l.isAperture && l.name === '0')!;
@@ -45,7 +45,7 @@ describe('exportDxf — aperture filtering', () => {
   });
 
   it('exports non-aperture polygon when aperturesOnly=false', () => {
-    const dxf = exportDxf([outlineRect], layers, { aperturesOnly: false });
+    const dxf = exportDxf([outlineRect], layers, [], { aperturesOnly: false });
     expect(dxf).toContain('0\nLWPOLYLINE');
     expect(dxf).toContain(`8\nOUTLINE`);
   });
@@ -69,6 +69,77 @@ describe('exportDxf — coordinate conversion', () => {
     const rect = rectToPolygon(0, 0, 2000, 1000, '0');
     const dxf = exportDxf([rect], layers);
     expect(dxf).toContain(`90\n${rect.outer.length}`);
+  });
+});
+
+describe('exportDxf — annotations (MTEXT)', () => {
+  const layersWithDim = [...defaultLayers(), { ...DIMENSIONS_LAYER }];
+
+  function makeAnn(text: string, visible = true): Annotation {
+    const layers = layersWithDim.map((l) =>
+      l.name === 'DIMENSIONS' ? { ...l, visible } : l
+    );
+    void layers; // layers visibility is driven by the layer table passed to exportDxf
+    return { id: 'a1', text, origin: { x: 5000, y: 3000 }, heightUm: 2000, layer: 'DIMENSIONS' };
+  }
+
+  it('emits MTEXT entity for an annotation', () => {
+    const ann = makeAnn('Hello');
+    const dxf = exportDxf([], layersWithDim, [ann]);
+    expect(dxf).toContain('0\nMTEXT');
+    expect(dxf).toContain('8\nDIMENSIONS');
+  });
+
+  it('converts origin: x µm→mm, y negated µm→mm', () => {
+    const ann = makeAnn('test');
+    const dxf = exportDxf([], layersWithDim, [ann]);
+    expect(dxf).toContain('10\n5.000000');
+    expect(dxf).toContain('20\n-3.000000');
+  });
+
+  it('converts heightUm to mm', () => {
+    const ann = makeAnn('test');
+    const dxf = exportDxf([], layersWithDim, [ann]);
+    expect(dxf).toContain('40\n2.000000');
+  });
+
+  it('encodes newline as \\P', () => {
+    const ann = makeAnn('line1\nline2');
+    const dxf = exportDxf([], layersWithDim, [ann]);
+    expect(dxf).toContain('line1\\Pline2');
+  });
+
+  it('escapes backslash, braces', () => {
+    const ann = makeAnn('a\\b{c}');
+    const dxf = exportDxf([], layersWithDim, [ann]);
+    expect(dxf).toContain('a\\\\b\\{c\\}');
+  });
+
+  it('encodes non-ASCII (Japanese) as \\U+XXXX', () => {
+    const ann = makeAnn('テスト'); // テ=30C6 ス=30B9 ト=30C8
+    const dxf = exportDxf([], layersWithDim, [ann]);
+    expect(dxf).toContain('\\U+30C6\\U+30B9\\U+30C8');
+  });
+
+  it('skips annotation on invisible layer', () => {
+    const ann = makeAnn('hidden');
+    const hiddenLayers = layersWithDim.map((l) =>
+      l.name === 'DIMENSIONS' ? { ...l, visible: false } : l
+    );
+    const dxf = exportDxf([], hiddenLayers, [ann]);
+    expect(dxf).not.toContain('0\nMTEXT');
+  });
+
+  it('skips empty/whitespace annotation', () => {
+    const ann = makeAnn('   ');
+    const dxf = exportDxf([], layersWithDim, [ann]);
+    expect(dxf).not.toContain('0\nMTEXT');
+  });
+
+  it('omits MTEXT when includeAnnotations=false', () => {
+    const ann = makeAnn('note');
+    const dxf = exportDxf([], layersWithDim, [ann], { includeAnnotations: false });
+    expect(dxf).not.toContain('0\nMTEXT');
   });
 });
 
