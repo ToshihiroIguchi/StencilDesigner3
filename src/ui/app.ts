@@ -1117,11 +1117,12 @@ export class App {
 
   async exportPdf(): Promise<void> {
     const state = this.history.state;
-    if (state.shapes.length === 0 && state.dimensions.length === 0) {
+    const hasAnnotations = state.annotations.some((a) => a.text.trim().length > 0);
+    if (state.shapes.length === 0 && state.dimensions.length === 0 && !hasAnnotations) {
       await this.showMessageModal({ title: 'Export PDF', message: 'Nothing to export.' });
       return;
     }
-    const ok = downloadPdf(state, this.currentDocName);
+    const ok = await downloadPdf(state, this.currentDocName);
     if (!ok) {
       await this.showMessageModal({ title: 'Export PDF', message: 'No visible content to export. Make at least one layer visible.' });
     }

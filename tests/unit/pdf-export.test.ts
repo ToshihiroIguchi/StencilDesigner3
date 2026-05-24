@@ -177,25 +177,25 @@ describe('formatBarLabel', () => {
 });
 
 describe('buildPdf', () => {
-  it('returns null for empty state', () => {
+  it('returns null for empty state', async () => {
     const state: AppState = createDefaultState();
-    expect(buildPdf(state, 'Test')).toBeNull();
+    expect(await buildPdf(state, 'Test')).toBeNull();
   });
 
-  it('returns jsPDF with %PDF- header for non-empty state', () => {
+  it('returns jsPDF with %PDF- header for non-empty state', async () => {
     const state: AppState = {
       ...createDefaultState(),
       shapes: [mkRectShape('s1', 0, 0, 10000, 10000)],
       layers: [mkLayer('0')],
     };
-    const pdf = buildPdf(state, 'Test');
+    const pdf = await buildPdf(state, 'Test');
     expect(pdf).not.toBeNull();
     const bytes = pdf!.output('arraybuffer') as ArrayBuffer;
     const header = new TextDecoder().decode(new Uint8Array(bytes).slice(0, 5));
     expect(header).toBe('%PDF-');
   });
 
-  it('produces valid PDF for multiple visible layers', () => {
+  it('produces valid PDF for multiple visible layers', async () => {
     const state: AppState = {
       ...createDefaultState(),
       shapes: [
@@ -204,30 +204,30 @@ describe('buildPdf', () => {
       ],
       layers: [mkLayer('0'), mkLayer('OUTLINE')],
     };
-    expect(buildPdf(state, 'MultiLayer')).not.toBeNull();
+    expect(await buildPdf(state, 'MultiLayer')).not.toBeNull();
   });
 
-  it('renders linear-h dimension without crash (offset fix)', () => {
+  it('renders linear-h dimension without crash (offset fix)', async () => {
     const state: AppState = {
       ...createDefaultState(),
       shapes: [mkRectShape('s1', 0, 0, 10000, 10000)],
       dimensions: [mkLinearHDim('d1', 0, 10000, 0, -5000)],
       layers: [mkLayer('0'), mkLayer('DIMENSIONS')],
     };
-    expect(buildPdf(state, 'DimH')).not.toBeNull();
+    expect(await buildPdf(state, 'DimH')).not.toBeNull();
   });
 
-  it('renders linear-v dimension without crash (offset fix)', () => {
+  it('renders linear-v dimension without crash (offset fix)', async () => {
     const state: AppState = {
       ...createDefaultState(),
       shapes: [mkRectShape('s1', 0, 0, 10000, 10000)],
       dimensions: [mkLinearVDim('d2', 0, 10000, 0, 15000)],
       layers: [mkLayer('0'), mkLayer('DIMENSIONS')],
     };
-    expect(buildPdf(state, 'DimV')).not.toBeNull();
+    expect(await buildPdf(state, 'DimV')).not.toBeNull();
   });
 
-  it('respects displayUnit=um for scale bar (µm mode)', () => {
+  it('respects displayUnit=um for scale bar (µm mode)', async () => {
     const state: AppState = {
       ...createDefaultState(),
       shapes: [mkRectShape('s1', 0, 0, 760, 560)], // sub-mm shape
@@ -235,6 +235,6 @@ describe('buildPdf', () => {
       displayUnit: 'um',
     };
     // Should not throw even with very large scale factor
-    expect(buildPdf(state, 'UmMode')).not.toBeNull();
+    expect(await buildPdf(state, 'UmMode')).not.toBeNull();
   });
 });
