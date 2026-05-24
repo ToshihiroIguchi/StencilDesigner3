@@ -8,6 +8,13 @@ dist/
 playwright-report/
 test-results/
 .playwright-mcp/
+data/
+tmp-pw-report/
+e2e-clean.log
+
+# Screenshots (debug/development)
+*.png
+!public/**/*.png
 
 # Verification screenshots
 verify-*.png
