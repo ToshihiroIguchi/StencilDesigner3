@@ -20,26 +20,12 @@ function freezeDimsForRemovedShapes(
       (a.kind === 'vertex' || a.kind === 'edge') && removedIds.has(a.shapeId);
     if (!refersRemoved(dim.anchor1) && !refersRemoved(dim.anchor2)) return dim;
 
-    const updatedAnchor = (a: DimensionAnchor, otherEndpoint: Point): DimensionAnchor => {
+    const updatedAnchor = (a: DimensionAnchor): DimensionAnchor => {
       if (a.kind === 'free') return a;
       if (!refersRemoved(a)) return a;
-      if (a.kind === 'vertex') {
-        const live = resolveAnchor(a, shapesBefore);
-        return { ...a, cachedPoint: live ?? a.cachedPoint };
-      }
-      // edge anchor: for centerline, cachedPoint should be the centerline endpoint
-      // which is already stored correctly; just ensure we have a good value
-      const live = resolveEdge(a, shapesBefore);
-      if (live) {
-        // midpoint as fallback
-        const mid: Point = {
-          x: Math.round((live[0].x + live[1].x) / 2),
-          y: Math.round((live[0].y + live[1].y) / 2),
-        };
-        return { ...a, cachedPoint: mid };
-      }
-      return a;
-      void otherEndpoint;
+      // Resolve the live point (vertex uses vertexId; edge uses t-interpolation)
+      const live = resolveAnchor(a, shapesBefore);
+      return { ...a, cachedPoint: live ?? a.cachedPoint };
     };
 
     // For centerline: compute full centerline before freeze so both endpoints are captured
@@ -56,10 +42,8 @@ function freezeDimsForRemovedShapes(
         }
       }
     } else {
-      const p2 = resolveAnchor(dim.anchor2, shapesBefore) ?? (dim.anchor2.kind !== 'free' ? dim.anchor2.cachedPoint : dim.anchor2.point);
-      frozenAnchor1 = updatedAnchor(dim.anchor1, p2);
-      const p1 = resolveAnchor(dim.anchor1, shapesBefore) ?? (dim.anchor1.kind !== 'free' ? dim.anchor1.cachedPoint : dim.anchor1.point);
-      frozenAnchor2 = updatedAnchor(dim.anchor2, p1);
+      frozenAnchor1 = updatedAnchor(dim.anchor1);
+      frozenAnchor2 = updatedAnchor(dim.anchor2);
     }
 
     return { ...dim, anchor1: frozenAnchor1, anchor2: frozenAnchor2, frozen: true };
@@ -464,16 +448,24 @@ export class UpdateLayerStyleCommand implements Command {
 const DIM_LAYER_TEMPLATE = DIMENSIONS_LAYER;
 
 export class AddDimensionCommand implements Command {
+  private layerWasCreated = false;
   constructor(private dim: Dimension) {}
   do(state: AppState): AppState {
-    // Auto-create DIMENSIONS layer if missing (not undone on undo — intentional)
-    const layers = state.layers.some((l) => l.name === 'DIMENSIONS')
-      ? state.layers
-      : [...state.layers, { ...DIM_LAYER_TEMPLATE }];
+    this.layerWasCreated = !state.layers.some((l) => l.name === 'DIMENSIONS');
+    const layers = this.layerWasCreated
+      ? [...state.layers, { ...DIM_LAYER_TEMPLATE }]
+      : state.layers;
     return { ...state, layers, dimensions: [...state.dimensions, this.dim] };
   }
   undo(state: AppState): AppState {
-    return { ...state, dimensions: state.dimensions.filter((d) => d.id !== this.dim.id) };
+    const nextDims = state.dimensions.filter((d) => d.id !== this.dim.id);
+    const stillReferenced =
+      nextDims.some((d) => d.layer === 'DIMENSIONS') ||
+      state.annotations.some((a) => a.layer === 'DIMENSIONS');
+    const layers = (this.layerWasCreated && !stillReferenced)
+      ? state.layers.filter((l) => l.name !== 'DIMENSIONS')
+      : state.layers;
+    return { ...state, layers, dimensions: nextDims };
   }
 }
 
@@ -493,15 +485,24 @@ export class DeleteDimensionCommand implements Command {
 // ─── Annotations ─────────────────────────────────────────────────────────────
 
 export class AddAnnotationCommand implements Command {
+  private layerWasCreated = false;
   constructor(private ann: Annotation) {}
   do(state: AppState): AppState {
-    const layers = state.layers.some((l) => l.name === 'DIMENSIONS')
-      ? state.layers
-      : [...state.layers, { ...DIM_LAYER_TEMPLATE }];
+    this.layerWasCreated = !state.layers.some((l) => l.name === 'DIMENSIONS');
+    const layers = this.layerWasCreated
+      ? [...state.layers, { ...DIM_LAYER_TEMPLATE }]
+      : state.layers;
     return { ...state, layers, annotations: [...state.annotations, this.ann] };
   }
   undo(state: AppState): AppState {
-    return { ...state, annotations: state.annotations.filter((a) => a.id !== this.ann.id) };
+    const nextAnns = state.annotations.filter((a) => a.id !== this.ann.id);
+    const stillReferenced =
+      state.dimensions.some((d) => d.layer === 'DIMENSIONS') ||
+      nextAnns.some((a) => a.layer === 'DIMENSIONS');
+    const layers = (this.layerWasCreated && !stillReferenced)
+      ? state.layers.filter((l) => l.name !== 'DIMENSIONS')
+      : state.layers;
+    return { ...state, layers, annotations: nextAnns };
   }
 }
 
@@ -560,6 +561,18 @@ export class CutCommand implements Command {
       dimensions: this.dimsBefore,
       selection: [],
     };
+  }
+}
+
+export class CompoundCommand implements Command {
+  constructor(private readonly cmds: Command[]) {}
+  do(state: AppState): AppState {
+    return this.cmds.reduce((s, c) => c.do(s), state);
+  }
+  undo(state: AppState): AppState {
+    let s = state;
+    for (let i = this.cmds.length - 1; i >= 0; i--) s = this.cmds[i].undo(s);
+    return s;
   }
 }
 

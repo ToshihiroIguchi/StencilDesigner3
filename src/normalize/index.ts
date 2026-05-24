@@ -138,8 +138,8 @@ export function normalizeAll(polygons: Polygon[]): Polygon[] {
   for (const poly of polygons) {
     try {
       result.push(normalize(poly));
-    } catch {
-      // Degenerate polygon - skip
+    } catch (e) {
+      console.warn(`normalizeAll: dropped polygon ${poly.id} (layer="${poly.layer}"): ${e}`);
     }
   }
   return result;

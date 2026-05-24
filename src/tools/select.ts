@@ -1,7 +1,7 @@
-import type { AppState, Annotation, Point, Polygon, Selection } from '../types';
+import type { AppState, Annotation, Command, Point, Polygon, Selection } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import { hitTest, hitTestAnnotation, hitTestDimension, rubberBandSelect } from '../core/selection';
-import { MoveAnnotationCommand, MoveCommand, SetSelectionCommand } from '../state/commands';
+import { CompoundCommand, MoveAnnotationCommand, MoveCommand, SetSelectionCommand } from '../state/commands';
 import { translatePolygon } from '../core/geometry';
 import { markDirty } from '../state/docStore';
 
@@ -10,6 +10,7 @@ const DRAG_THRESHOLD_PX = 5;
 export class SelectTool extends BaseTool {
   private isDragging = false;
   private dragStartCanvas: Point | null = null;
+  private dragStartWorld: Point | null = null;
   private moveOrigin: Point | null = null;
   private dragThresholdReached = false;
   private pendingDx = 0;
@@ -74,6 +75,7 @@ export class SelectTool extends BaseTool {
 
       // Snap the origin for movement reference
       this.moveOrigin = this.ctx.getSnap(worldPt).point;
+      this.dragStartWorld = { ...this.moveOrigin };
     } else {
       this.isDragging = false;
       if (!shift) {
@@ -91,7 +93,7 @@ export class SelectTool extends BaseTool {
     const snapPt = this.snap.point;
     const state = this.ctx.history.state;
 
-    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.moveOrigin && snapPt) {
+    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.dragStartWorld && snapPt) {
       if (!this.dragThresholdReached) {
         const dxPx = canvasPt.x - this.dragStartCanvas.x;
         const dyPx = canvasPt.y - this.dragStartCanvas.y;
@@ -101,31 +103,32 @@ export class SelectTool extends BaseTool {
       }
 
       if (this.dragThresholdReached) {
-        let dx = snapPt.x - this.moveOrigin.x;
-        let dy = snapPt.y - this.moveOrigin.y;
+        // Compute total displacement from drag start (not frame delta) to avoid ortho drift
+        let totalDx = snapPt.x - this.dragStartWorld.x;
+        let totalDy = snapPt.y - this.dragStartWorld.y;
 
         if (shift) {
-          // Ortho lock: constrain movement to the dominant axis
-          if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
-          else dx = 0;
+          // Ortho lock: constrain to dominant axis relative to drag start
+          if (Math.abs(totalDx) >= Math.abs(totalDy)) totalDy = 0;
+          else totalDx = 0;
         }
 
-        if (dx !== 0 || dy !== 0) {
-          this.pendingDx += dx;
-          this.pendingDy += dy;
+        const incDx = totalDx - this.pendingDx;
+        const incDy = totalDy - this.pendingDy;
+
+        if (incDx !== 0 || incDy !== 0) {
+          this.pendingDx = totalDx;
+          this.pendingDy = totalDy;
           const ids = new Set(state.selection.map((s) => s.shapeId));
           state.shapes = state.shapes.map((shape) => {
             if (!ids.has(shape.id)) return shape;
-            return { ...translatePolygon(shape, dx, dy), id: shape.id };
+            return { ...translatePolygon(shape, incDx, incDy), id: shape.id };
           });
           // Move annotations live as well
           state.annotations = state.annotations.map((ann) => {
             if (!ids.has(ann.id)) return ann;
-            return { ...ann, origin: { x: ann.origin.x + dx, y: ann.origin.y + dy } };
+            return { ...ann, origin: { x: ann.origin.x + incDx, y: ann.origin.y + incDy } };
           });
-          // Move reference point by exactly what we moved the shapes
-          this.moveOrigin.x += dx;
-          this.moveOrigin.y += dy;
         }
       }
     }
@@ -159,19 +162,20 @@ export class SelectTool extends BaseTool {
       state.shapes = this.savedShapes;
       state.annotations = this.savedAnnotations ?? state.annotations;
       if (this.pendingDx !== 0 || this.pendingDy !== 0) {
-        // Commit shape move (shapes only — annotations committed separately below)
+        const cmds: Command[] = [];
         const shapeSel = savedSel.filter((s) => s.type !== 'annotation');
         if (shapeSel.length > 0) {
-          this.ctx.history.execute(new MoveCommand(shapeSel, this.pendingDx, this.pendingDy));
+          cmds.push(new MoveCommand(shapeSel, this.pendingDx, this.pendingDy));
         }
-        // Commit annotation moves individually
         const annIds = savedSel.filter((s) => s.type === 'annotation').map((s) => s.shapeId);
         for (const id of annIds) {
           const ann = state.annotations.find((a) => a.id === id);
           if (!ann) continue;
           const newOrigin = { x: ann.origin.x + this.pendingDx, y: ann.origin.y + this.pendingDy };
-          this.ctx.history.execute(new MoveAnnotationCommand(id, newOrigin));
+          cmds.push(new MoveAnnotationCommand(id, newOrigin));
         }
+        if (cmds.length === 1) this.ctx.history.execute(cmds[0]);
+        else if (cmds.length > 1) this.ctx.history.execute(new CompoundCommand(cmds));
         markDirty();
       }
     }
@@ -198,6 +202,7 @@ export class SelectTool extends BaseTool {
     this.isDragging = false;
     this.isRubberBand = false;
     this.dragStartCanvas = null;
+    this.dragStartWorld = null;
     this.moveOrigin = null;
     this.rubberBandStart = null;
     this.rubberBandEnd = null;

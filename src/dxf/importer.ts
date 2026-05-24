@@ -19,11 +19,15 @@ function mmToUm(v: number): number {
 }
 
 /** Approximate arc as polyline segments. Returns vertices with new IDs. */
-function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number): Vertex[] {
+function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number, ccw = true): Vertex[] {
   const points: Vertex[] = [];
   let start = startAngle;
   let end = endAngle;
-  if (end < start) end += 360;
+  if (ccw) {
+    while (end < start) end += 360;   // span ∈ (0, 360]
+  } else {
+    while (end > start) end -= 360;   // span ∈ [-360, 0)
+  }
   const span = end - start;
   const fullCircleSegments = getCircleSegments(mmToUm(r));
   const steps = Math.max(2, Math.ceil((Math.abs(span) / 360) * fullCircleSegments));
@@ -57,18 +61,22 @@ function bulgeToArcPoints(
   const sagitta = bulge * chord / 2;
   const r = (chord * chord / 4 + sagitta * sagitta) / (2 * Math.abs(sagitta));
 
-  const cx = (p1x + p2x) / 2 + px * (r - sagitta);
-  const cy = (p1y + p2y) / 2 + py * (r - sagitta);
+  // Center offset along left-perp: sign(bulge)*(r-|sagitta|).
+  // For CCW (bulge>0, small arc): offset = +(r-s) > 0 → center to the left.
+  // For CCW (bulge>0, large arc): offset = +(r-s) < 0 → center to the right (correct for >180°).
+  // For CW  (bulge<0, small arc): offset = -(r-|s|) < 0 → center to the right.
+  // For CW  (bulge<0, large arc): offset = -(r-|s|) > 0 → center to the left.
+  const perpOffset = Math.sign(bulge) * (r - Math.abs(sagitta));
+  const cx = (p1x + p2x) / 2 + px * perpOffset;
+  const cy = (p1y + p2y) / 2 + py * perpOffset;
 
   const startAngle = Math.atan2(p1y - cy, p1x - cx) * (180 / Math.PI);
   const endAngle   = Math.atan2(p2y - cy, p2x - cx) * (180 / Math.PI);
 
   if (bulge > 0) {
-    // CCW arc in DXF space
-    return arcToPoints(cx, cy, r, startAngle, endAngle);
+    return arcToPoints(cx, cy, r, startAngle, endAngle, true);
   } else {
-    // CW arc in DXF space = CCW from p2 to p1, reversed to go from p1 to p2
-    return arcToPoints(cx, cy, r, endAngle, startAngle).reverse();
+    return arcToPoints(cx, cy, r, startAngle, endAngle, false);
   }
 }
 
