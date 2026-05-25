@@ -514,8 +514,8 @@ test.describe('11. Copy', () => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 200, box.y + 175);
     await page.click('#btn-copy-btn');
-    await page.fill('#duplicate-modal-nx', '2');
-    await page.fill('#duplicate-modal-ny', '1');
+    await page.fill('#duplicate-modal-nx', '1');
+    await page.fill('#duplicate-modal-ny', '0');
     await page.fill('#duplicate-modal-px', '1');
     await page.fill('#duplicate-modal-py', '0');
     await page.click('#duplicate-modal-ok');
@@ -527,8 +527,8 @@ test.describe('11. Copy', () => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 200, box.y + 175);
     await page.click('#btn-copy-btn');
-    await page.fill('#duplicate-modal-nx', '2');
-    await page.fill('#duplicate-modal-ny', '1');
+    await page.fill('#duplicate-modal-nx', '1');
+    await page.fill('#duplicate-modal-ny', '0');
     await page.fill('#duplicate-modal-px', '1');
     await page.fill('#duplicate-modal-py', '0');
     await page.click('#duplicate-modal-ok');
@@ -552,8 +552,8 @@ test.describe('12. Array copy', () => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 150, box.y + 150);
     await page.click('#btn-copy-btn');
-    await page.fill('#duplicate-modal-nx', '3');
-    await page.fill('#duplicate-modal-ny', '3');
+    await page.fill('#duplicate-modal-nx', '2');
+    await page.fill('#duplicate-modal-ny', '2');
     await page.fill('#duplicate-modal-px', '2');
     await page.fill('#duplicate-modal-py', '2');
     await page.click('#duplicate-modal-ok');
@@ -565,8 +565,8 @@ test.describe('12. Array copy', () => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 150, box.y + 150);
     await page.click('#btn-copy-btn');
-    await page.fill('#duplicate-modal-nx', '2');
-    await page.fill('#duplicate-modal-ny', '1');
+    await page.fill('#duplicate-modal-nx', '1');
+    await page.fill('#duplicate-modal-ny', '0');
     await page.fill('#duplicate-modal-px', '3');
     await page.fill('#duplicate-modal-py', '0');
     await page.click('#duplicate-modal-ok');
@@ -578,8 +578,8 @@ test.describe('12. Array copy', () => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 150, box.y + 150);
     await page.click('#btn-copy-btn');
-    await page.fill('#duplicate-modal-nx', '3');
-    await page.fill('#duplicate-modal-ny', '3');
+    await page.fill('#duplicate-modal-nx', '2');
+    await page.fill('#duplicate-modal-ny', '2');
     await page.fill('#duplicate-modal-px', '2');
     await page.fill('#duplicate-modal-py', '2');
     await page.click('#duplicate-modal-ok');
