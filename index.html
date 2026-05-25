@@ -48,12 +48,12 @@
 
   <!-- Snap / Theme / Clear -->
   <button id="btn-snap" class="hdr-btn active" title="Snap on / off">
-    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    <svg class="icon" viewBox="0 0 24 24"><path d="M7 3v9a5 5 0 0 1 10 0V3"/><line x1="4" y1="3" x2="10" y2="3"/><line x1="14" y1="3" x2="20" y2="3"/></svg>
     Snap
   </button>
   <button id="btn-theme" class="hdr-btn" title="Switch light / dark mode">
-    <svg class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    Theme
+    <svg id="theme-icon" class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <span id="theme-label">Dark</span>
   </button>
   <button id="btn-clear" class="hdr-btn" title="Clear all shapes in this document" style="color:var(--danger)">
     <svg class="icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
