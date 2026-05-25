@@ -36,8 +36,11 @@ export function deleteShapes(shapes: Polygon[], selection: Selection[]): Polygon
 }
 
 /**
- * Array copy: replicate selection in an nx × ny grid.
- * Position (0,0) is the original; skipped.
+ * Array copy: replicate selection in a (nx+1) × (ny+1) grid.
+ * nx, ny are the number of additional copies along each axis.
+ * Total copies added = (nx+1)(ny+1) - 1. The original at (0,0) is preserved.
+ * Use nx=1, ny=0 for a single copy shifted by pitchX along X.
+ * Caller must ensure nx >= 0 && ny >= 0 && !(nx === 0 && ny === 0).
  * pitchX, pitchY are in µm.
  */
 export function arrayCopyShapes(
@@ -52,8 +55,8 @@ export function arrayCopyShapes(
   const originals = shapes.filter((s) => ids.has(s.id));
   const copies: Polygon[] = [];
 
-  for (let ix = 0; ix < nx; ix++) {
-    for (let iy = 0; iy < ny; iy++) {
+  for (let ix = 0; ix <= nx; ix++) {
+    for (let iy = 0; iy <= ny; iy++) {
       if (ix === 0 && iy === 0) continue; // original position
       const dx = ix * pitchX;
       const dy = iy * pitchY;

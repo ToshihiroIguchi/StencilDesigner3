@@ -65,8 +65,8 @@ export class App {
   private pendingRender = false;
   private filletRadius = 500;
   private clipboard: import('../types').Polygon[] = [];
-  private duplicateCountX = 1;  // µm — last-used Duplicate count X
-  private duplicateCountY = 1;  // µm — last-used Duplicate count Y
+  private duplicateCountX = 1;  // last-used additional copy count X
+  private duplicateCountY = 0;  // last-used additional copy count Y
   private duplicatePitchX = 2000;   // µm — last-used Duplicate pitch X
   private duplicatePitchY = 2000;   // µm — last-used Duplicate pitch Y
   private drcConfig: DrcConfig = { ...DEFAULT_DRC_CONFIG };
@@ -836,7 +836,7 @@ export class App {
   duplicateSelected(): void {
     const state = this.history.state;
     if (state.selection.length === 0) return;
-    this.history.execute(new DuplicateCommand(state.selection, 1, 1, this.duplicatePitchX, this.duplicatePitchY));
+    this.history.execute(new DuplicateCommand(state.selection, 1, 0, this.duplicatePitchX, this.duplicatePitchY));
     markDirty();
     this.requestRender();
   }
@@ -1180,8 +1180,8 @@ export class App {
       const okBtn = document.getElementById('duplicate-modal-ok') as HTMLButtonElement;
       const cancelBtn = document.getElementById('duplicate-modal-cancel') as HTMLButtonElement;
       const unit = this.history.state.displayUnit;
-      nxInput.value = String(Math.max(1, this.duplicateCountX));
-      nyInput.value = String(Math.max(1, this.duplicateCountY));
+      nxInput.value = String(Math.max(0, this.duplicateCountX));
+      nyInput.value = String(Math.max(0, this.duplicateCountY));
       pxInput.value = UnitConverter.formatOutput(this.duplicatePitchX, unit);
       pyInput.value = UnitConverter.formatOutput(this.duplicatePitchY, unit);
       modal.style.display = '';
@@ -1199,7 +1199,8 @@ export class App {
         const ny = parseInt(nyInput.value, 10);
         const pitchX = UnitConverter.parseInput(pxInput.value, this.history.state.displayUnit);
         const pitchY = UnitConverter.parseInput(pyInput.value, this.history.state.displayUnit);
-        if (isNaN(nx) || isNaN(ny) || nx < 1 || ny < 1) return;
+        if (isNaN(nx) || isNaN(ny) || nx < 0 || ny < 0) return;
+        if (nx === 0 && ny === 0) return;
         this.duplicateCountX = nx;
         this.duplicateCountY = ny;
         this.duplicatePitchX = pitchX;

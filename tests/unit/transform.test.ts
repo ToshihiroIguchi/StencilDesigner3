@@ -60,20 +60,33 @@ describe('deleteShapes', () => {
 });
 
 describe('arrayCopyShapes', () => {
-  it('creates nx*ny-1 copies (original not duplicated)', () => {
+  it('nx=1, ny=0 produces a single copy along X', () => {
     const poly = makeRect(0, 0, 100, 100);
     const sel = selAll([poly]);
-    const result = arrayCopyShapes([poly], sel, 3, 2, 500, 500);
-    // 3×2=6 total, minus original = 5 copies
+    const result = arrayCopyShapes([poly], sel, 1, 0, 1000, 0);
+    // (1+1)(0+1)-1 = 1 copy + 1 original = 2 total
+    expect(result.length).toBe(2);
+    const positions = result.map((s) => polygonBbox(s).minX).sort((a, b) => a - b);
+    expect(positions).toEqual([0, 1000]);
+  });
+
+  it('creates (nx+1)(ny+1)-1 copies in a grid', () => {
+    const poly = makeRect(0, 0, 100, 100);
+    const sel = selAll([poly]);
+    const result = arrayCopyShapes([poly], sel, 2, 1, 500, 500);
+    // (2+1)(1+1)-1 = 5 copies + 1 original = 6 total
     expect(result.length).toBe(6);
   });
 
-  it('places copies at correct positions', () => {
+  it('nx=1, ny=1 produces a 2×2 grid (3 copies)', () => {
     const poly = makeRect(0, 0, 100, 100);
     const sel = selAll([poly]);
-    const result = arrayCopyShapes([poly], sel, 2, 1, 1000, 0);
-
-    const positions = result.map((s) => polygonBbox(s).minX).sort((a, b) => a - b);
-    expect(positions).toEqual([0, 1000]);
+    const result = arrayCopyShapes([poly], sel, 1, 1, 1000, 2000);
+    // (1+1)(1+1)-1 = 3 copies + 1 original = 4 total
+    expect(result.length).toBe(4);
+    const xs = [...new Set(result.map((s) => polygonBbox(s).minX))].sort((a, b) => a - b);
+    const ys = [...new Set(result.map((s) => polygonBbox(s).minY))].sort((a, b) => a - b);
+    expect(xs).toEqual([0, 1000]);
+    expect(ys).toEqual([0, 2000]);
   });
 });
