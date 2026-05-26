@@ -14,7 +14,15 @@
 
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <header id="header">
-  <span class="app-title">StencilDesigner3</span>
+  <span class="app-title" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;">StencilDesigner3</span>
+  <span class="app-logo-brand">
+    <!-- Actual favicon image directly to guarantee 100% pixel-perfect branding consistency -->
+    <img src="/favicon.png" width="28" height="28" style="border-radius: 6px; display: block; flex-shrink: 0;" alt="" />
+    <!-- Logo Text: StencilDesigner3 -->
+    <svg class="app-logo-text-svg" viewBox="0 0 136 32" width="136" height="32" style="display: block;" aria-hidden="true">
+      <text x="0" y="21" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="14.5px" fill="var(--fg)" letter-spacing="0.3px">Stencil<tspan fill="var(--accent)" font-weight="400">Designer</tspan><tspan fill="var(--accent2)" font-weight="800">3</tspan></text>
+    </svg>
+  </span>
   <button id="btn-file-menu" class="hdr-btn" title="File operations">
     <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
     File

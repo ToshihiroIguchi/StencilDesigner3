@@ -60,12 +60,13 @@ body.light {
   user-select: none;
 }
 
-#header .app-title {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--accent);
+#header .app-logo-brand {
   margin-right: 8px;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 #header .separator { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
