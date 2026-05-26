@@ -150,18 +150,13 @@ This is used by the included GitHub Actions workflow (`.github/workflows/deploy.
 npm run test:unit
 ```
 
-Runs 63 fast, headless unit tests covering geometry, normalization, DRC, state history, and the polygon tool.
+Runs 203 fast, headless unit tests covering geometry, normalization, DRC, layers, DXF I/O, PDF export, state history, and tools.
 
 ```
- ✓ tests/unit/normalize.test.ts    (12 tests)
- ✓ tests/unit/transform.test.ts    (6 tests)
- ✓ tests/unit/drc.test.ts          (12 tests)
- ✓ tests/unit/geometry.test.ts     (11 tests)
- ✓ tests/unit/state.test.ts        (9 tests)
- ✓ tests/unit/polygon-tool.test.ts (13 tests)
+ ✓ tests/unit/...                  (17 test files)
 
- Test Files  6 passed (6)
-       Tests  63 passed (63)
+ Test Files  17 passed (17)
+       Tests  203 passed (203)
 ```
 
 To run in watch mode (re-runs on file change):
@@ -373,7 +368,7 @@ src/
 
 1. Fork the repository and create a feature branch.
 2. Make your changes — keep all coordinates as integers in µm, call `normalize()` after any geometric edit, and avoid `any` types.
-3. Run `npm run test:unit` and confirm all 63 tests pass.
+3. Run `npm run test:unit` and confirm all 203 tests pass.
 4. Open a pull request with a clear description of the change.
 
 ---

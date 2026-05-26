@@ -59,9 +59,9 @@
     <svg id="theme-icon" class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     <span id="theme-label">Dark</span>
   </button>
-  <button id="btn-clear" class="hdr-btn" title="Clear all shapes in this document" style="color:var(--danger)">
+  <button id="btn-clear" class="hdr-btn" title="Reset document (deletes all shapes, custom layers, and history)" style="color:var(--danger)">
     <svg class="icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-    Clear
+    Reset
   </button>
   <button id="btn-help" class="hdr-btn" title="Keyboard Shortcuts Help (?)">
     <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -434,7 +434,7 @@
       <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:4px">
         <strong>Action</strong><strong>Key</strong>
       </div>
-      <div style="display:flex;justify-content:space-between"><span>Select Tool</span><kbd>S</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Select Tool</span><kbd>V</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Box Tool</span><kbd>R</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Circle Tool</span><kbd>C</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Polygon Tool</span><kbd>P</kbd></div>
@@ -444,11 +444,18 @@
       <div style="display:flex;justify-content:space-between"><span>Centerline Tool</span><kbd>L</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Arrow Tool</span><kbd>A</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Fillet Tool</span><kbd>F</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Slice Tool</span><kbd>K</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Dimension Tool</span><kbd>D</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Delete Selection</span><kbd>Del</kbd> / <kbd>Backspace</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Select All</span><kbd>Ctrl+A</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Copy Selection</span><kbd>Ctrl+C</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Cut Selection</span><kbd>Ctrl+X</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Paste Selection</span><kbd>Ctrl+V</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Array Duplicate</span><kbd>Ctrl+D</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Undo</span><kbd>Ctrl+Z</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Redo</span><kbd>Ctrl+Y</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Zoom In / Out</span><kbd>+</kbd> / <kbd>-</kbd></div>
+      <div style="display:flex;justify-content:space-between"><span>Reset Zoom</span><kbd>0</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Zoom Fit</span><kbd>Home</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Help</span><kbd>?</kbd></div>
     </div>

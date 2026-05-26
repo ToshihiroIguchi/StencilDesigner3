@@ -1099,7 +1099,7 @@ export class App {
   }
 
   async clearCurrentDoc(): Promise<void> {
-    const ok = await this.showMessageModal({ title: 'Clear All', message: 'Remove all shapes from this document?', okText: 'Clear', cancelText: 'Cancel', danger: true });
+    const ok = await this.showMessageModal({ title: 'Reset Document', message: 'Are you sure you want to reset this document? This will permanently delete all shapes, custom layers, and history. This action cannot be undone.', okText: 'Reset', cancelText: 'Cancel', danger: true });
     if (!ok) return;
     this.cancelDiffMode();
     const prev = this.history.state;
