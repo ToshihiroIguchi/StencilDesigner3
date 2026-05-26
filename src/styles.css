@@ -370,12 +370,28 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s, border-color 0.12s;
+  transition: all 0.15s ease-in-out;
   padding: 0;
 }
 
-button:hover { background: var(--btn-hover); }
-button:disabled { opacity: 0.4; cursor: default; }
+button:hover {
+  background: var(--btn-hover);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+  pointer-events: none;
+}
 
 button.active {
   background: var(--btn-active);
@@ -484,10 +500,60 @@ svg.icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-w
 .fm-storage-text { font-size: 11px; color: var(--fg2); white-space: nowrap; }
 
 /* ── Doc name in header ──────────────────────────────────────────────────── */
-.doc-name-label { font-size: 12px; color: var(--fg2); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; padding: 0 4px; cursor: pointer; border-radius: 3px; }
-.doc-name-label::after { content: ' ✎'; font-size: 10px; opacity: 0.45; }
-.doc-name-label:hover { color: var(--fg); background: var(--btn-hover); }
-.doc-name-input { font-size: 12px; color: var(--fg); background: var(--bg3); border: 1px solid var(--accent); border-radius: 3px; padding: 2px 4px; width: 140px; align-self: center; font-family: inherit; outline: none; }
+.doc-name-label {
+  height: 30px;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-self: center;
+  padding: 0 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease-in-out;
+}
+.doc-name-label::after {
+  content: '✎';
+  font-size: 11px;
+  opacity: 0.5;
+  color: var(--accent);
+  transition: opacity 0.15s, transform 0.15s;
+}
+.doc-name-label:hover {
+  color: var(--fg);
+  background: var(--btn-hover);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(74, 158, 255, 0.15);
+}
+.doc-name-label:hover::after {
+  opacity: 1;
+  transform: scale(1.1);
+}
+.doc-name-input {
+  height: 30px;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--bg3);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0 10px;
+  width: 160px;
+  align-self: center;
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
 
 /* ── Storage full banner ─────────────────────────────────────────────────── */
 .storage-banner { position: fixed; bottom: var(--footer-h); left: 0; right: 0; background: var(--danger); color: #fff; font-size: 12px; text-align: center; padding: 4px 8px; z-index: 900; }
