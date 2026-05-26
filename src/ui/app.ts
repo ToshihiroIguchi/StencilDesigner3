@@ -78,6 +78,7 @@ export class App {
   private isDark = true;
   private activeTool: AnyTool;
   private isPanning = false;
+  private isSpacePressed = false;
   private panStart: { x: number; y: number } | null = null;
   private panOrigin: { x: number; y: number } | null = null;
   private stopAutosave: (() => void) | null = null;
@@ -250,6 +251,13 @@ export class App {
     this.canvas.addEventListener('dblclick', (e) => this.onDblClick(e));
 
     document.addEventListener('keydown', (e) => this.onKeyDown(e));
+    document.addEventListener('keyup', (e) => this.onKeyUp(e));
+    window.addEventListener('blur', () => {
+      if (this.isSpacePressed) {
+        this.isSpacePressed = false;
+        this.updateCursor();
+      }
+    });
 
     // Toolbar buttons
     document.querySelectorAll('[data-tool]').forEach((el) => {
@@ -393,12 +401,13 @@ export class App {
   }
 
   private onMouseDown(e: MouseEvent): void {
-    if (e.button === 2 || (e.button === 1)) {
-      // Right or middle: pan
+    if (e.button === 2 || (e.button === 1) || (e.button === 0 && this.isSpacePressed)) {
+      // Right, middle, or left + Space: pan
       this.isPanning = true;
       this.panStart = { x: e.clientX, y: e.clientY };
       const state = this.history.state;
       this.panOrigin = { x: state.panX, y: state.panY };
+      this.updateCursor();
       return;
     }
 
@@ -436,6 +445,7 @@ export class App {
       this.isPanning = false;
       this.panStart = null;
       this.panOrigin = null;
+      this.updateCursor();
       return;
     }
 
@@ -494,11 +504,48 @@ export class App {
     this.requestRender();
   }
 
+  private updateCursor(): void {
+    if (this.isPanning) {
+      this.canvas.style.cursor = 'grabbing';
+    } else if (this.isSpacePressed) {
+      this.canvas.style.cursor = 'grab';
+    } else if (this.diffStep > 0) {
+      this.canvas.style.cursor = 'crosshair';
+    } else {
+      this.canvas.style.cursor = '';
+    }
+  }
+
+  private onKeyUp(e: KeyboardEvent): void {
+    if (e.key === ' ' || e.code === 'Space') {
+      const target = e.target as HTMLElement;
+      const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+      const editingText = (this.activeTool instanceof TextTool && this.activeTool.isEditing())
+        || (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing());
+
+      if (!inInput && !editingText) {
+        this.isSpacePressed = false;
+        this.updateCursor();
+      }
+    }
+  }
+
   private onKeyDown(e: KeyboardEvent): void {
     const target = e.target as HTMLElement;
     const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
     const editingText = (this.activeTool instanceof TextTool && this.activeTool.isEditing())
       || (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing());
+
+    if (e.key === ' ' || e.code === 'Space') {
+      if (!inInput && !editingText && !this.isAnyModalOpen()) {
+        e.preventDefault();
+        if (!this.isSpacePressed) {
+          this.isSpacePressed = true;
+          this.updateCursor();
+        }
+        return;
+      }
+    }
 
     if (e.ctrlKey || e.metaKey) {
       // Ctrl+Shift+Z must be checked before plain Ctrl+Z
