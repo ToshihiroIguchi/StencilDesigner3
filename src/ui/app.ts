@@ -538,6 +538,7 @@ export class App {
       if (e.key === 'a' || e.key === 'A') { this.setTool('arrow'); return; }
       if (e.key === 't' || e.key === 'T') { this.setTool('text'); return; }
       if (e.key === 'n' || e.key === 'N') { this.setTool('annotation'); return; }
+      if (e.key === 's' || e.key === 'S' || e.key === 'F9') { e.preventDefault(); this.toggleSnap(); return; }
       if (e.key === 'Home') { e.preventDefault(); this.fitToContent(); return; }
       if (e.key === '+' || e.key === '=') { e.preventDefault(); this.zoomStep(1); return; }
       if (e.key === '-') { e.preventDefault(); this.zoomStep(-1); return; }
