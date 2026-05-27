@@ -221,9 +221,9 @@ const DIM_FONT = 3.0;
 const DIM_LABEL_PAD = 0.6;
 const DIM_ARROW = 1.0;
 const DIM_ANGLE = 20 * Math.PI / 180;
-const DIM_EXT_GAP = 0.5;
+const DIM_EXT_GAP = 0.8;
 const DIM_EXT_OVER = 0.8;
-const DIM_TEXT_GAP = 1.5;
+const DIM_TEXT_GAP = 1.2;
 
 function drawArrowhead(pdf: jsPDF, x: number, y: number, angle: number): void {
   pdf.line(x, y, x + DIM_ARROW * Math.cos(angle + DIM_ANGLE), y + DIM_ARROW * Math.sin(angle + DIM_ANGLE));
@@ -257,6 +257,46 @@ function drawDimLabelPdf(
   pdf.text(label, x, y, { align, baseline: 'middle' });
 }
 
+function findVerticalEdgeBounds(x: number, y: number, shapes: Polygon[]): { yMin: number; yMax: number } | null {
+  for (const shape of shapes) {
+    const rings = [shape.outer, ...shape.holes];
+    for (const ring of rings) {
+      for (let i = 0; i < ring.length; i++) {
+        const pA = ring[i];
+        const pB = ring[(i + 1) % ring.length];
+        if (pA.x === x && pB.x === x) {
+          const yMin = Math.min(pA.y, pB.y);
+          const yMax = Math.max(pA.y, pB.y);
+          if (y >= yMin - 1 && y <= yMax + 1) {
+            return { yMin, yMax };
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findHorizontalEdgeBounds(x: number, y: number, shapes: Polygon[]): { xMin: number; xMax: number } | null {
+  for (const shape of shapes) {
+    const rings = [shape.outer, ...shape.holes];
+    for (const ring of rings) {
+      for (let i = 0; i < ring.length; i++) {
+        const pA = ring[i];
+        const pB = ring[(i + 1) % ring.length];
+        if (pA.y === y && pB.y === y) {
+          const xMin = Math.min(pA.x, pB.x);
+          const xMax = Math.max(pA.x, pB.x);
+          if (x >= xMin - 1 && x <= xMax + 1) {
+            return { xMin, xMax };
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function renderOneDimensionPdf(
   f: FrameInfo,
   kind: Dimension['kind'],
@@ -267,6 +307,7 @@ function renderOneDimensionPdf(
   unit: 'mm' | 'um',
   frozen: boolean,
   fontName: string,
+  shapes: Polygon[] = [],
 ): void {
   const pdf = f.pdf;
   pdf.setDrawColor(color);
@@ -291,8 +332,23 @@ function renderOneDimensionPdf(
   }
 
   if (kind === 'linear-h') {
-    const c1x = wx(p1.x, f), c1y = wy(p1.y, f);
-    const c2x = wx(p2.x, f), c2y = wy(p2.y, f);
+    // Find vertical edge boundaries to avoid drawing extension lines inside shape outlines
+    let y1 = p1.y;
+    let y2 = p2.y;
+
+    const bounds1 = findVerticalEdgeBounds(p1.x, p1.y, shapes);
+    if (bounds1) {
+      if (offset > bounds1.yMax) y1 = bounds1.yMax;
+      else if (offset < bounds1.yMin) y1 = bounds1.yMin;
+    }
+    const bounds2 = findVerticalEdgeBounds(p2.x, p2.y, shapes);
+    if (bounds2) {
+      if (offset > bounds2.yMax) y2 = bounds2.yMax;
+      else if (offset < bounds2.yMin) y2 = bounds2.yMin;
+    }
+
+    const c1x = wx(p1.x, f), c1y = wy(y1, f);
+    const c2x = wx(p2.x, f), c2y = wy(y2, f);
     const cdy = wy(offset, f); // offset is world Y of the dimension line
 
     const d1 = Math.sign(cdy - c1y) || 1;
@@ -310,8 +366,22 @@ function renderOneDimensionPdf(
     drawDimLabelPdf(pdf, label, (c1x + c2x) / 2, cdy + DIM_TEXT_GAP * textDir, 'center', color, fontName);
   } else {
     // linear-v
-    const c1x = wx(p1.x, f), c1y = wy(p1.y, f);
-    const c2x = wx(p2.x, f), c2y = wy(p2.y, f);
+    let x1 = p1.x;
+    let x2 = p2.x;
+
+    const bounds1 = findHorizontalEdgeBounds(p1.x, p1.y, shapes);
+    if (bounds1) {
+      if (offset > bounds1.xMax) x1 = bounds1.xMax;
+      else if (offset < bounds1.xMin) x1 = bounds1.xMin;
+    }
+    const bounds2 = findHorizontalEdgeBounds(p2.x, p2.y, shapes);
+    if (bounds2) {
+      if (offset > bounds2.xMax) x2 = bounds2.xMax;
+      else if (offset < bounds2.xMin) x2 = bounds2.xMin;
+    }
+
+    const c1x = wx(x1, f), c1y = wy(p1.y, f);
+    const c2x = wx(x2, f), c2y = wy(p2.y, f);
     const cdx = wx(offset, f); // offset is world X of the dimension line
 
     const d1 = Math.sign(cdx - c1x) || 1;
@@ -344,7 +414,7 @@ function drawDimensions(
     const layer = layerMap.get(d.layer);
     if (!layer || !layer.visible) continue;
     const { p1, p2, frozen } = resolveDimension(d, shapes);
-    renderOneDimensionPdf(f, d.kind, p1, p2, d.offset, frozen ? '#888888' : layer.color, unit, frozen, fontName);
+    renderOneDimensionPdf(f, d.kind, p1, p2, d.offset, frozen ? '#888888' : layer.color, unit, frozen, fontName, shapes);
   }
 }
 

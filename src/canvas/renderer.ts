@@ -196,7 +196,7 @@ export class CanvasRenderer {
 
     // In-progress dimension draft
     if (extras?.dimDraft) {
-      this.drawDimDraft(extras.dimDraft, vt);
+      this.drawDimDraft(extras.dimDraft, state.shapes, vt);
     }
 
     // Measure overlay
@@ -699,9 +699,49 @@ export class CanvasRenderer {
 
   private static readonly DIM_ARROW = 8;
   private static readonly DIM_ANGLE = Math.PI / 6;
-  private static readonly DIM_EXT_GAP = 4;
-  private static readonly DIM_EXT_OVER = 5;
-  private static readonly DIM_TEXT_GAP = 7;
+  private static readonly DIM_EXT_GAP = 6;
+  private static readonly DIM_EXT_OVER = 4;
+  private static readonly DIM_TEXT_GAP = 6;
+
+  private findVerticalEdgeBounds(x: number, y: number, shapes: Polygon[]): { yMin: number; yMax: number } | null {
+    for (const shape of shapes) {
+      const rings = [shape.outer, ...shape.holes];
+      for (const ring of rings) {
+        for (let i = 0; i < ring.length; i++) {
+          const pA = ring[i];
+          const pB = ring[(i + 1) % ring.length];
+          if (pA.x === x && pB.x === x) {
+            const yMin = Math.min(pA.y, pB.y);
+            const yMax = Math.max(pA.y, pB.y);
+            if (y >= yMin - 1 && y <= yMax + 1) {
+              return { yMin, yMax };
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private findHorizontalEdgeBounds(x: number, y: number, shapes: Polygon[]): { xMin: number; xMax: number } | null {
+    for (const shape of shapes) {
+      const rings = [shape.outer, ...shape.holes];
+      for (const ring of rings) {
+        for (let i = 0; i < ring.length; i++) {
+          const pA = ring[i];
+          const pB = ring[(i + 1) % ring.length];
+          if (pA.y === y && pB.y === y) {
+            const xMin = Math.min(pA.x, pB.x);
+            const xMax = Math.max(pA.x, pB.x);
+            if (x >= xMin - 1 && x <= xMax + 1) {
+              return { xMin, xMax };
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
 
   private drawDimensions(
     dimensions: Dimension[],
@@ -718,7 +758,7 @@ export class CanvasRenderer {
       const { p1, p2, frozen } = resolveDimension(dim, shapes);
       const baseColor = selected ? COLORS.shapeSelected : (layer?.color ?? '#888888');
       const color = frozen ? '#7a7a8a' : baseColor;
-      this.drawOneDimension(dim.kind, p1, p2, dim.offset, color, unit, vt, frozen);
+      this.drawOneDimension(dim.kind, p1, p2, dim.offset, color, unit, vt, frozen, shapes);
     }
   }
 
@@ -731,6 +771,7 @@ export class CanvasRenderer {
     unit: 'mm' | 'um',
     vt: ViewTransform,
     frozen = false,
+    shapes: Polygon[] = [],
   ): void {
     const ctx = this.ctx;
     const { DIM_ARROW, DIM_ANGLE, DIM_EXT_GAP, DIM_EXT_OVER, DIM_TEXT_GAP } = CanvasRenderer;
@@ -769,8 +810,23 @@ export class CanvasRenderer {
     }
 
     if (kind === 'linear-h') {
-      const c1 = worldToCanvas(p1.x, p1.y, vt);
-      const c2 = worldToCanvas(p2.x, p2.y, vt);
+      // Find vertical edge boundaries to avoid drawing extension lines inside shape outlines
+      let y1 = p1.y;
+      let y2 = p2.y;
+
+      const bounds1 = this.findVerticalEdgeBounds(p1.x, p1.y, shapes);
+      if (bounds1) {
+        if (offset > bounds1.yMax) y1 = bounds1.yMax;
+        else if (offset < bounds1.yMin) y1 = bounds1.yMin;
+      }
+      const bounds2 = this.findVerticalEdgeBounds(p2.x, p2.y, shapes);
+      if (bounds2) {
+        if (offset > bounds2.yMax) y2 = bounds2.yMax;
+        else if (offset < bounds2.yMin) y2 = bounds2.yMin;
+      }
+
+      const c1 = worldToCanvas(p1.x, y1, vt);
+      const c2 = worldToCanvas(p2.x, y2, vt);
       const cdy = worldToCanvas(0, offset, vt).y;
 
       const d1 = Math.sign(cdy - c1.y) || 1;
@@ -796,8 +852,22 @@ export class CanvasRenderer {
       this.drawDimLabel(label, (c1.x + c2.x) / 2, cdy + DIM_TEXT_GAP * textDir);
     } else {
       // linear-v
-      const c1 = worldToCanvas(p1.x, p1.y, vt);
-      const c2 = worldToCanvas(p2.x, p2.y, vt);
+      let x1 = p1.x;
+      let x2 = p2.x;
+
+      const bounds1 = this.findHorizontalEdgeBounds(p1.x, p1.y, shapes);
+      if (bounds1) {
+        if (offset > bounds1.xMax) x1 = bounds1.xMax;
+        else if (offset < bounds1.xMin) x1 = bounds1.xMin;
+      }
+      const bounds2 = this.findHorizontalEdgeBounds(p2.x, p2.y, shapes);
+      if (bounds2) {
+        if (offset > bounds2.xMax) x2 = bounds2.xMax;
+        else if (offset < bounds2.xMin) x2 = bounds2.xMin;
+      }
+
+      const c1 = worldToCanvas(x1, p1.y, vt);
+      const c2 = worldToCanvas(x2, p2.y, vt);
       const cdx = worldToCanvas(offset, 0, vt).x;
 
       const d1 = Math.sign(cdx - c1.x) || 1;
@@ -860,7 +930,7 @@ export class CanvasRenderer {
 
   // ─── In-progress drafts ────────────────────────────────────────────────────
 
-  private drawDimDraft(draft: DimDraft, vt: ViewTransform): void {
+  private drawDimDraft(draft: DimDraft, shapes: Polygon[], vt: ViewTransform): void {
     const ctx = this.ctx;
     ctx.save();
     ctx.strokeStyle = 'rgba(100,200,100,0.7)';
@@ -881,7 +951,7 @@ export class CanvasRenderer {
       ctx.restore();
       // Use mm for dimension draft by default as it's just a preview, or pass proper unit if possible.
       // Since it's a draft, we'll use mm.
-      this.drawOneDimension(draft.kind, draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', 'mm', vt);
+      this.drawOneDimension(draft.kind, draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', 'mm', vt, false, shapes);
       return;
     }
 
@@ -893,7 +963,7 @@ export class CanvasRenderer {
     ctx.strokeStyle = 'rgba(100,200,100,0.7)';
     ctx.fillStyle = 'rgba(100,200,100,0.7)';
     ctx.lineWidth = 1.2;
-    this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', 'mm', vt);
+    this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', 'mm', vt, false, shapes);
     ctx.restore();
   }
 
