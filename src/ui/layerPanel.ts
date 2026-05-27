@@ -6,6 +6,7 @@ import {
 } from '../state/commands';
 import { markDirty } from '../state/docStore';
 import { showInputModal, showMessageModal } from './modals';
+import { escHtml } from './fileManager';
 
 export interface LayerPanelDeps {
   history: History;
@@ -25,7 +26,7 @@ export function renderLayerPanel(deps: LayerPanelDeps, state: AppState): void {
     row.innerHTML = `
       <span class="lyr-active" title="Set active">${isActive ? '●' : '○'}</span>
       <input type="color" class="lyr-color" value="${layer.color}" title="Layer color">
-      <span class="lyr-name" title="${layer.name}">${layer.name}</span>
+      <span class="lyr-name" title="${escHtml(layer.name)}">${escHtml(layer.name)}</span>
       <button class="lyr-btn lyr-vis${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be hidden' : 'Toggle visibility'}">${layer.visible ? 'V' : 'H'}</button>
       <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}${layer.name === 'DIMENSIONS' ? ' lyr-btn-disabled' : ''}" title="${layer.name === 'DIMENSIONS' ? 'DIMENSIONS layer is never an aperture' : 'Toggle aperture (DRC + DXF export)'}">A</button>
       <button class="lyr-btn lyr-del" title="Delete layer">×</button>
@@ -142,7 +143,7 @@ async function deleteLayer(deps: LayerPanelDeps, name: string): Promise<void> {
   msg.textContent = `Layer "${name}" has ${shapeCount} shape(s).`;
   targetSel.innerHTML = state.layers
     .filter((l) => l.name !== name)
-    .map((l) => `<option value="${l.name}">${l.name}</option>`)
+    .map((l) => `<option value="${escHtml(l.name)}">${escHtml(l.name)}</option>`)
     .join('');
 
   modal.style.display = '';

@@ -216,7 +216,7 @@ export function updateRightPanel(state: AppState, deps: RightPanelDeps): void {
       infoEl.innerHTML = `<div class="shape-info">
         <span style="color:${layerColor}">Note</span>
         <span style="white-space:pre-wrap;word-break:break-all">${escHtml(preview)}</span>
-        <span style="color:var(--fg2)">Layer: ${ann.layer}</span>
+        <span style="color:var(--fg2)">Layer: ${escHtml(ann.layer)}</span>
       </div>
       <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del: delete · Dbl-click: edit</p>`;
       if (propsEl) propsEl.style.display = 'none';
@@ -243,7 +243,7 @@ export function updateRightPanel(state: AppState, deps: RightPanelDeps): void {
       }
       const frozenTag = frozen ? ' <span style="color:#7a7a8a">[frozen]</span>' : '';
       const title = dim.kind === 'centerline' ? 'Centerline' : 'Dimension';
-      infoEl.innerHTML = `<div class="shape-info"><span>${title}${frozenTag}</span><span>${label}</span><span style="color:var(--fg2)">Layer: ${dim.layer}</span></div>
+      infoEl.innerHTML = `<div class="shape-info"><span>${title}${frozenTag}</span><span>${label}</span><span style="color:var(--fg2)">Layer: ${escHtml(dim.layer)}</span></div>
         <p style="font-size:11px;color:var(--fg2);margin-top:4px">Del to delete</p>`;
       if (propsEl) propsEl.style.display = 'none';
       return;

@@ -12,7 +12,8 @@ export function getCircleSegments(r: number): number {
   const maxChordError = 0.5; // µm
   if (r <= maxChordError) return 8;
   const theta = 2 * Math.acos(1 - maxChordError / r);
-  return Math.max(32, Math.ceil((2 * Math.PI) / theta));
+  const calculated = Math.ceil((2 * Math.PI) / theta);
+  return Math.min(2048, Math.max(32, calculated));
 }
 
 /** Approximate a circle as a polygon with dynamic or explicit sides. */
