@@ -1,5 +1,5 @@
 import type { Point, Polygon, Ring } from '../types';
-import { dist, isRingCircleLike, ringCentroid, midpoint, snapToGrid } from './geometry';
+import { dist, isRingCircleLike, ringCentroid, midpoint, snapToGrid, snapToGridShifted } from './geometry';
 
 export type SnapKind = 'grid' | 'vertex' | 'midpoint' | 'center' | 'edge';
 
@@ -44,6 +44,7 @@ export function findSnap(
   gridSize: number,
   snapRadius: number,
   excludeShapeId?: string,
+  gridOrigin?: Point,
 ): SnapResult {
   let best: SnapResult = { point: worldPt, kind: 'grid' };
   let bestDist = snapRadius;
@@ -97,7 +98,7 @@ export function findSnap(
   }
   if (bestDist < snapRadius) return best;
 
-  return { point: snapToGrid(worldPt, gridSize), kind: 'grid' };
+  return { point: gridOrigin ? snapToGridShifted(worldPt, gridSize, gridOrigin) : snapToGrid(worldPt, gridSize), kind: 'grid' };
 }
 
 export interface SelectionSnapResult {
@@ -115,6 +116,7 @@ export function findSelectionSnap(
   staticShapes: Polygon[],
   gridSize: number,
   snapRadius: number,
+  gridOrigin?: Point,
 ): SelectionSnapResult {
   const rawDx = currentMouseWorld.x - dragStartWorld.x;
   const rawDy = currentMouseWorld.y - dragStartWorld.y;
@@ -149,7 +151,7 @@ export function findSelectionSnap(
       };
 
       // Check if this dragged vertex snaps to any static shape within snapRadius
-      const snapRes = findSnap(vDragged, staticShapes, gridSize, snapRadius);
+      const snapRes = findSnap(vDragged, staticShapes, gridSize, snapRadius, undefined, gridOrigin);
       if (snapRes.kind !== 'grid') {
         const d = dist(vDragged, snapRes.point);
         if (d < bestDist) {
@@ -181,7 +183,7 @@ export function findSelectionSnap(
   }
 
   // Otherwise, fall back to mouse grid snapping
-  const snappedMouse = snapToGrid(currentMouseWorld, gridSize);
+  const snappedMouse = gridOrigin ? snapToGridShifted(currentMouseWorld, gridSize, gridOrigin) : snapToGrid(currentMouseWorld, gridSize);
   const deltaX = Math.round(snappedMouse.x - dragStartWorld.x);
   const deltaY = Math.round(snappedMouse.y - dragStartWorld.y);
 

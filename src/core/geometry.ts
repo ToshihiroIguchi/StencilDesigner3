@@ -111,6 +111,15 @@ export function snapToGrid(p: Point, gridSize: number): Point {
   };
 }
 
+/** Snap a world point to the nearest grid point shifted by a custom origin. */
+export function snapToGridShifted(p: Point, gridSize: number, origin: Point): Point {
+  return {
+    x: origin.x + Math.round((p.x - origin.x) / gridSize) * gridSize,
+    y: origin.y + Math.round((p.y - origin.y) / gridSize) * gridSize,
+  };
+}
+
+
 /** Distance between two points. */
 export function dist(a: Point, b: Point): number {
   const dx = a.x - b.x, dy = a.y - b.y;

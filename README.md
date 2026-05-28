@@ -300,7 +300,8 @@ The DRC panel is always visible in the **right panel**. DRC runs automatically e
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | Redo |
 | `Home` | Fit all shapes in view |
-| `Esc` | Cancel current operation |
+| `Esc` | Cancel current operation, clear temporary reference point |
+| `G` / `O` | Set/clear temporary reference point (snap tracker) |
 | `Enter` | Commit polygon (while drawing) |
 
 ---

@@ -81,6 +81,7 @@ export interface RendererExtras {
   selectedAnnotationIds?: Set<string>;
   drawHud?: DrawHud;
   selectionSnap?: SelectionSnapResult;
+  tempRefPoint?: Point;
 }
 
 export class CanvasRenderer {
@@ -140,6 +141,11 @@ export class CanvasRenderer {
     ctx.rect(RULER_SIZE, RULER_SIZE, this.width - RULER_SIZE, this.height - RULER_SIZE);
     ctx.clip();
 
+    // Temporary reference point guide lines
+    if (extras?.tempRefPoint) {
+      this.drawTempRefPointGuides(extras.tempRefPoint, vt);
+    }
+
     // Shapes
     const selIds = selectedIds(state.selection);
     const drcErrorIds = new Set(
@@ -173,6 +179,11 @@ export class CanvasRenderer {
     // Text tool live preview
     if (extras?.textPreviewPolys) {
       this.drawTextPreview(extras.textPreviewPolys, vt);
+    }
+
+    // Temporary reference point indicator
+    if (extras?.tempRefPoint) {
+      this.drawTempRefPointIndicator(extras.tempRefPoint, vt);
     }
 
     // Snap indicator
@@ -261,6 +272,58 @@ export class CanvasRenderer {
     }
     ctx.stroke();
   }
+
+  private drawTempRefPointGuides(p: Point, vt: ViewTransform): void {
+    const ctx = this.ctx;
+    const cp = worldToCanvas(p.x, p.y, vt);
+    const color = this.isDark ? 'rgba(255, 100, 150, 0.45)' : 'rgba(230, 50, 100, 0.55)'; // Magenta/pink guides
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.0;
+    ctx.setLineDash([4, 4]); // Dashed guides
+    ctx.beginPath();
+    
+    // Horizontal guide line passing through p
+    if (cp.y >= RULER_SIZE && cp.y <= this.height) {
+      ctx.moveTo(RULER_SIZE, cp.y);
+      ctx.lineTo(this.width, cp.y);
+    }
+    // Vertical guide line passing through p
+    if (cp.x >= RULER_SIZE && cp.x <= this.width) {
+      ctx.moveTo(cp.x, RULER_SIZE);
+      ctx.lineTo(cp.x, this.height);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawTempRefPointIndicator(p: Point, vt: ViewTransform): void {
+    const ctx = this.ctx;
+    const cp = worldToCanvas(p.x, p.y, vt);
+    const color = this.isDark ? '#ff4081' : '#e91e63'; // Neon pink/magenta
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.8;
+    
+    // Concentric circle and crosshair
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cp.x - 10, cp.y); ctx.lineTo(cp.x + 10, cp.y);
+    ctx.moveTo(cp.x, cp.y - 10); ctx.lineTo(cp.x, cp.y + 10);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+
 
   private drawSelectionSnap(snap: SelectionSnapResult, vt: ViewTransform): void {
     if (snap.kind === 'grid' || !snap.movingPoint || !snap.targetPoint) return;

@@ -101,6 +101,7 @@ export class App {
   private currentDocName = '';
   private storageBannerTimer: ReturnType<typeof setTimeout> | null = null;
   private dragCounter = 0;
+  private tempRefPoint: Point | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -186,7 +187,9 @@ export class App {
       worldPt,
       interactiveShapes,
       effectiveGrid,
-      state.snapRadius / state.zoom
+      state.snapRadius / state.zoom,
+      undefined,
+      this.tempRefPoint ?? undefined
     );
   }
 
@@ -215,7 +218,8 @@ export class App {
       currentMouseWorld,
       staticShapes,
       effectiveGrid,
-      state.snapRadius / state.zoom
+      state.snapRadius / state.zoom,
+      this.tempRefPoint ?? undefined
     );
   }
 
@@ -269,6 +273,7 @@ export class App {
         selectionSnap: this.activeTool instanceof SelectTool
           ? (this.activeTool.getSelectionSnapResult() ?? undefined)
           : undefined,
+        tempRefPoint: this.tempRefPoint ?? undefined,
       },
     );
     this.updateFooter(state);
@@ -472,6 +477,20 @@ export class App {
     const cursorY = document.getElementById('footer-cy');
     if (cursorX) cursorX.textContent = UnitConverter.formatOutput(worldPt.x, this.history.state.displayUnit);
     if (cursorY) cursorY.textContent = UnitConverter.formatOutput(worldPt.y, this.history.state.displayUnit);
+
+    const relCoords = document.getElementById('footer-rel-coords');
+    const relCoordsVal = document.getElementById('footer-rc');
+    if (this.tempRefPoint) {
+      const dX = worldPt.x - this.tempRefPoint.x;
+      const dY = worldPt.y - this.tempRefPoint.y;
+      const unit = this.history.state.displayUnit;
+      if (relCoordsVal) {
+        relCoordsVal.textContent = `dX: ${UnitConverter.formatOutput(dX, unit, true)}, dY: ${UnitConverter.formatOutput(dY, unit, true)}`;
+      }
+      if (relCoords) relCoords.style.display = '';
+    } else {
+      if (relCoords) relCoords.style.display = 'none';
+    }
   }
 
   private onMouseUp(e: MouseEvent): void {
@@ -607,6 +626,40 @@ export class App {
     }
     if (!inInput && !e.ctrlKey && !e.metaKey) {
       if (e.key === '?' || e.key === 'h' || e.key === 'H') { e.preventDefault(); this.toggleHelpModal(); return; }
+      if (e.key === 'g' || e.key === 'G' || e.key === 'o' || e.key === 'O') {
+        e.preventDefault();
+        const activeSnap = this.activeTool.getSnap();
+        if (activeSnap) {
+          const pt = activeSnap.point;
+          if (this.tempRefPoint && this.tempRefPoint.x === pt.x && this.tempRefPoint.y === pt.y) {
+            this.tempRefPoint = null;
+            this.showNotify("Temporary reference point cleared.");
+            const relCoords = document.getElementById('footer-rel-coords');
+            if (relCoords) relCoords.style.display = 'none';
+          } else {
+            this.tempRefPoint = pt;
+            const unit = this.history.state.displayUnit;
+            const xStr = UnitConverter.formatOutput(pt.x, unit, true);
+            const yStr = UnitConverter.formatOutput(pt.y, unit, true);
+            this.showNotify(`Temporary reference point set at (${xStr}, ${yStr}).`);
+            const relCoords = document.getElementById('footer-rel-coords');
+            const relCoordsVal = document.getElementById('footer-rc');
+            if (relCoordsVal) {
+              relCoordsVal.textContent = `dX: ${UnitConverter.formatOutput(0, unit, true)}, dY: ${UnitConverter.formatOutput(0, unit, true)}`;
+            }
+            if (relCoords) relCoords.style.display = '';
+          }
+        } else {
+          if (this.tempRefPoint) {
+            this.tempRefPoint = null;
+            this.showNotify("Temporary reference point cleared.");
+            const relCoords = document.getElementById('footer-rel-coords');
+            if (relCoords) relCoords.style.display = 'none';
+          }
+        }
+        this.requestRender();
+        return;
+      }
       if (e.key === 'v' || e.key === 'V') { this.setTool('select'); return; }
       if (e.key === 'r' || e.key === 'R') { this.setTool('rect'); return; }
       if (e.key === 'c' || e.key === 'C') { this.setTool('circle'); return; }
@@ -651,6 +704,12 @@ export class App {
       this.cancelDiffMode();
       this.closeHelpModal();
       this.activeTool.cancel();
+      if (this.tempRefPoint) {
+        this.tempRefPoint = null;
+        this.showNotify("Temporary reference point cleared.");
+        const relCoords = document.getElementById('footer-rel-coords');
+        if (relCoords) relCoords.style.display = 'none';
+      }
     }
     this.activeTool.onKeyDown(e.key, this.history.state);
   }

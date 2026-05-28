@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rectToPolygon, circleToPolygon, lineToPolygon, translatePolygon, polygonArea, polygonBbox, snapToGrid, dist, isRingCircleLike, ringCentroid } from '../../src/core/geometry';
+import { rectToPolygon, circleToPolygon, lineToPolygon, translatePolygon, polygonArea, polygonBbox, snapToGrid, snapToGridShifted, dist, isRingCircleLike, ringCentroid } from '../../src/core/geometry';
 import { area, signedArea2 } from '../../src/normalize';
 import type { Ring } from '../../src/types';
 
@@ -88,6 +88,16 @@ describe('snapToGrid', () => {
     expect(snapToGrid({ x: 0, y: 0 }, 1000)).toEqual({ x: 0, y: 0 });
   });
 });
+
+describe('snapToGridShifted', () => {
+  it('snaps to nearest grid point shifted by an origin', () => {
+    const origin = { x: 100, y: 200 };
+    expect(snapToGridShifted({ x: 1200, y: 2300 }, 1000, origin)).toEqual({ x: 1100, y: 2200 });
+    expect(snapToGridShifted({ x: 600, y: 700 }, 1000, origin)).toEqual({ x: 1100, y: 1200 });
+    expect(snapToGridShifted({ x: 100, y: 200 }, 1000, origin)).toEqual({ x: 100, y: 200 });
+  });
+});
+
 
 describe('dist', () => {
   it('calculates Euclidean distance', () => {
