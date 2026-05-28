@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test('verify proximity smart snapping visually in the browser', async ({ page }) => {
-  // Go to the running dev server
-  await page.goto('http://localhost:5174/');
+  // Go to the running preview server
+  await page.goto('/');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1000); // Allow IndexedDB and Canvas to initialize
 
