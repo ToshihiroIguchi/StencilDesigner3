@@ -217,7 +217,8 @@ function drawShapes(f: FrameInfo, shapes: Polygon[], layers: Layer[]): void {
   f.pdf.setLineDashPattern([], 0);
 }
 
-const DIM_FONT = 3.0;
+const DIM_FONT_MM = 3.0;
+const DIM_FONT_PT = DIM_FONT_MM * (72 / 25.4); // Convert mm to points (approx 8.5 pt)
 const DIM_LABEL_PAD = 0.6;
 const DIM_ARROW = 1.0;
 const DIM_ANGLE = 20 * Math.PI / 180;
@@ -239,14 +240,14 @@ function drawDimLabelPdf(
   color: string,
   fontName: string,
 ): void {
-  pdf.setFontSize(DIM_FONT);
+  pdf.setFontSize(DIM_FONT_PT);
   if (fontName !== 'helvetica') {
     pdf.setFont(fontName, 'normal');
   } else {
     pdf.setFont('helvetica', 'normal');
   }
   const w = pdf.getTextWidth(label);
-  const h = DIM_FONT * 0.9;
+  const h = DIM_FONT_MM * 0.9;
   let bgX = x;
   if (align === 'center') bgX = x - w / 2;
   else if (align === 'right') bgX = x - w;
