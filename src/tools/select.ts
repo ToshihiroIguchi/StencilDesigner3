@@ -4,6 +4,7 @@ import { hitTest, hitTestAnnotation, hitTestDimension, rubberBandSelect } from '
 import { CompoundCommand, MoveAnnotationCommand, MoveCommand, SetSelectionCommand } from '../state/commands';
 import { translatePolygon } from '../core/geometry';
 import { markDirty } from '../state/docStore';
+import type { SelectionSnapResult } from '../core/snap';
 
 const DRAG_THRESHOLD_PX = 5;
 
@@ -18,10 +19,15 @@ export class SelectTool extends BaseTool {
   private savedShapes: Polygon[] | null = null;
   private savedAnnotations: Annotation[] | null = null;
   private savedSelection: Selection[] | null = null;
+  private selectionSnap: SelectionSnapResult | null = null;
 
   private isRubberBand = false;
   private rubberBandStart: Point | null = null;
   private rubberBandEnd: Point | null = null;
+
+  getSelectionSnapResult(): SelectionSnapResult | null {
+    return this.selectionSnap;
+  }
 
   constructor(ctx: ToolContext) {
     super(ctx);
@@ -89,11 +95,9 @@ export class SelectTool extends BaseTool {
   }
 
   onMouseMove(worldPt: Point, canvasPt: Point, shift: boolean, _state: AppState): void {
-    this.snap = this.ctx.getSnap(worldPt);
-    const snapPt = this.snap.point;
     const state = this.ctx.history.state;
 
-    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.dragStartWorld && snapPt) {
+    if (this.isDragging && state.selection.length > 0 && this.dragStartCanvas && this.dragStartWorld) {
       if (!this.dragThresholdReached) {
         const dxPx = canvasPt.x - this.dragStartCanvas.x;
         const dyPx = canvasPt.y - this.dragStartCanvas.y;
@@ -103,9 +107,24 @@ export class SelectTool extends BaseTool {
       }
 
       if (this.dragThresholdReached) {
-        // Compute total displacement from drag start (not frame delta) to avoid ortho drift
-        let totalDx = snapPt.x - this.dragStartWorld.x;
-        let totalDy = snapPt.y - this.dragStartWorld.y;
+        // Collect moving shapes
+        const ids = new Set(state.selection.filter((s) => s.type === 'polygon').map((s) => s.shapeId));
+        const movingShapes = (this.savedShapes ?? state.shapes).filter((s) => ids.has(s.id));
+
+        // Calculate advanced selection snap (excludes moving shapes internally)
+        this.selectionSnap = this.ctx.getSelectionSnap(movingShapes, this.dragStartWorld, worldPt);
+
+        // Keep this.snap in sync for generic renderer purposes, though selectionSnap is primary
+        this.snap = {
+          point: this.selectionSnap.targetPoint ?? {
+            x: this.dragStartWorld.x + this.selectionSnap.delta.x,
+            y: this.dragStartWorld.y + this.selectionSnap.delta.y,
+          },
+          kind: this.selectionSnap.kind,
+        };
+
+        let totalDx = this.selectionSnap.delta.x;
+        let totalDy = this.selectionSnap.delta.y;
 
         if (shift) {
           // Ortho lock: constrain to dominant axis relative to drag start
@@ -119,18 +138,22 @@ export class SelectTool extends BaseTool {
         if (incDx !== 0 || incDy !== 0) {
           this.pendingDx = totalDx;
           this.pendingDy = totalDy;
-          const ids = new Set(state.selection.map((s) => s.shapeId));
+
+          const selIds = new Set(state.selection.map((s) => s.shapeId));
           state.shapes = state.shapes.map((shape) => {
-            if (!ids.has(shape.id)) return shape;
+            if (!selIds.has(shape.id)) return shape;
             return { ...translatePolygon(shape, incDx, incDy), id: shape.id };
           });
           // Move annotations live as well
           state.annotations = state.annotations.map((ann) => {
-            if (!ids.has(ann.id)) return ann;
+            if (!selIds.has(ann.id)) return ann;
             return { ...ann, origin: { x: ann.origin.x + incDx, y: ann.origin.y + incDy } };
           });
         }
       }
+    } else {
+      this.snap = this.ctx.getSnap(worldPt);
+      this.selectionSnap = null;
     }
 
     if (this.isRubberBand) {
@@ -212,5 +235,6 @@ export class SelectTool extends BaseTool {
     this.dragThresholdReached = false;
     this.pendingDx = 0;
     this.pendingDy = 0;
+    this.selectionSnap = null;
   }
 }

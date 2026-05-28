@@ -1,11 +1,16 @@
 import type { AppState, Point } from '../types';
 import type { DraftShape } from '../canvas/renderer';
 import type { History } from '../state/history';
-import type { SnapResult } from '../core/snap';
+import type { SnapResult, SelectionSnapResult } from '../core/snap';
 
 export interface ToolContext {
   history: History;
   getSnap: (worldPt: Point) => SnapResult;
+  getSelectionSnap: (
+    movingShapes: import('../types').Polygon[],
+    dragStartWorld: Point,
+    currentMouseWorld: Point
+  ) => SelectionSnapResult;
   requestRender: () => void;
   notify: (msg: string) => void;
 }

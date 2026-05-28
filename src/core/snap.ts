@@ -97,6 +97,97 @@ export function findSnap(
   }
   if (bestDist < snapRadius) return best;
 
-  // ── Tier 3: grid ──
   return { point: snapToGrid(worldPt, gridSize), kind: 'grid' };
 }
+
+export interface SelectionSnapResult {
+  delta: { x: number; y: number }; // Snapped translation vector
+  kind: SnapKind;
+  movingPoint?: Point;             // Vertex on the moving shape that snapped
+  targetPoint?: Point;             // target point on the stationary shape/grid
+  ref?: SnapRef;                   // Snapping reference on the static shape
+}
+
+export function findSelectionSnap(
+  movingShapes: Polygon[],
+  dragStartWorld: Point,
+  currentMouseWorld: Point,
+  staticShapes: Polygon[],
+  gridSize: number,
+  snapRadius: number,
+): SelectionSnapResult {
+  const rawDx = currentMouseWorld.x - dragStartWorld.x;
+  const rawDy = currentMouseWorld.y - dragStartWorld.y;
+
+  // Collect all unique vertices from moving shapes' outer rings
+  const movingVertices: Point[] = [];
+  const seen = new Set<string>();
+  for (const shape of movingShapes) {
+    for (const v of shape.outer) {
+      const key = `${v.x},${v.y}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        movingVertices.push({ x: v.x, y: v.y });
+      }
+    }
+  }
+
+  let bestCandidate: {
+    movingPt: Point;
+    snapRes: SnapResult;
+    dist: number;
+  } | null = null;
+
+  let bestDist = snapRadius;
+
+  if (staticShapes.length > 0) {
+    for (const v of movingVertices) {
+      // Find where this vertex would end up under raw mouse dragging
+      const vDragged = {
+        x: Math.round(v.x + rawDx),
+        y: Math.round(v.y + rawDy),
+      };
+
+      // Check if this dragged vertex snaps to any static shape within snapRadius
+      const snapRes = findSnap(vDragged, staticShapes, gridSize, snapRadius);
+      if (snapRes.kind !== 'grid') {
+        const d = dist(vDragged, snapRes.point);
+        if (d < bestDist) {
+          bestDist = d;
+          bestCandidate = {
+            movingPt: v,
+            snapRes,
+            dist: d,
+          };
+        }
+      }
+    }
+  }
+
+  // If we found a valid vertex-to-vertex/edge/center/midpoint snap, align it!
+  if (bestCandidate) {
+    const targetPt = bestCandidate.snapRes.point;
+    const movingPt = bestCandidate.movingPt;
+    const deltaX = Math.round(targetPt.x - movingPt.x);
+    const deltaY = Math.round(targetPt.y - movingPt.y);
+
+    return {
+      delta: { x: deltaX, y: deltaY },
+      kind: bestCandidate.snapRes.kind,
+      movingPoint: movingPt,
+      targetPoint: targetPt,
+      ref: bestCandidate.snapRes.ref,
+    };
+  }
+
+  // Otherwise, fall back to mouse grid snapping
+  const snappedMouse = snapToGrid(currentMouseWorld, gridSize);
+  const deltaX = Math.round(snappedMouse.x - dragStartWorld.x);
+  const deltaY = Math.round(snappedMouse.y - dragStartWorld.y);
+
+  return {
+    delta: { x: deltaX, y: deltaY },
+    kind: 'grid',
+  };
+}
+

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findSnap } from '../../src/core/snap';
+import { findSnap, findSelectionSnap } from '../../src/core/snap';
 import { circleToPolygon, rectToPolygon } from '../../src/core/geometry';
 
 describe('findSnap - circle center snap', () => {
@@ -143,5 +143,44 @@ describe('findSnap - SnapResult ref', () => {
     const result = findSnap({ x: 550, y: 550 }, [], 100, 50);
     expect(result.kind).toBe('grid');
     expect(result.ref).toBeUndefined();
+  });
+});
+
+describe('findSelectionSnap', () => {
+  it('snaps a moving rectangle to a static rectangle corner', () => {
+    const staticRect = rectToPolygon(10000, 10000, 5000, 5000); // 10000,10000 -> 15000,15000
+    const movingRect = rectToPolygon(0, 0, 5000, 5000); // 0,0 -> 5000,5000
+
+    // Drag start at (0,0), mouse moves to (5010, 5005).
+    // The raw bottom-right corner of movingRect under this drag is (5000+5010, 5000+5005) = (10010, 10005).
+    // This is within snapRadius=50 of the static top-left corner (10000, 10000).
+    // It should snap to (10000, 10000) and return the perfect delta dx=5000, dy=5000.
+    const result = findSelectionSnap(
+      [movingRect],
+      { x: 0, y: 0 },
+      { x: 5010, y: 5005 },
+      [staticRect],
+      1000,
+      50
+    );
+
+    expect(result.kind).toBe('vertex');
+    expect(result.movingPoint).toEqual({ x: 0, y: 0 });
+    expect(result.targetPoint).toEqual({ x: 5000, y: 5000 });
+    expect(result.delta).toEqual({ x: 5000, y: 5000 });
+  });
+
+  it('falls back to grid snap if static shapes are empty', () => {
+    const movingRect = rectToPolygon(0, 0, 5000, 5000);
+    const result = findSelectionSnap(
+      [movingRect],
+      { x: 0, y: 0 },
+      { x: 4010, y: 4005 },
+      [],
+      1000,
+      50
+    );
+    expect(result.kind).toBe('grid');
+    expect(result.delta).toEqual({ x: 4000, y: 4000 });
   });
 });

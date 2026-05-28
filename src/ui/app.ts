@@ -15,7 +15,7 @@ import { TextTool } from '../tools/text';
 import { AnnotationTool } from '../tools/annotation';
 import { CutTool } from '../tools/cut';
 import { hitTest, hitTestAnnotation } from '../core/selection';
-import { findSnap, type SnapResult } from '../core/snap';
+import { findSnap, type SnapResult, findSelectionSnap, type SelectionSnapResult } from '../core/snap';
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
   DuplicateCommand, MoveCommand,
@@ -110,6 +110,8 @@ export class App {
     const toolCtx = {
       history: this.history,
       getSnap: (worldPt: Point) => this.getSnap(worldPt),
+      getSelectionSnap: (movingShapes: import('../types').Polygon[], dragStartWorld: Point, currentMouseWorld: Point) =>
+        this.getSelectionSnap(movingShapes, dragStartWorld, currentMouseWorld),
       requestRender: () => this.requestRender(),
       notify: (msg: string) => this.showNotify(msg),
     };
@@ -188,6 +190,35 @@ export class App {
     );
   }
 
+  private getSelectionSnap(
+    movingShapes: import('../types').Polygon[],
+    dragStartWorld: Point,
+    currentMouseWorld: Point
+  ): SelectionSnapResult {
+    const state = this.history.state;
+    if (!state.snapEnabled) {
+      const rawDx = Math.round(currentMouseWorld.x - dragStartWorld.x);
+      const rawDy = Math.round(currentMouseWorld.y - dragStartWorld.y);
+      return { delta: { x: rawDx, y: rawDy }, kind: 'grid' };
+    }
+    const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+    const movingIds = new Set(movingShapes.map((s) => s.id));
+    const staticShapes = state.shapes.filter((s) => {
+      const l = layerMap.get(s.layer);
+      return l && l.visible && !movingIds.has(s.id);
+    });
+    const subGs = state.gridSize / 5;
+    const effectiveGrid = subGs * state.zoom >= 8 ? subGs : state.gridSize;
+    return findSelectionSnap(
+      movingShapes,
+      dragStartWorld,
+      currentMouseWorld,
+      staticShapes,
+      effectiveGrid,
+      state.snapRadius / state.zoom
+    );
+  }
+
   private requestRender(): void {
     if (this.pendingRender) return;
     this.pendingRender = true;
@@ -234,6 +265,9 @@ export class App {
           : undefined,
         drawHud: (this.activeTool instanceof RectTool || this.activeTool instanceof CircleTool)
           ? (this.activeTool.getDrawHud(state.displayUnit) ?? undefined)
+          : undefined,
+        selectionSnap: this.activeTool instanceof SelectTool
+          ? (this.activeTool.getSelectionSnapResult() ?? undefined)
           : undefined,
       },
     );
@@ -627,6 +661,8 @@ export class App {
     const toolCtx = {
       history: this.history,
       getSnap: (worldPt: Point) => this.getSnap(worldPt),
+      getSelectionSnap: (movingShapes: import('../types').Polygon[], dragStartWorld: Point, currentMouseWorld: Point) =>
+        this.getSelectionSnap(movingShapes, dragStartWorld, currentMouseWorld),
       requestRender: () => this.requestRender(),
       notify: (msg: string) => this.showNotify(msg),
     };

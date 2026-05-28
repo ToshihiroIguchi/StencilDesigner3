@@ -1,6 +1,6 @@
 import type { AppState, Annotation, Dimension, DrcError, Layer, Point, Polygon, Ring, ViewTransform } from '../types';
 import { worldToCanvas } from '../types';
-import type { SnapResult } from '../core/snap';
+import type { SnapResult, SelectionSnapResult } from '../core/snap';
 import { selectedIds } from '../core/transform';
 import { UnitConverter } from '../core/format';
 import { resolveDimension } from '../core/dimension-resolve';
@@ -80,6 +80,7 @@ export interface RendererExtras {
   annotationPreviewPt?: Point;
   selectedAnnotationIds?: Set<string>;
   drawHud?: DrawHud;
+  selectionSnap?: SelectionSnapResult;
 }
 
 export class CanvasRenderer {
@@ -179,6 +180,11 @@ export class CanvasRenderer {
       this.drawSnapIndicator(snap, vt);
     }
 
+    // Selection snap indicators & guidelines
+    if (extras?.selectionSnap && state.snapEnabled) {
+      this.drawSelectionSnap(extras.selectionSnap, vt);
+    }
+
     // Annotations (notes exported to DXF as MTEXT on visible layers)
     if (state.annotations.length > 0) {
       this.drawAnnotations(state.annotations, layerMap, extras?.selectedAnnotationIds ?? new Set(), vt);
@@ -254,6 +260,48 @@ export class CanvasRenderer {
         ctx.arc(cp.x, cp.y, 5, 0, Math.PI * 2);
     }
     ctx.stroke();
+  }
+
+  private drawSelectionSnap(snap: SelectionSnapResult, vt: ViewTransform): void {
+    if (snap.kind === 'grid' || !snap.movingPoint || !snap.targetPoint) return;
+
+    const ctx = this.ctx;
+    const cMoving = worldToCanvas(snap.movingPoint.x, snap.movingPoint.y, vt);
+    const cTarget = worldToCanvas(snap.targetPoint.x, snap.targetPoint.y, vt);
+
+    ctx.save();
+
+    // 1. Draw dashed guideline connecting moving vertex to target snap point
+    ctx.strokeStyle = '#ff9f4a'; // Orange/accent color for moving reference
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(cMoving.x, cMoving.y);
+    ctx.lineTo(cTarget.x, cTarget.y);
+    ctx.stroke();
+
+    // 2. Draw Moving Point Indicator: orange ring ◯
+    ctx.fillStyle = '#ff9f4a';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(cMoving.x, cMoving.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 3. Draw Target Point Indicator: green crosshair/square ⊠
+    ctx.strokeStyle = '#00ff88'; // Snap indicator green
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.rect(cTarget.x - 5, cTarget.y - 5, 10, 10);
+    ctx.moveTo(cTarget.x - 5, cTarget.y - 5);
+    ctx.lineTo(cTarget.x + 5, cTarget.y + 5);
+    ctx.moveTo(cTarget.x + 5, cTarget.y - 5);
+    ctx.lineTo(cTarget.x - 5, cTarget.y + 5);
+    ctx.stroke();
+
+    ctx.restore();
   }
 
   private drawGrid(state: AppState, vt: ViewTransform): void {
