@@ -108,7 +108,11 @@ export class SelectTool extends BaseTool {
 
       if (this.dragThresholdReached) {
         // Collect moving shapes
-        const ids = new Set(state.selection.filter((s) => s.type === 'polygon').map((s) => s.shapeId));
+        const ids = new Set(
+          state.selection
+            .filter((s) => s.type === 'polygon' || s.type === 'vertex' || s.type === 'edge')
+            .map((s) => s.shapeId)
+        );
         const movingShapes = (this.savedShapes ?? state.shapes).filter((s) => ids.has(s.id));
 
         // Calculate advanced selection snap (excludes moving shapes internally)
