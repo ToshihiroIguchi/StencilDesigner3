@@ -163,6 +163,60 @@ Open **http://localhost:9090**.
 
 Press `Ctrl + C` in the terminal.
 
+### Running on a Python-only machine (no Node.js at all)
+
+The build step above needs Node.js, but the **target machine that actually runs the app
+does not**. You can build the `dist/` folder once on any machine that has Node.js, then
+copy it to a Python-only machine and serve it there. The app is fully self-contained —
+`dist/` has no external runtime dependencies.
+
+**Step 1 — Obtain the `dist/` folder** (choose one)
+
+- **Download a pre-built archive (recommended — no Node.js needed)** from the
+  [Releases page](https://github.com/ToshihiroIguchi/StencilDesigner3/releases).
+  Each release includes a `stencildesigner3-dist-<version>.zip` asset that is built
+  automatically by GitHub Actions and ready to serve as-is.
+
+  ```bash
+  unzip stencildesigner3-dist-v1.0.0.zip   # extracts a dist/ folder
+  ```
+
+- **Build it yourself** on a machine with Node.js:
+
+  ```bash
+  npm install
+  npm run build
+  ```
+
+**Step 2 — Transfer `dist/` to the Python-only machine**
+
+Copy the entire `dist/` directory by any means — USB drive, `scp`, a shared folder,
+or a zip archive. No other files from the repository are needed.
+
+```bash
+# Example: zip on the build machine, unzip on the target
+zip -r dist.zip dist        # build machine
+unzip dist.zip              # target machine
+```
+
+(If you downloaded the release archive in Step 1, it already contains `dist/` — just
+copy that folder over.)
+
+**Step 3 — Serve it with Python on the target machine**
+
+```bash
+# Windows (Command Prompt / PowerShell)
+python -m http.server 8000 --directory dist
+
+# macOS / Linux
+python3 -m http.server 8000 --directory dist
+```
+
+Open **http://localhost:8000** in your browser. Node.js is never installed on this machine.
+
+> **Tip:** To let other machines on the same network reach it, the built-in server already
+> binds to all interfaces by default; open `http://<this-machine-ip>:8000` from another device.
+
 ---
 
 ## Build for Production

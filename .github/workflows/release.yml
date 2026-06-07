@@ -1,0 +1,52 @@
+name: Release (built dist)
+
+# Builds the static app and attaches a ready-to-serve dist archive to a
+# GitHub Release. Lets Python-only / offline users download a single zip,
+# unzip it, and run `python -m http.server 8000 --directory dist` — no
+# Node.js needed on the target machine.
+#
+# Note: the archive is built with the DEFAULT base path ("/"), so it works
+# when served from the root of a local server (http://localhost:8000/).
+# This is intentionally different from the GitHub Pages build, which uses
+# VITE_BASE=/StencilDesigner3/.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Build with the default base path ("/") for local/offline serving.
+      - run: npm run build
+
+      - name: Package dist into a zip
+        run: zip -r "stencildesigner3-dist-${{ github.ref_name }}.zip" dist
+
+      - name: Create or update the release and upload the archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "stencildesigner3-dist-${{ github.ref_name }}.zip" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            || gh release upload "${{ github.ref_name }}" \
+                 "stencildesigner3-dist-${{ github.ref_name }}.zip" --clobber
