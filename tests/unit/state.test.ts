@@ -97,6 +97,20 @@ describe('History (undo/redo)', () => {
     expect(history.undo()).toBe(false);
     expect(history.redo()).toBe(false);
   });
+
+  it('SetSelectionCommand undoes and redoes selection state', () => {
+    const selBefore = history.state.selection;
+    const newSel = [{ type: 'polygon' as const, shapeId: 'test-id', index: -1, holeIndex: -1 }];
+
+    history.execute(new SetSelectionCommand(newSel, selBefore));
+    expect(history.state.selection).toEqual(newSel);
+
+    history.undo();
+    expect(history.state.selection).toEqual(selBefore);
+
+    history.redo();
+    expect(history.state.selection).toEqual(newSel);
+  });
 });
 
 describe('DeleteCommand', () => {

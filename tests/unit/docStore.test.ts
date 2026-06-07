@@ -87,4 +87,33 @@ describe('docStore CRUD', () => {
     const list = await listDocs();
     expect(list.find((d) => d.id === meta.id)?.name).toBe('New Name');
   });
+
+  it('migrateState normalizes geometry on loadDoc', async () => {
+    const { createDoc, loadDoc } = await import('../../src/state/docStore');
+    const meta = await createDoc('Dirty Geometry');
+    const state = await loadDoc(meta.id);
+    if (!state) throw new Error('State is null');
+
+    const badPoly = {
+      id: 'p-bad',
+      layer: '0',
+      outer: [
+        { id: 'v1', x: 0, y: 0 },
+        { id: 'v2', x: 1000, y: 0 },
+        { id: 'v2-dup', x: 1000, y: 0 },
+        { id: 'v3', x: 1000, y: 1000 },
+        { id: 'v4', x: 0, y: 1000 },
+      ],
+      holes: [],
+    };
+    state.shapes = [badPoly];
+
+    const localforage = (await import('localforage')).default;
+    await localforage.setItem(`doc:${meta.id}`, JSON.parse(JSON.stringify(state)));
+
+    const loaded = await loadDoc(meta.id);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.shapes.length).toBe(1);
+    expect(loaded!.shapes[0].outer.length).toBe(4);
+  });
 });

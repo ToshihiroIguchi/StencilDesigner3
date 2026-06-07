@@ -19,7 +19,7 @@ import { findSnap, type SnapResult, findSelectionSnap, type SelectionSnapResult 
 import {
   AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
   DuplicateCommand, MoveCommand,
-  AddLayerCommand, PasteCommand,
+  AddLayerCommand, PasteCommand, SetSelectionCommand,
 } from '../state/commands';
 import { loadPrefs } from '../state/autosave';
 import {
@@ -380,7 +380,11 @@ export class App {
     const fileInput = document.getElementById('dxf-file-input') as HTMLInputElement | null;
     fileInput?.addEventListener('change', (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) this.loadDxfFile(file);
+      if (file) {
+        void this.loadDxfFile(file).then(() => {
+          if (fileInput) fileInput.value = '';
+        });
+      }
     });
 
     // Stencil file input (File > Open from Disk…)
@@ -795,7 +799,10 @@ export class App {
   doDifference(): void {
     this.cancelDiffMode();
     this.diffStep = 1;
-    this.history.state.selection = [];
+    const prevSel = this.history.state.selection;
+    if (prevSel.length > 0) {
+      this.history.execute(new SetSelectionCommand([], prevSel));
+    }
     this.canvas.style.cursor = 'crosshair';
     document.getElementById('btn-difference')?.classList.add('active');
     this.requestRender();
@@ -846,9 +853,10 @@ export class App {
       return l && l.visible && !l.locked;
     });
     if (selectable.length === 0) return;
-    state.selection = selectable.map((s) => ({
+    const newSel = selectable.map((s) => ({
       type: 'polygon' as const, shapeId: s.id, index: -1, holeIndex: -1,
     }));
+    this.history.execute(new SetSelectionCommand(newSel, state.selection));
     this.requestRender();
   }
 

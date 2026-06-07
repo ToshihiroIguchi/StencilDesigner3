@@ -156,3 +156,29 @@ describe('exportDxf — holes', () => {
     expect(count).toBe(2);
   });
 });
+
+describe('exportDxf — ACI color mapping', () => {
+  it('maps custom colors to closest standard ACI index', () => {
+    const customLayers: Layer[] = [
+      { name: 'RedLayer', color: '#ff1010', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: true },
+      { name: 'BlueLayer', color: '#0505fa', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: true },
+      { name: 'InvisibleGreen', color: '#10ef10', linetype: 'CONTINUOUS', lineweight: -1, visible: false, locked: false, plot: true, isAperture: true },
+    ];
+    const dxf = exportDxf([], customLayers);
+
+    const redIdx = dxf.indexOf('2\nRedLayer');
+    expect(redIdx).toBeGreaterThan(-1);
+    const redAciSection = dxf.slice(redIdx, redIdx + 200);
+    expect(redAciSection).toContain('62\n1');
+
+    const blueIdx = dxf.indexOf('2\nBlueLayer');
+    expect(blueIdx).toBeGreaterThan(-1);
+    const blueAciSection = dxf.slice(blueIdx, blueIdx + 200);
+    expect(blueAciSection).toContain('62\n5');
+
+    const greenIdx = dxf.indexOf('2\nInvisibleGreen');
+    expect(greenIdx).toBeGreaterThan(-1);
+    const greenAciSection = dxf.slice(greenIdx, greenIdx + 200);
+    expect(greenAciSection).toContain('62\n-3');
+  });
+});

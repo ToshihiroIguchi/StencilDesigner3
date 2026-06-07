@@ -1,6 +1,7 @@
 import type { AppState, Dimension, DimensionAnchor } from '../types';
 import { createDefaultState, defaultLayers, REGMARK_LAYER, DIMENSIONS_LAYER } from '../types';
 import { vertex } from '../core/vertex';
+import { normalizeAll } from '../normalize';
 import localforage from 'localforage';
 
 const DOC_LIST_KEY = 'doc_list';
@@ -254,6 +255,8 @@ function migrateState(s: Partial<AppState>): AppState {
     const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);
     if (fallback) finalState.activeLayerName = fallback.name;
   }
+
+  finalState.shapes = normalizeAll(finalState.shapes);
 
   return finalState;
 }

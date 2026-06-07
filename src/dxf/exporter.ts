@@ -46,6 +46,42 @@ function cssToRgbInt(css: string): number {
   return (r << 16) | (g << 8) | b;
 }
 
+function cssToAci(css: string): number {
+  if (!css || css.charAt(0) !== '#') return 7;
+  const hex = css.slice(1);
+  if (hex.length !== 6) return 7;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+
+  const aciColors = [
+    { aci: 1, r: 255, g: 0, b: 0 },
+    { aci: 2, r: 255, g: 255, b: 0 },
+    { aci: 3, r: 0, g: 255, b: 0 },
+    { aci: 4, r: 0, g: 255, b: 255 },
+    { aci: 5, r: 0, g: 0, b: 255 },
+    { aci: 6, r: 255, g: 0, b: 255 },
+    { aci: 7, r: 255, g: 255, b: 255 },
+    { aci: 7, r: 0, g: 0, b: 0 },
+  ];
+
+  let bestAci = 7;
+  let minDistance = Infinity;
+
+  for (const c of aciColors) {
+    const dr = r - c.r;
+    const dg = g - c.g;
+    const db = b - c.b;
+    const dist = dr * dr + dg * dg + db * db;
+    if (dist < minDistance) {
+      minDistance = dist;
+      bestAci = c.aci;
+    }
+  }
+
+  return bestAci;
+}
+
 const LTYPE_DEFS: Record<string, string> = {
   CONTINUOUS: '0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0',
   DASHED:     '0\nLTYPE\n2\nDASHED\n70\n0\n3\nDashed _ _ _\n72\n65\n73\n2\n40\n19.0\n49\n12.0\n74\n0\n49\n-7.0\n74\n0',
@@ -83,7 +119,8 @@ export function exportDxf(
   lines.push(`0\nTABLE\n2\nLAYER\n70\n${layers.length}`);
   for (const l of layers) {
     const colorInt = cssToRgbInt(l.color);
-    const aciSign = l.visible ? 7 : -7;
+    const aci = cssToAci(l.color);
+    const aciSign = l.visible ? aci : -aci;
     const flags = l.locked ? 4 : 0;
     lines.push('0\nLAYER');
     lines.push(`2\n${l.name}`);
