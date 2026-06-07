@@ -419,19 +419,20 @@ function drawDimensions(
   }
 }
 
-function drawTitleBar(f: FrameInfo, docName: string, fontName: string): void {
+function drawTitleBar(f: FrameInfo, docName: string, fontName: string, appName: string): void {
   const { pdf, pageW } = f;
   pdf.setFontSize(11);
   pdf.setTextColor('#333333');
   pdf.setFont('helvetica', 'bold');
-  pdf.text('StencilDesigner3', MARGIN_LR, 8);
+  pdf.text(appName, MARGIN_LR, 8);
   
+  const appNameWidth = pdf.getTextWidth(appName);
   if (fontName !== 'helvetica') {
     pdf.setFont(fontName, 'normal');
   } else {
     pdf.setFont('helvetica', 'normal');
   }
-  pdf.text(docName, MARGIN_LR + 40, 8);
+  pdf.text(docName, MARGIN_LR + appNameWidth + 4, 8);
 
   const now = new Date();
   const yyyy = now.getFullYear();
@@ -526,7 +527,7 @@ function drawAnnotations(f: FrameInfo, annotations: Annotation[], layers: Layer[
   }
 }
 
-export async function buildPdf(state: AppState, docName: string): Promise<jsPDF | null> {
+export async function buildPdf(state: AppState, docName: string, appName = 'StencilDesigner3'): Promise<jsPDF | null> {
   const bbox = computeBBox(state.shapes, state.dimensions, state.layers, state.annotations);
   if (!bbox) return null;
 
@@ -574,7 +575,7 @@ export async function buildPdf(state: AppState, docName: string): Promise<jsPDF 
   }
 
   // 4. Drawing elements
-  drawTitleBar(f, docName || 'Untitled', activeFont);
+  drawTitleBar(f, docName || 'Untitled', activeFont, appName);
   drawShapes(f, state.shapes, state.layers);
   drawDimensions(f, state.dimensions, state.shapes, state.layers, state.displayUnit, activeFont);
   drawAnnotations(f, state.annotations, state.layers, activeFont);
@@ -583,8 +584,8 @@ export async function buildPdf(state: AppState, docName: string): Promise<jsPDF 
   return f.pdf;
 }
 
-export async function downloadPdf(state: AppState, docName: string, filename?: string): Promise<boolean> {
-  const pdf = await buildPdf(state, docName);
+export async function downloadPdf(state: AppState, docName: string, filename?: string, appName = 'StencilDesigner3'): Promise<boolean> {
+  const pdf = await buildPdf(state, docName, appName);
   if (!pdf) return false;
   pdf.save(filename ?? `${docName || 'stencil'}.pdf`);
   return true;

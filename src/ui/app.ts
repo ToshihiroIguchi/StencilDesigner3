@@ -30,6 +30,7 @@ import {
 import { importDxf, type ImportResult } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
 import { downloadPdf } from '../pdf/exporter';
+import { config } from '../config';
 import { polygonBbox, clonePolygon, translatePolygon } from '../core/geometry';
 import { resolveDimension } from '../core/dimension-resolve';
 import { runDrc, DEFAULT_DRC_CONFIG, type DrcConfig } from '../core/drc';
@@ -120,6 +121,20 @@ export class App {
   }
 
   async init(): Promise<void> {
+    // 設定されたアプリ名でヘッダーロゴとスクリーンリーダー用タイトルを更新
+    const logoTextEl = document.getElementById('app-logo-text');
+    if (logoTextEl) {
+      if (config.appName === 'StencilDesigner3') {
+        logoTextEl.innerHTML = 'Stencil<span style="color: var(--accent); font-weight: 400;">Designer</span><span style="color: var(--accent2); font-weight: 800;">3</span>';
+      } else {
+        logoTextEl.textContent = config.appName;
+      }
+    }
+    const hiddenTitleEl = document.getElementById('app-title-hidden');
+    if (hiddenTitleEl) {
+      hiddenTitleEl.textContent = config.appName;
+    }
+
     await migrateLegacyKey();
 
     try {
@@ -1107,7 +1122,11 @@ export class App {
         return;
       }
     }
-    downloadDxf(state.shapes, state.layers, state.annotations);
+    // デフォルト（Untitledなど）の名前の場合は設定されたデフォルトファイル名を使用する
+    const isUntitled = !this.currentDocName || /^Untitled( \d+)?$/.test(this.currentDocName);
+    const namePrefix = isUntitled ? (config.defaultFilename || 'stencil') : this.currentDocName;
+    const filename = `${namePrefix}.dxf`;
+    downloadDxf(state.shapes, state.layers, state.annotations, filename);
   }
 
   async exportPdf(): Promise<void> {
@@ -1117,7 +1136,11 @@ export class App {
       await this.showMessageModal({ title: 'Export PDF', message: 'Nothing to export.' });
       return;
     }
-    const ok = await downloadPdf(state, this.currentDocName);
+    // デフォルト（Untitledなど）の名前の場合は設定されたデフォルトファイル名を使用する
+    const isUntitled = !this.currentDocName || /^Untitled( \d+)?$/.test(this.currentDocName);
+    const namePrefix = isUntitled ? (config.defaultFilename || 'stencil') : this.currentDocName;
+    const filename = `${namePrefix}.pdf`;
+    const ok = await downloadPdf(state, this.currentDocName, filename, config.appName);
     if (!ok) {
       await this.showMessageModal({ title: 'Export PDF', message: 'No visible content to export. Make at least one layer visible.' });
     }
@@ -1176,9 +1199,16 @@ export class App {
   private updateDocNameLabel(): void {
     const el = document.getElementById('doc-name-label');
     if (!el) return;
-    el.textContent = this.currentDocName || 'Untitled';
+    const docName = this.currentDocName || 'Untitled';
+    el.textContent = docName;
     el.title = 'Click to rename';
     el.onclick = () => this.startInlineRename(el);
+
+    // 設定されたテンプレートに従ってブラウザのタブ名（document.title）を更新
+    const appName = config.appName || 'StencilDesigner3';
+    document.title = config.tabTitleTemplate
+      ? config.tabTitleTemplate.replace('{docName}', docName).replace('{appName}', appName)
+      : `${docName} - ${appName}`;
   }
 
   private startInlineRename(el: HTMLElement): void {
