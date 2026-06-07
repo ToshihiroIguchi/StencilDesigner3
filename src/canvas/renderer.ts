@@ -1004,13 +1004,13 @@ export class CanvasRenderer {
       ctx.save();
       ctx.translate(cdx + DIM_TEXT_GAP * textDir * 3 + (textDir < 0 ? -2 : 2), (c1.y + c2.y) / 2);
       ctx.rotate(-Math.PI / 2);
-      ctx.font = '10px monospace';
+      ctx.font = '12px monospace';
 
       const tw = ctx.measureText(label).width;
       const padX = 3, padY = 2;
       const bg = this.isDark ? 'rgba(30,30,46,0.85)' : 'rgba(245,245,240,0.85)';
       ctx.fillStyle = bg;
-      ctx.fillRect(-tw / 2 - padX, -6 - padY, tw + padX * 2, 12 + padY * 2);
+      ctx.fillRect(-tw / 2 - padX, -7 - padY, tw + padX * 2, 14 + padY * 2);
 
       ctx.fillStyle = color;
       ctx.textAlign = 'center';
@@ -1034,12 +1034,12 @@ export class CanvasRenderer {
 
   private drawDimLabel(text: string, cx: number, cy: number): void {
     const ctx = this.ctx;
-    ctx.font = '10px monospace';
+    ctx.font = '12px monospace';
     const tw = ctx.measureText(text).width;
     const padX = 3, padY = 2;
     const bg = this.isDark ? 'rgba(30,30,46,0.85)' : 'rgba(245,245,240,0.85)';
     ctx.fillStyle = bg;
-    ctx.fillRect(cx - tw / 2 - padX, cy - 6 - padY, tw + padX * 2, 12 + padY * 2);
+    ctx.fillRect(cx - tw / 2 - padX, cy - 7 - padY, tw + padX * 2, 14 + padY * 2);
     ctx.fillStyle = ctx.strokeStyle as string;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
