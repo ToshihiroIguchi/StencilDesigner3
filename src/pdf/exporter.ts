@@ -217,7 +217,7 @@ function drawShapes(f: FrameInfo, shapes: Polygon[], layers: Layer[]): void {
   f.pdf.setLineDashPattern([], 0);
 }
 
-const DIM_FONT_MM = 3.0;
+const DIM_FONT_MM = 3.175; // 12px @ 96 dpi = 3.175 mm, matches canvas renderer
 const DIM_FONT_PT = DIM_FONT_MM * (72 / 25.4); // Convert mm to points (approx 8.5 pt)
 const DIM_LABEL_PAD = 0.6;
 const DIM_ARROW = 1.0;

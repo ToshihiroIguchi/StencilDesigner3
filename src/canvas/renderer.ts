@@ -960,7 +960,7 @@ export class CanvasRenderer {
 
       const label = UnitConverter.formatOutput(Math.abs(p2.x - p1.x), unit, true);
       const textDir = -(d1 || 1);
-      this.drawDimLabel(label, (c1.x + c2.x) / 2, cdy + DIM_TEXT_GAP * textDir);
+      this.drawDimLabel(label, (c1.x + c2.x) / 2, cdy + DIM_TEXT_GAP * textDir, color);
     } else {
       // linear-v
       let x1 = p1.x;
@@ -1032,18 +1032,20 @@ export class CanvasRenderer {
     ctx.stroke();
   }
 
-  private drawDimLabel(text: string, cx: number, cy: number): void {
+  private drawDimLabel(text: string, cx: number, cy: number, color: string): void {
     const ctx = this.ctx;
+    ctx.save();
     ctx.font = '12px monospace';
     const tw = ctx.measureText(text).width;
     const padX = 3, padY = 2;
     const bg = this.isDark ? 'rgba(30,30,46,0.85)' : 'rgba(245,245,240,0.85)';
     ctx.fillStyle = bg;
     ctx.fillRect(cx - tw / 2 - padX, cy - 7 - padY, tw + padX * 2, 14 + padY * 2);
-    ctx.fillStyle = ctx.strokeStyle as string;
+    ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, cx, cy);
+    ctx.restore();
   }
 
   // ─── In-progress drafts ────────────────────────────────────────────────────
