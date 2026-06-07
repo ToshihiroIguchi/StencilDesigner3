@@ -3,6 +3,7 @@ import { newId } from '../types';
 import { normalizeAll, bbox, pointInRing } from '../normalize';
 import { dist, getCircleSegments } from '../core/geometry';
 import { vertex } from '../core/vertex';
+import { aciToHex } from './aci';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DxfEntity = any;
@@ -270,42 +271,6 @@ function classifyAndBuildPolygons(allRings: Array<{ ring: Ring; layer: string }>
   }
 
   return polygons;
-}
-
-function aciToHex(aci: number): string {
-  // AutoCAD Color Index (ACI) — standard 255-color palette (indices 1–9 + 10–249 interpolated)
-  const exact: Record<number, string> = {
-    1: '#ff0000', 2: '#ffff00', 3: '#00ff00', 4: '#00ffff',
-    5: '#0000ff', 6: '#ff00ff', 7: '#ffffff', 8: '#414141', 9: '#808080',
-  };
-  if (exact[aci]) return exact[aci];
-  // ACI 10–249: arranged in 24 hue groups of 10 shades each
-  if (aci >= 10 && aci <= 249) {
-    const hueIdx = Math.floor((aci - 10) / 10); // 0..23
-    const shadeIdx = (aci - 10) % 10;           // 0..9
-    const hue = (hueIdx / 24) * 360;
-    // Shades 0,2,4,6,8 → full sat; 1,3,5,7,9 → half sat; lightness varies
-    const lightness = 20 + shadeIdx * 6;
-    const saturation = shadeIdx % 2 === 0 ? 100 : 50;
-    return hslToHex(hue, saturation, lightness);
-  }
-  return '#ffffff';
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const sn = s / 100, ln = l / 100;
-  const c = (1 - Math.abs(2 * ln - 1)) * sn;
-  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-  const m = ln - c / 2;
-  let r = 0, g = 0, b = 0;
-  if      (h < 60)  { r = c; g = x; b = 0; }
-  else if (h < 120) { r = x; g = c; b = 0; }
-  else if (h < 180) { r = 0; g = c; b = x; }
-  else if (h < 240) { r = 0; g = x; b = c; }
-  else if (h < 300) { r = x; g = 0; b = c; }
-  else              { r = c; g = 0; b = x; }
-  const toHex = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 function normalizeLinetype(lt: string | undefined): Layer['linetype'] {

@@ -136,11 +136,12 @@ export function rubberBandSelect(
   dimensions: Dimension[],
   vt: ViewTransform,
   annotations: Annotation[] = [],
+  selectableShapes: Polygon[] = shapes,
 ): Selection[] {
   const wp1 = canvasToWorld(Math.min(x1, x2), Math.min(y1, y2), vt);
   const wp2 = canvasToWorld(Math.max(x1, x2), Math.max(y1, y2), vt);
 
-  const shapeSels: Selection[] = shapes
+  const shapeSels: Selection[] = selectableShapes
     .filter((shape) => {
       return shape.outer.every(
         (p) => p.x >= wp1.x && p.x <= wp2.x && p.y >= wp1.y && p.y <= wp2.y

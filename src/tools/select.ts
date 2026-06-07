@@ -50,6 +50,10 @@ export class SelectTool extends BaseTool {
       const l = layerMap.get(a.layer);
       return l && l.visible && !l.locked;
     });
+    const interactiveShapes = state.shapes.filter((s) => {
+      const l = layerMap.get(s.layer);
+      return l && l.visible && !l.locked;
+    });
     const dimHit = hitTestDimension(canvasPt.x, canvasPt.y, interactiveDims, state.shapes, state, state.snapRadius);
     if (dimHit) {
       hit = { type: 'dimension', shapeId: dimHit.id, index: -1, holeIndex: -1 };
@@ -58,7 +62,7 @@ export class SelectTool extends BaseTool {
       if (annHit) {
         hit = { type: 'annotation', shapeId: annHit.id, index: -1, holeIndex: -1 };
       } else {
-        hit = hitTest(canvasPt.x, canvasPt.y, state.shapes, state, state.snapRadius);
+        hit = hitTest(canvasPt.x, canvasPt.y, interactiveShapes, state, state.snapRadius);
       }
     }
     if (hit) {
@@ -172,10 +176,23 @@ export class SelectTool extends BaseTool {
 
     if (this.isRubberBand && this.rubberBandStart) {
       const vt = { zoom: state.zoom, panX: state.panX, panY: state.panY };
+      const layerMap = new Map(state.layers.map((l) => [l.name, l]));
+      const interactiveShapes = state.shapes.filter((s) => {
+        const l = layerMap.get(s.layer);
+        return l && l.visible && !l.locked;
+      });
+      const interactiveDims = state.dimensions.filter((d) => {
+        const l = layerMap.get(d.layer);
+        return l && l.visible && !l.locked;
+      });
+      const interactiveAnns = state.annotations.filter((a) => {
+        const l = layerMap.get(a.layer);
+        return l && l.visible && !l.locked;
+      });
       const sel = rubberBandSelect(
         this.rubberBandStart.x, this.rubberBandStart.y,
         canvasPt.x, canvasPt.y,
-        state.shapes, state.dimensions, vt, state.annotations
+        state.shapes, interactiveDims, vt, interactiveAnns, interactiveShapes
       );
       if (sel.length > 0) {
         const newSel = shift ? [...state.selection, ...sel] : sel;

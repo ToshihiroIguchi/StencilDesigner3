@@ -1,8 +1,10 @@
-import type { AppState, Selection } from '../types';
+import type { AppState } from '../types';
 import type { History } from '../state/history';
+import type { Command } from '../types';
 import {
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
   UpdateLayerStyleCommand, MoveShapesToLayerCommand,
+  SetSelectionCommand, CompoundCommand,
 } from '../state/commands';
 import { markDirty } from '../state/docStore';
 import { showInputModal, showMessageModal } from './modals';
@@ -75,12 +77,24 @@ function toggleLayerVisible(deps: LayerPanelDeps, name: string): void {
   if (name === state.activeLayerName) return;
   const layer = state.layers.find((l) => l.name === name);
   if (!layer) return;
-  const wasVisible = layer.visible;
-  state.layers = state.layers.map((l) => l.name === name ? { ...l, visible: !l.visible } : l);
-  if (wasVisible) {
-    const hiddenIds = new Set(state.shapes.filter((s) => s.layer === name).map((s) => s.id));
-    state.selection = state.selection.filter((s: Selection) => !hiddenIds.has(s.shapeId));
+
+  const cmds: Command[] = [new UpdateLayerStyleCommand(name, { visible: !layer.visible })];
+
+  if (layer.visible) {
+    // Hiding: purge any selection entries that belong to this layer.
+    const hiddenIds = new Set<string>([
+      ...state.shapes.filter((s) => s.layer === name).map((s) => s.id),
+      ...state.dimensions.filter((d) => d.layer === name).map((d) => d.id),
+      ...state.annotations.filter((a) => a.layer === name).map((a) => a.id),
+    ]);
+    const newSel = state.selection.filter((s) => !hiddenIds.has(s.shapeId));
+    if (newSel.length !== state.selection.length) {
+      cmds.push(new SetSelectionCommand(newSel, state.selection));
+    }
   }
+
+  deps.history.execute(cmds.length === 1 ? cmds[0] : new CompoundCommand(cmds));
+  markDirty();
   deps.requestRender();
 }
 

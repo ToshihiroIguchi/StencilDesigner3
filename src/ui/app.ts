@@ -856,6 +856,10 @@ export class App {
     const newSel = selectable.map((s) => ({
       type: 'polygon' as const, shapeId: s.id, index: -1, holeIndex: -1,
     }));
+    const currentIds = new Set(state.selection.map((s) => s.shapeId));
+    const newIds = new Set(newSel.map((s) => s.shapeId));
+    const unchanged = currentIds.size === newIds.size && [...newIds].every((id) => currentIds.has(id));
+    if (unchanged) return;
     this.history.execute(new SetSelectionCommand(newSel, state.selection));
     this.requestRender();
   }

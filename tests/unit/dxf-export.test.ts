@@ -179,6 +179,8 @@ describe('exportDxf — ACI color mapping', () => {
     const greenIdx = dxf.indexOf('2\nInvisibleGreen');
     expect(greenIdx).toBeGreaterThan(-1);
     const greenAciSection = dxf.slice(greenIdx, greenIdx + 200);
-    expect(greenAciSection).toContain('62\n-3');
+    // #10ef10 maps to ACI 96 (#1fff1f) with the full 255-colour palette; layer is
+    // hidden so the sign is negated.
+    expect(greenAciSection).toContain('62\n-96');
   });
 });

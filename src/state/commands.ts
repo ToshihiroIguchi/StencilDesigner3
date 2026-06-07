@@ -420,7 +420,7 @@ export class RenameLayerCommand implements Command {
 }
 
 // ─── Update Layer Style ───────────────────────────────────────────────────────
-type LayerStylePatch = Partial<Pick<Layer, 'color' | 'linetype' | 'lineweight' | 'plot' | 'isAperture'>>;
+type LayerStylePatch = Partial<Pick<Layer, 'color' | 'linetype' | 'lineweight' | 'plot' | 'isAperture' | 'visible'>>;
 export class UpdateLayerStyleCommand implements Command {
   private before: Layer | null = null;
   constructor(private layerName: string, private patch: LayerStylePatch) {}
