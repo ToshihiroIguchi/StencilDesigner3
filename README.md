@@ -57,6 +57,7 @@ No installation, no backend — open the page and start drawing.
 | [Node.js](https://nodejs.org/) | 18.x or later (20.x recommended) |
 | npm | 9.x or later (bundled with Node.js) |
 | Modern browser | Chrome 110+, Firefox 110+, Edge 110+ |
+| [Python](https://www.python.org/) | 3.7 or later (optional — only needed for the Python HTTP server method) |
 
 > **Note:** The app runs entirely in the browser. Node.js / npm are only needed to build and run the development server.
 
@@ -121,6 +122,46 @@ npm run preview    # Serve the built files
 ```
 
 Open **http://localhost:4173** in your browser.
+
+### Python built-in HTTP server (no Node.js required at runtime)
+
+If you have Python 3 installed but prefer not to keep Node.js running, you can serve the
+pre-built static files with Python's built-in HTTP server.
+
+**Step 1 — Build the production files** (requires Node.js / npm, one-time)
+
+```bash
+npm run build
+```
+
+Output is written to the `dist/` directory.
+
+**Step 2 — Start the Python HTTP server**
+
+```bash
+# Windows (Command Prompt / PowerShell)
+python -m http.server 8000 --directory dist
+
+# macOS / Linux
+python3 -m http.server 8000 --directory dist
+```
+
+Open **http://localhost:8000** in your browser.
+
+> **Note:** The `--directory` flag requires Python 3.7 or later.
+> For older versions, `cd dist` first, then run `python3 -m http.server 8000`.
+
+**Specify a different port**
+
+```bash
+python -m http.server 9090 --directory dist
+```
+
+Open **http://localhost:9090**.
+
+**Stop the server**
+
+Press `Ctrl + C` in the terminal.
 
 ---
 
