@@ -957,28 +957,33 @@ export class App {
   private async loadDwgFile(file: File): Promise<void> {
     const buf = await file.arrayBuffer();
     this.setLoading(true, 'Parsing DWG…');
+    let result: ImportResult;
     try {
-      const result = await this.runDwgWorker(buf);
-      if (result.polygons.length === 0) {
-        // When nothing was imported, show a breakdown of the ignored entity types.
-        const ignored = Object.entries(result.ignoredCounts)
-          .map(([k, n]) => `${k}: ${n}`)
-          .join('\n');
-        await this.showMessageModal({
-          title: 'Import DWG',
-          message: `No importable geometry was found.\n${ignored ? `\nUnsupported / skipped entities:\n${ignored}` : ''}`,
-        });
-        return;
-      }
-      await this.showImportDialog(result);
+      result = await this.runDwgWorker(buf);
     } catch (e) {
       await this.showMessageModal({
         title: 'Import DWG',
         message: `DWG import failed: ${e instanceof Error ? e.message : e}`,
       });
+      return;
     } finally {
+      // Hide the overlay before showing any modal — it sits above modals (z-index)
+      // and would otherwise block interaction with the import dialog.
       this.setLoading(false);
     }
+
+    if (result.polygons.length === 0) {
+      // When nothing was imported, show a breakdown of the ignored entity types.
+      const ignored = Object.entries(result.ignoredCounts)
+        .map(([k, n]) => `${k}: ${n}`)
+        .join('\n');
+      await this.showMessageModal({
+        title: 'Import DWG',
+        message: `No importable geometry was found.\n${ignored ? `\nUnsupported / skipped entities:\n${ignored}` : ''}`,
+      });
+      return;
+    }
+    await this.showImportDialog(result);
   }
 
   /** Runs DWG parsing in a Web Worker and resolves the ImportResult. buf is transferred (zero-copy). */
