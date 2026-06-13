@@ -74,7 +74,7 @@ src/
 - No floating-point coordinates in Polygon/Ring/Point
 - Do not skip `normalize()` after edits
 - No `any` types unless interfacing with external JS libraries (mark with comment)
-- Keep all user interactions, code comments, and documentation in Japanese (code identifiers should remain in standard English)
+- Conduct all chat interactions with the user in Japanese. Code, comments, documentation, UI strings, and identifiers must all be in standard English.
 
 ## Running
 ```sh
