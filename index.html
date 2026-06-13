@@ -29,6 +29,7 @@
   <div class="separator"></div>
   <span id="doc-name-label" class="doc-name-label" title="Click to rename">Untitled</span>
   <input id="dxf-file-input" type="file" accept=".dxf" style="display:none" />
+  <input id="dwg-file-input" type="file" accept=".dwg" style="display:none" />
   <input id="stencil-file-input" type="file" accept=".stencil,.json" style="display:none" />
 
   <div class="separator"></div>
@@ -471,7 +472,13 @@
       <div style="display:flex;justify-content:space-between"><span>Zoom Fit</span><kbd>Home</kbd></div>
       <div style="display:flex;justify-content:space-between"><span>Help</span><kbd>?</kbd></div>
     </div>
-    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
+      <span style="font-size:12px;color:var(--fg2)">
+        Licensed under
+        <a href="https://github.com/ToshihiroIguchi/StencilDesigner3/blob/main/LICENSE" target="_blank" rel="noopener">GPL-3.0-or-later</a>
+        &middot;
+        <a href="https://github.com/ToshihiroIguchi/StencilDesigner3" target="_blank" rel="noopener">Source code</a>
+      </span>
       <button id="shortcut-close" class="hdr-btn">Close</button>
     </div>
   </div>
@@ -504,6 +511,7 @@
   <button class="file-menu-item" data-action="open-from-disk">Open from Disk…</button>
   <hr class="file-menu-sep">
   <button class="file-menu-item" data-action="import-dxf">Import DXF…</button>
+  <button class="file-menu-item" data-action="import-dwg">Import DWG…</button>
   <hr class="file-menu-sep">
   <button class="file-menu-item" data-action="export-dxf">Export DXF</button>
   <button class="file-menu-item" data-action="export-pdf">Export as PDF</button>
@@ -532,7 +540,15 @@
       <line x1="12" y1="15" x2="12" y2="3"/>
     </svg>
     <p class="drop-overlay-msg">Drop to import</p>
-    <p class="drop-overlay-sub">.dxf &middot; .stencil</p>
+    <p class="drop-overlay-sub">.dxf &middot; .dwg &middot; .stencil</p>
+  </div>
+</div>
+
+<!-- Loading overlay (e.g. while parsing DWG) -->
+<div id="loading-overlay" class="loading-overlay" hidden>
+  <div class="loading-box">
+    <div class="loading-spinner"></div>
+    <p id="loading-message" class="loading-message">Loading…</p>
   </div>
 </div>
 </body>

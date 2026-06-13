@@ -337,6 +337,7 @@ export class App {
         case 'open-doc':       void this.showFileManager(); break;
         case 'open-from-disk': document.getElementById('stencil-file-input')?.click(); break;
         case 'import-dxf':     void this.importDxf(); break;
+        case 'import-dwg':     void this.importDwg(); break;
         case 'export-dxf':     this.exportDxf(); break;
         case 'export-pdf':     void this.exportPdf(); break;
       }
@@ -402,6 +403,17 @@ export class App {
       }
     });
 
+    // DWG file input
+    const dwgFileInput = document.getElementById('dwg-file-input') as HTMLInputElement | null;
+    dwgFileInput?.addEventListener('change', (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        void this.loadDwgFile(file).then(() => {
+          if (dwgFileInput) dwgFileInput.value = '';
+        });
+      }
+    });
+
     // Stencil file input (File > Open from Disk…)
     const stencilFileInput = document.getElementById('stencil-file-input') as HTMLInputElement | null;
     stencilFileInput?.addEventListener('change', (e) => {
@@ -437,10 +449,12 @@ export class App {
       const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
       if (ext === 'dxf') {
         this.loadDxfFile(file);
+      } else if (ext === 'dwg') {
+        void this.loadDwgFile(file);
       } else if (ext === 'stencil' || ext === 'json') {
         void this.importStencilFile(file);
       } else {
-        void this.showMessageModal({ title: 'Import', message: `Unsupported file type: .${ext}\nDrop a .dxf or .stencil file.` });
+        void this.showMessageModal({ title: 'Import', message: `Unsupported file type: .${ext}\nDrop a .dxf, .dwg or .stencil file.` });
       }
     });
   }
@@ -934,6 +948,66 @@ export class App {
     } catch (e) {
       await this.showMessageModal({ title: 'Import DXF', message: `DXF import failed: ${e}` });
     }
+  }
+
+  async importDwg(): Promise<void> {
+    document.getElementById('dwg-file-input')?.click();
+  }
+
+  private async loadDwgFile(file: File): Promise<void> {
+    const buf = await file.arrayBuffer();
+    this.setLoading(true, 'Parsing DWG…');
+    try {
+      const result = await this.runDwgWorker(buf);
+      if (result.polygons.length === 0) {
+        // When nothing was imported, show a breakdown of the ignored entity types.
+        const ignored = Object.entries(result.ignoredCounts)
+          .map(([k, n]) => `${k}: ${n}`)
+          .join('\n');
+        await this.showMessageModal({
+          title: 'Import DWG',
+          message: `No importable geometry was found.\n${ignored ? `\nUnsupported / skipped entities:\n${ignored}` : ''}`,
+        });
+        return;
+      }
+      await this.showImportDialog(result);
+    } catch (e) {
+      await this.showMessageModal({
+        title: 'Import DWG',
+        message: `DWG import failed: ${e instanceof Error ? e.message : e}`,
+      });
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  /** Runs DWG parsing in a Web Worker and resolves the ImportResult. buf is transferred (zero-copy). */
+  private runDwgWorker(buf: ArrayBuffer): Promise<ImportResult> {
+    return new Promise<ImportResult>((resolve, reject) => {
+      const worker = new Worker(new URL('../dwg/worker.ts', import.meta.url), { type: 'module' });
+      worker.onmessage = (e: MessageEvent<{ result?: ImportResult; error?: string }>) => {
+        worker.terminate();
+        if (e.data.error) reject(new Error(e.data.error));
+        else if (e.data.result) resolve(e.data.result);
+        else reject(new Error('Worker returned an invalid response'));
+      };
+      worker.onerror = (e) => {
+        worker.terminate();
+        reject(new Error(e.message || 'The worker raised an error'));
+      };
+      worker.postMessage({ buf }, [buf]);
+    });
+  }
+
+  /** Toggles the loading overlay. */
+  private setLoading(show: boolean, message?: string): void {
+    const overlay = document.getElementById('loading-overlay') as HTMLElement | null;
+    if (!overlay) return;
+    if (show && message) {
+      const msg = document.getElementById('loading-message');
+      if (msg) msg.textContent = message;
+    }
+    overlay.hidden = !show;
   }
 
   private async showImportDialog(result: ImportResult): Promise<void> {
