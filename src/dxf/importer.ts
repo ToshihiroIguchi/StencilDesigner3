@@ -15,12 +15,12 @@ export interface ImportResult {
 }
 
 /** Convert mm to µm (integer). */
-function mmToUm(v: number): number {
+export function mmToUm(v: number): number {
   return Math.round(v * 1000);
 }
 
 /** Approximate arc as polyline segments. Returns vertices with new IDs. */
-function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number, ccw = true): Vertex[] {
+export function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number, ccw = true): Vertex[] {
   const points: Vertex[] = [];
   let start = startAngle;
   let end = endAngle;
@@ -44,7 +44,7 @@ function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endA
  * Inputs are in DXF mm space (Y-up). arcToPoints handles the Y-flip.
  * Returns vertices from p1 toward p2 (inclusive of both endpoints).
  */
-function bulgeToArcPoints(
+export function bulgeToArcPoints(
   p1x: number, p1y: number,
   p2x: number, p2y: number,
   bulge: number
@@ -87,7 +87,7 @@ function bulgeToArcPoints(
  * isClosed: whether the last vertex connects back to the first.
  * Returns vertices in screen µm space (Y-flipped).
  */
-function expandPolylineVerts(
+export function expandPolylineVerts(
   dxfVerts: Array<{ x: number; y: number; bulge?: number }>,
   isClosed: boolean
 ): Vertex[] {
@@ -280,6 +280,70 @@ function normalizeLinetype(lt: string | undefined): Layer['linetype'] {
   return valid.includes(upper) ? upper as Layer['linetype'] : 'CONTINUOUS';
 }
 
+/**
+ * セグメント列・閉リング列・レイヤ情報からImportResultを構築する共通後段処理。
+ * DXF取り込み・DWG取り込みの両方から呼び出せるよう抽出した関数。
+ *
+ * @param segments   開いたセグメントの配列（レイヤ付き）
+ * @param closedRings 閉じたリングの配列（レイヤ付き）
+ * @param rawLayers  レイヤ情報の配列（name必須、他フィールドは省略可）
+ */
+export function buildImportResult(
+  segments: Array<{ seg: [Vertex, Vertex]; layer: string }>,
+  closedRings: Array<{ ring: Ring; layer: string }>,
+  rawLayers: Array<Partial<Layer> & { name: string; colorIndex?: number; frozen?: boolean; lineType?: string; lineweight?: number; locked?: boolean; plot?: boolean }>,
+): ImportResult {
+  // open セグメントをレイヤ別に chainSegments で連結してリング化
+  const chainedRings: Array<{ ring: Ring; layer: string }> = [];
+  if (segments.length > 0) {
+    const layerGroups = new Map<string, [Vertex, Vertex][]>();
+    for (const { seg, layer } of segments) {
+      if (!layerGroups.has(layer)) layerGroups.set(layer, []);
+      layerGroups.get(layer)!.push(seg);
+    }
+    for (const [layer, segs] of layerGroups) {
+      const rings = chainSegments(segs);
+      for (const ring of rings) {
+        chainedRings.push({ ring, layer });
+      }
+    }
+  }
+
+  // closedRings と連結済みリングを合わせてポリゴンに分類
+  const allRings = [...closedRings, ...chainedRings];
+  const polygons = classifyAndBuildPolygons(allRings);
+
+  // レイヤ表構築（aciToHex / normalizeLinetype / REGMARK → isAperture）
+  const importedLayers: Layer[] = rawLayers.map((rl) => {
+    const colorIndex = Math.abs(rl.colorIndex ?? 7);
+    const visible = (rl.colorIndex ?? 7) >= 0 && !rl.frozen;
+    const name: string = rl.name;
+    return {
+      name,
+      color: aciToHex(colorIndex),
+      linetype: normalizeLinetype(rl.lineType),
+      lineweight: rl.lineweight ?? -1,
+      visible,
+      locked: !!rl.locked,
+      plot: rl.plot !== false,
+      isAperture: name === 'REGMARK',
+    };
+  });
+
+  // entityで使用されたが表に無いレイヤを補完
+  const usedLayerNames = new Set(polygons.map((p) => p.layer));
+  for (const name of usedLayerNames) {
+    if (!importedLayers.some((l) => l.name === name)) {
+      importedLayers.push({
+        name, color: '#ffffff', linetype: 'CONTINUOUS', lineweight: -1,
+        visible: true, locked: false, plot: true, isAperture: name === 'REGMARK',
+      });
+    }
+  }
+
+  return { polygons: normalizeAll(polygons), layers: importedLayers, ignoredCounts: {} };
+}
+
 /** Parse DXF text and return polygons with layer information. */
 export async function importDxf(dxfText: string): Promise<ImportResult> {
   const DxfParser = await import('dxf-parser');
@@ -356,56 +420,21 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     }
   }
 
-  // Chain open segments into rings, preserving layer
-  const chainedRings: Array<{ ring: Ring; layer: string }> = [];
-  if (segments.length > 0) {
-    const layerGroups = new Map<string, [Vertex, Vertex][]>();
-    for (const { seg, layer } of segments) {
-      if (!layerGroups.has(layer)) layerGroups.set(layer, []);
-      layerGroups.get(layer)!.push(seg);
-    }
-    for (const [layer, segs] of layerGroups) {
-      const rings = chainSegments(segs);
-      for (const ring of rings) {
-        chainedRings.push({ ring, layer });
-      }
-    }
-  }
-
-  const allRings = [...closedRings, ...chainedRings];
-
-  // Classify rings into polygons with correct outer/hole nesting
-  const polygons = classifyAndBuildPolygons(allRings);
-
-  // Read LAYER table from DXF
+  // DXFのLAYERテーブルをbuildImportResult用のrawLayers形式へ変換
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawLayers: Record<string, any> = dxf?.tables?.layer?.layers ?? {};
-  const importedLayers: Layer[] = Object.values(rawLayers).map((rl: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-    const colorIndex = Math.abs(rl.colorIndex ?? 7);
-    const visible = (rl.colorIndex ?? 7) >= 0 && !rl.frozen;
-    const name: string = rl.name ?? '0';
-    return {
-      name,
-      color: aciToHex(colorIndex),
-      linetype: normalizeLinetype(rl.lineType),
-      lineweight: rl.lineweight ?? -1,
-      visible,
-      locked: !!rl.locked,
-      plot: rl.plot !== false,
-      isAperture: name === 'REGMARK',
-    };
-  });
+  const rawLayerMap: Record<string, any> = dxf?.tables?.layer?.layers ?? {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawLayers = Object.values(rawLayerMap).map((rl: any) => ({
+    name: (rl.name ?? '0') as string,
+    colorIndex: rl.colorIndex as number | undefined,
+    frozen: rl.frozen as boolean | undefined,
+    lineType: rl.lineType as string | undefined,
+    lineweight: rl.lineweight as number | undefined,
+    locked: rl.locked as boolean | undefined,
+    plot: rl.plot as boolean | undefined,
+  }));
 
-  // Supplement layer table with any layer names used by entities but not in the table
-  const usedLayerNames = new Set(polygons.map((p) => p.layer));
-  for (const name of usedLayerNames) {
-    if (!importedLayers.some((l) => l.name === name)) {
-      importedLayers.push({
-        name, color: '#ffffff', linetype: 'CONTINUOUS', lineweight: -1,
-        visible: true, locked: false, plot: true, isAperture: name === 'REGMARK',
-      });
-    }
-  }
-
-  return { polygons: normalizeAll(polygons), layers: importedLayers, ignoredCounts };
+  // buildImportResult で後段処理を実行し、ignoredCounts を合算して返す
+  const result = buildImportResult(segments, closedRings, rawLayers);
+  return { ...result, ignoredCounts: { ...result.ignoredCounts, ...ignoredCounts } };
 }
