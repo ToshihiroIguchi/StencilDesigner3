@@ -281,19 +281,19 @@ function normalizeLinetype(lt: string | undefined): Layer['linetype'] {
 }
 
 /**
- * セグメント列・閉リング列・レイヤ情報からImportResultを構築する共通後段処理。
- * DXF取り込み・DWG取り込みの両方から呼び出せるよう抽出した関数。
+ * Shared back-end stage that builds an ImportResult from segments, closed rings,
+ * and layer info. Extracted so both the DXF and DWG import paths can reuse it.
  *
- * @param segments   開いたセグメントの配列（レイヤ付き）
- * @param closedRings 閉じたリングの配列（レイヤ付き）
- * @param rawLayers  レイヤ情報の配列（name必須、他フィールドは省略可）
+ * @param segments    open segments (with layer)
+ * @param closedRings closed rings (with layer)
+ * @param rawLayers   layer info (name required; other fields optional)
  */
 export function buildImportResult(
   segments: Array<{ seg: [Vertex, Vertex]; layer: string }>,
   closedRings: Array<{ ring: Ring; layer: string }>,
   rawLayers: Array<Partial<Layer> & { name: string; colorIndex?: number; frozen?: boolean; lineType?: string; lineweight?: number; locked?: boolean; plot?: boolean }>,
 ): ImportResult {
-  // open セグメントをレイヤ別に chainSegments で連結してリング化
+  // Group open segments by layer and chain each group into rings via chainSegments.
   const chainedRings: Array<{ ring: Ring; layer: string }> = [];
   if (segments.length > 0) {
     const layerGroups = new Map<string, [Vertex, Vertex][]>();
@@ -309,11 +309,11 @@ export function buildImportResult(
     }
   }
 
-  // closedRings と連結済みリングを合わせてポリゴンに分類
+  // Combine the closed rings and the chained rings, then classify into polygons.
   const allRings = [...closedRings, ...chainedRings];
   const polygons = classifyAndBuildPolygons(allRings);
 
-  // レイヤ表構築（aciToHex / normalizeLinetype / REGMARK → isAperture）
+  // Build the layer table (aciToHex / normalizeLinetype / REGMARK → isAperture).
   const importedLayers: Layer[] = rawLayers.map((rl) => {
     const colorIndex = Math.abs(rl.colorIndex ?? 7);
     const visible = (rl.colorIndex ?? 7) >= 0 && !rl.frozen;
@@ -330,7 +330,7 @@ export function buildImportResult(
     };
   });
 
-  // entityで使用されたが表に無いレイヤを補完
+  // Add any layer referenced by an entity but missing from the layer table.
   const usedLayerNames = new Set(polygons.map((p) => p.layer));
   for (const name of usedLayerNames) {
     if (!importedLayers.some((l) => l.name === name)) {
@@ -420,7 +420,7 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     }
   }
 
-  // DXFのLAYERテーブルをbuildImportResult用のrawLayers形式へ変換
+  // Convert the DXF LAYER table into the rawLayers shape expected by buildImportResult.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawLayerMap: Record<string, any> = dxf?.tables?.layer?.layers ?? {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -434,7 +434,7 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     plot: rl.plot as boolean | undefined,
   }));
 
-  // buildImportResult で後段処理を実行し、ignoredCounts を合算して返す
+  // Run the shared back-end stage and merge ignoredCounts before returning.
   const result = buildImportResult(segments, closedRings, rawLayers);
   return { ...result, ignoredCounts: { ...result.ignoredCounts, ...ignoredCounts } };
 }
