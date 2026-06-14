@@ -2,6 +2,7 @@
   "name": "stencil-designer-3",
   "version": "1.0.0",
   "description": "Browser-based 2D CAD editor for stencil/mask design",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +14,7 @@
     "test:unit:watch": "vitest"
   },
   "dependencies": {
+    "@mlightcad/libredwg-web": "^0.7.2",
     "@tarikjabiri/dxf": "3.0.0-alpha.13",
     "clipper-lib": "^6.4.2",
     "dxf-parser": "^1.1.2",

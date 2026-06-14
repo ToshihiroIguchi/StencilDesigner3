@@ -308,8 +308,8 @@ export async function importDwg(buf: ArrayBuffer): Promise<ImportResult>;
 - [ ] `buildImportResult` 抽出後も既存DXFテストが全パス。
 
 ### Playwright（E2E）
-- [ ] `.dwg` をドロップ → 取り込みダイアログ → キャンバス描画。
-- [ ] 重いDWGでUIがフリーズしない（Worker）。
+- [x] `.dwg` をドロップ → 取り込みダイアログ → キャンバス描画。（`tests/e2e/dwg_import.spec.ts`、example_2018.dwg）
+- [x] 重いDWGでUIがフリーズしない（Worker）。（同 spec、Dynblocks.dwg + rAF カウンタで検証）
 
 ### ビルド/配布
 - [ ] 本番ビルドで wasm が遅延チャンク分離・初期ロード非混入。
