@@ -7,7 +7,7 @@ if (!canvas) {
   throw new Error('main-canvas element not found');
 }
 
-// 設定を読み込んでからアプリケーションを初期化する
+// Load configuration before initializing the application
 loadConfig()
   .then(() => {
     const app = new App(canvas);

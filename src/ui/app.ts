@@ -121,7 +121,7 @@ export class App {
   }
 
   async init(): Promise<void> {
-    // 設定されたアプリ名でヘッダーロゴとスクリーンリーダー用タイトルを更新
+    // Update the header logo and screen-reader title with the configured app name
     const logoTextEl = document.getElementById('app-logo-text');
     if (logoTextEl) {
       if (config.appName === 'StencilDesigner3') {
@@ -1201,7 +1201,7 @@ export class App {
         return;
       }
     }
-    // デフォルト（Untitledなど）の名前の場合は設定されたデフォルトファイル名を使用する
+    // For default names (e.g. Untitled), use the configured default filename
     const isUntitled = !this.currentDocName || /^Untitled( \d+)?$/.test(this.currentDocName);
     const namePrefix = isUntitled ? (config.defaultFilename || 'stencil') : this.currentDocName;
     const filename = `${namePrefix}.dxf`;
@@ -1215,7 +1215,7 @@ export class App {
       await this.showMessageModal({ title: 'Export PDF', message: 'Nothing to export.' });
       return;
     }
-    // デフォルト（Untitledなど）の名前の場合は設定されたデフォルトファイル名を使用する
+    // For default names (e.g. Untitled), use the configured default filename
     const isUntitled = !this.currentDocName || /^Untitled( \d+)?$/.test(this.currentDocName);
     const namePrefix = isUntitled ? (config.defaultFilename || 'stencil') : this.currentDocName;
     const filename = `${namePrefix}.pdf`;
@@ -1283,7 +1283,7 @@ export class App {
     el.title = 'Click to rename';
     el.onclick = () => this.startInlineRename(el);
 
-    // 設定されたテンプレートに従ってブラウザのタブ名（document.title）を更新
+    // Update the browser tab title (document.title) using the configured template
     const appName = config.appName || 'StencilDesigner3';
     document.title = config.tabTitleTemplate
       ? config.tabTitleTemplate.replace('{docName}', docName).replace('{appName}', appName)
