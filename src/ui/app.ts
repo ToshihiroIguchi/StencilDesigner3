@@ -570,7 +570,9 @@ export class App {
 
   private setZoom(newZoom: number, anchorCanvasX?: number, anchorCanvasY?: number): void {
     const state = this.history.state;
-    const z = Math.max(0.001, Math.min(50, newZoom));
+    // Lower bound must be small enough to fit large drawings (e.g. multi-metre
+    // DWG sheets): 1e-6 px/µm fits content up to roughly 500 m wide.
+    const z = Math.max(0.000001, Math.min(50, newZoom));
     if (anchorCanvasX !== undefined && anchorCanvasY !== undefined) {
       state.panX = anchorCanvasX - (anchorCanvasX - state.panX) * (z / state.zoom);
       state.panY = anchorCanvasY - (anchorCanvasY - state.panY) * (z / state.zoom);
@@ -1025,7 +1027,7 @@ export class App {
         this.history.execute(new AddShapeCommand(poly));
       }
       markDirty();
-      this.requestRender();
+      this.fitToContent();
       return;
     }
 
@@ -1094,7 +1096,7 @@ export class App {
           this.history.execute(new AddShapeCommand(poly));
         }
         markDirty();
-        this.requestRender();
+        this.fitToContent();
         resolve();
       };
 
@@ -1164,8 +1166,11 @@ export class App {
     const contentH = maxY - minY || 1;
     const z = Math.min(viewW / (contentW * 1.2), viewH / (contentH * 1.2), 50);
     this.setZoom(z);
-    state.panX = Math.round(RULER + viewW / 2 - ((minX + maxX) / 2) * z);
-    state.panY = Math.round(RULER + viewH / 2 - ((minY + maxY) / 2) * z);
+    // setZoom may clamp the requested zoom; centre using the value actually
+    // applied so content stays centred even at the zoom limits.
+    const appliedZoom = state.zoom;
+    state.panX = Math.round(RULER + viewW / 2 - ((minX + maxX) / 2) * appliedZoom);
+    state.panY = Math.round(RULER + viewH / 2 - ((minY + maxY) / 2) * appliedZoom);
     this.requestRender();
   }
 
