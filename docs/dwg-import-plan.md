@@ -141,42 +141,44 @@ THIRD-PARTY-LICENSES.md    新規（第三者ライセンス表示）
 
 ## 6. フェーズ別タスク
 
+> **進捗注記:** Phase 1–6 はすべて実装・検証・main マージ済み（PR #3〜#7）。詳細経緯は `dwg-import-impl-spec.md` と memory を参照。
+
 ### Phase 1｜依存追加・遅延ロード基盤・GPL整合（同一PR）
-- [ ] `npm install @mlightcad/libredwg-web`
-- [ ] `LICENSE` を GPL-3.0 全文へ、`package.json` の license 更新、`THIRD-PARTY-LICENSES.md` 追加、README 追記
-- [ ] `src/dwg/libredwg.ts`：`LibreDwg.create()` の遅延 `import()` と `.wasm` の `locateFile` 解決
-- [ ] Vite で `.wasm` が初期バンドルに入らず遅延チャンク化されることを確認
+- [x] `npm install @mlightcad/libredwg-web`
+- [x] `LICENSE` を GPL-3.0 全文へ、`package.json` の license 更新、`THIRD-PARTY-LICENSES.md` 追加、README 追記
+- [x] `src/dwg/libredwg.ts`：`LibreDwg.create()` の遅延 `import()` と `.wasm` の `locateFile` 解決
+- [x] Vite で `.wasm` が初期バンドルに入らず遅延チャンク化されることを確認
 
 ### Phase 2｜変換コア（DwgDatabase → ImportResult）
-- [ ] `src/dxf/importer.ts`：後段を `buildImportResult(...)` に抽出（DXF 側の挙動は不変・既存テストで担保）
-- [ ] `src/dwg/importer.ts`：`importDwg(buf: ArrayBuffer): Promise<ImportResult>`
-  - [ ] LINE/ARC/CIRCLE/LWPOLYLINE/POLYLINE をマッピング（フィールド名差分を吸収）
-  - [ ] エラーコードを警告/致命に分類、部分取り込み（try/catch）
-  - [ ] `ignoredCounts` 集計
+- [x] `src/dxf/importer.ts`：後段を `buildImportResult(...)` に抽出（DXF 側の挙動は不変・既存テストで担保）
+- [x] `src/dwg/importer.ts`：`importDwg(buf: ArrayBuffer): Promise<ImportResult>`
+  - [x] LINE/ARC/CIRCLE/LWPOLYLINE/POLYLINE をマッピング（フィールド名差分を吸収）
+  - [x] エラーコードを警告/致命に分類、部分取り込み（try/catch）
+  - [x] `ignoredCounts` 集計
 
 ### Phase 3｜網羅性拡張（「大半で読める」要件）
-- [ ] `src/dwg/blocks.ts`：INSERT/MINSERT 展開（平行移動・スケール・回転、再帰＋循環ガード）
-- [ ] ELLIPSE 近似、SPLINE 折れ線近似
-- [ ] （任意）SOLID/3DFACE/POINT/HATCH 対応
-- [ ] 取り込み 0 件時の理由提示 UI
+- [x] `src/dwg/blocks.ts`：INSERT/MINSERT 展開（平行移動・スケール・回転、再帰＋循環ガード）
+- [x] ELLIPSE 近似、SPLINE 折れ線近似（SPLINE は de Boor / centripetal Catmull-Rom + 適応的弦高分割で精密化。PR #5）
+- [ ] （任意）SOLID/3DFACE/POINT/HATCH 対応 — 未対応（`ignoredCounts` 計上のみ。優先度低）
+- [x] 取り込み 0 件時の理由提示 UI
 
 ### Phase 4｜Web Worker 化
-- [ ] `src/dwg/worker.ts`：パース（read+convert+変換）を Worker で実行し `ImportResult` を postMessage
-- [ ] UI にスピナー/進捗表示、キャンセル（任意）
+- [x] `src/dwg/worker.ts`：パース（read+convert+変換）を Worker で実行し `ImportResult` を postMessage
+- [x] UI にスピナー/進捗表示、キャンセル（任意）
 
 ### Phase 5｜UI 配線（`src/ui/app.ts`）
-- [ ] ドロップ判定に `dwg` 追加 → `loadDwgFile(file)`（`file.arrayBuffer()`）
-- [ ] ファイル入力 `accept` とメニューに `.dwg` 追加、`importDwg()` メソッド
-- [ ] 取り込み後は既存 `showImportDialog(result)` を流用（変更不要）
-- [ ] About/フッタに「ソースコード」「ライセンス」リンク（GPL §6）
+- [x] ドロップ判定に `dwg` 追加 → `loadDwgFile(file)`（`file.arrayBuffer()`）
+- [x] ファイル入力 `accept` とメニューに `.dwg` 追加、`importDwg()` メソッド
+- [x] 取り込み後は既存 `showImportDialog(result)` を流用（変更不要）
+- [x] About/フッタに「ソースコード」「ライセンス」リンク（GPL §6）
 
 ### Phase 6｜テスト・検証
-- [ ] 単体（Vitest）：各バージョン DWG（r14/2000/2007/2013/2018）で entity 数・bbox・レイヤ・ブロック展開を検証
-- [ ] ブロック多用 DWG で「空にならない」回帰テスト
-- [ ] エラーコード警告ファイルが成功扱いになることを検証
-- [ ] E2E（Playwright）：`.dwg` ドロップ → ダイアログ → 描画
-- [ ] 本番ビルドで WASM が遅延チャンク分離・初期ロードに非混入を確認
-- [ ] 配布物に LICENSE / THIRD-PARTY が同梱されることを確認
+- [x] 単体（Vitest）：各バージョン DWG（r14/2000/2007/2013/2018）で entity 数・bbox・レイヤ・ブロック展開を検証
+- [x] ブロック多用 DWG で「空にならない」回帰テスト
+- [x] エラーコード警告ファイルが成功扱いになることを検証
+- [x] E2E（Playwright）：`.dwg` ドロップ → ダイアログ → 描画
+- [x] 本番ビルドで WASM が遅延チャンク分離・初期ロードに非混入を確認
+- [x] 配布物に LICENSE / THIRD-PARTY が同梱されることを確認（`release.yml` zip に明示追加）
 
 ---
 

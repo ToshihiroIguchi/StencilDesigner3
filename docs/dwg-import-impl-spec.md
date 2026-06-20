@@ -106,7 +106,7 @@ interface DwgInsertEntity extends DwgEntity {         // 'INSERT'
   name: string;                                       // 参照ブロック名
   insertionPoint: DwgPoint3D;
   xScale: number; yScale: number; zScale: number;
-  rotation: number;                                   // ★単位要確認(§8)
+  rotation: number;                                   // radian（§8で実測確定）
   columnCount: number; rowCount: number;
   columnSpacing: number; rowSpacing: number;
   attribs: DwgAttribEntity[];
@@ -218,7 +218,7 @@ export async function importDwg(buf: ArrayBuffer): Promise<ImportResult>;
 | `LWPOLYLINE` | `flag&1` で閉判定。bulge は `bulgeToArcPoints`。閉→`closedRings`、開→セグメント列 |
 | `POLYLINE2D` | 同上（vertices は `DwgVertex2dEntity`、`x,y,bulge`） |
 | `POLYLINE3D` | z無視、x/yのみ。`flag&1` で閉 |
-| `ARC` | `arcToPoints(center.x,center.y,radius,startAngle,endAngle)`（度・§8要確認）→セグメント列 |
+| `ARC` | `arcToPoints(center.x,center.y,radius,startAngle,endAngle)`（startAngle/endAngle は radian → `*180/π` で度変換。§8で実測確定）→セグメント列 |
 | `CIRCLE` | `arcToPoints(...,0,360)` の最終点を除いて `closedRings` |
 | `ELLIPSE` | `majorAxisEndPoint`(相対)から長軸長・角度算出、`axisRatio`で短軸。startAngle/endAngle（§8）でパラメトリック分割し折れ線化。閉(全周)なら`closedRings` |
 | `SPLINE` | まず `fitPoints` があればそれを折れ線として使用。無ければ `controlPoints` を de Boor で degree 次評価し許容誤差で分割（簡易実装可: 制御点折れ線でも可だが精度注意）。閉フラグで `closedRings` |
@@ -266,28 +266,26 @@ export async function importDwg(buf: ArrayBuffer): Promise<ImportResult>;
 
 ---
 
-## 8. 実装前に必ず確認する不確実点（VERIFY）
+## 8. 実装前に必ず確認する不確実点（VERIFY） — **全て実測で確定済み**
 
-1. **角度の単位**: `ARC.startAngle/endAngle` が度か rad か。既存 `arcToPoints` は**度**前提。
-   - 確認法: 既知DWG（`example_2018.dwg`）の ARC を変換し、bbox/見た目で検証。rad なら `*180/Math.PI` 変換を噛ませる。
-   - `INSERT.rotation`・`ELLIPSE.startAngle/endAngle` は **rad の可能性が高い**。同様に実検証。
-2. **閉フラグ**: `LWPOLYLINE.flag & 1`、`POLYLINE2D.flag & 1` で閉。実データで確認。
-3. **ブロック basePoint**: 展開時に減算が要るか実データで確認（多くは原点で影響なし）。
-4. **`db.entities` の網羅**: モデル空間が `db.entities` に入ること、ペーパー空間が混ざる場合 `isInPaperSpace` で除外できること。
-5. **`?url` + locateFile**: §5 のどちらの方式で wasm が確実にロードできるか（Node の data:URL 問題と同様の罠に注意）。
+実フィクスチャ（`example_2018.dwg` 等）で全項目を実測し、以下のとおり確定した。
 
-各項目は §10 のサンプルで実測して確定すること。
+1. **角度の単位 = radian（確定）**: `ARC.startAngle/endAngle`・`ELLIPSE.startAngle/endAngle`・`INSERT.rotation` はすべて radian。既存 `arcToPoints` は度入力のため、ARC は `*180/π`（`RAD2DEG`）で度変換してから渡す（`src/dwg/importer.ts` の `RAD2DEG` / `arcPointsMm`）。INSERT.rotation は radian のまま回転行列へ（`src/dwg/blocks.ts`）。ELLIPSE はパラメトリック角を radian のまま使用。
+2. **閉フラグ = 確定**: `LWPOLYLINE.flag & 1`・`POLYLINE2D.flag & 1` で閉。実装に反映済み。
+3. **ブロック basePoint = 確定**: 展開時に `basePoint` を減算（`insertMatrix`）。実データで整合を確認。
+4. **`db.entities` の網羅 = 確定**: モデル空間は `db.entities` を起点に取得。ペーパー空間は除外。
+5. **`?url` + locateFile = 確定**: 上流 dist の wasm は `data:application/wasm;base64,` インライン化で emscripten の isDataURI が `application/octet-stream` しか認識せず失敗する罠あり。対策＝wasm を `src/dwg/libredwg-web.wasm` に vendor し `?url` 取り込み、`createModule({ locateFile: () => wasmUrl })` + `createByWasmInstance` で実アセットをロード（`vite.config.ts` の alias / `optimizeDeps.include` 併用）。本番ビルドで実アセット 1 個のみ出力を確認。
 
 ---
 
 ## 9. GPL-3.0 コンプライアンス（依存追加と同一PRで必須）
 
-- [ ] `LICENSE` を **GPL-3.0 全文**へ差し替え（著作権者本人のため再ライセンス可）。
-- [ ] `package.json` の `"license"` を `"GPL-3.0-or-later"` に。
-- [ ] `THIRD-PARTY-LICENSES.md` 追加: LibreDWG / `@mlightcad/libredwg-web` の著作権・GPL-3.0・取得元URL（バージョン固定）を明記。WASM 同梱の通知は除去しない。
-- [ ] README に「DWG機能のため GPL-3.0-or-later で配布」「対応ソース＝本リポジトリ＋上流リンク」を追記。
-- [ ] About/フッタにソース・ライセンスへのリンク（GPL §6）。
-- [ ] リリースワークフロー（dist公開）に `LICENSE`/`THIRD-PARTY-LICENSES.md`/`wasm` を同梱。
+- [x] `LICENSE` を **GPL-3.0 全文**へ差し替え（著作権者本人のため再ライセンス可）。
+- [x] `package.json` の `"license"` を `"GPL-3.0-or-later"` に。
+- [x] `THIRD-PARTY-LICENSES.md` 追加: LibreDWG / `@mlightcad/libredwg-web` の著作権・GPL-3.0・取得元URL（バージョン固定）を明記。WASM 同梱の通知は除去しない。
+- [x] README に「DWG機能のため GPL-3.0-or-later で配布」「対応ソース＝本リポジトリ＋上流リンク」を追記。
+- [x] About/フッタにソース・ライセンスへのリンク（GPL §6）。
+- [x] リリースワークフロー（dist公開）に `LICENSE`/`THIRD-PARTY-LICENSES.md`/`wasm` を同梱。`wasm` は `dist` に内包され zip 化される。`LICENSE`/`THIRD-PARTY-LICENSES.md` は `release.yml` の zip 対象へ明示追加済み。
 
 ---
 
@@ -300,20 +298,20 @@ export async function importDwg(buf: ArrayBuffer): Promise<ImportResult>;
 → `test/fixtures/dwg/` に保存（リポジトリへコミット可。サイズ留意）。
 
 ### Vitest（`src/dwg/*.test.ts`）
-- [ ] 各バージョンが読め、entity が **0件にならない**（空取り込み回帰防止）。
-- [ ] `LINE/LWPOLYLINE/ARC/CIRCLE` の bbox が妥当（µm整数・Y反転確認）。
-- [ ] **INSERT 展開**: ブロック含むDWGで、展開後ジオメトリが現れる（Dynblocks 等）。
-- [ ] 角度単位（§8-1）の確定をテストで固定。
-- [ ] 警告エラーコードのファイルが成功扱いになる。
-- [ ] `buildImportResult` 抽出後も既存DXFテストが全パス。
+- [x] 各バージョンが読め、entity が **0件にならない**（空取り込み回帰防止）。
+- [x] `LINE/LWPOLYLINE/ARC/CIRCLE` の bbox が妥当（µm整数・Y反転確認）。
+- [x] **INSERT 展開**: ブロック含むDWGで、展開後ジオメトリが現れる（Dynblocks 等）。
+- [x] 角度単位（§8-1）の確定をテストで固定。
+- [x] 警告エラーコードのファイルが成功扱いになる。
+- [x] `buildImportResult` 抽出後も既存DXFテストが全パス。
 
 ### Playwright（E2E）
 - [x] `.dwg` をドロップ → 取り込みダイアログ → キャンバス描画。（`tests/e2e/dwg_import.spec.ts`、example_2018.dwg）
 - [x] 重いDWGでUIがフリーズしない（Worker）。（同 spec、Dynblocks.dwg + rAF カウンタで検証）
 
 ### ビルド/配布
-- [ ] 本番ビルドで wasm が遅延チャンク分離・初期ロード非混入。
-- [ ] 配布物に LICENSE/THIRD-PARTY/wasm 同梱。
+- [x] 本番ビルドで wasm が遅延チャンク分離・初期ロード非混入。（dist で wasm は単独アセット、worker は遅延チャンク。PR #7 でチャンクスリム化）
+- [x] 配布物に LICENSE/THIRD-PARTY/wasm 同梱。（`release.yml` の zip 対象に LICENSE/THIRD-PARTY-LICENSES.md を追加、wasm は dist 内）
 
 ---
 

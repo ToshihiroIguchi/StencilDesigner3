@@ -75,6 +75,7 @@ src/
 - Do not skip `normalize()` after edits
 - No `any` types unless interfacing with external JS libraries (mark with comment)
 - Conduct all chat interactions with the user in Japanese. Code, comments, documentation, UI strings, and identifiers must all be in standard English.
+- Git commit messages and pull request content (titles AND bodies) must be written entirely in English. Do not include Japanese in commit messages or PR descriptions, even when quoting Japanese source/doc text — paraphrase such references in English instead. (Exception: the Japanese design docs under `docs/*.md` intentionally remain in Japanese.)
 
 ## Running
 ```sh
