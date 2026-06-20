@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-// ── ヘルパー関数 ────────────────────────────────────────────────────────────
+// ── Helper functions ────────────────────────────────────────────────────────
 
 async function gotoAndCloseModal(page: Page) {
   await page.goto('/');
@@ -17,12 +17,12 @@ async function gotoAndCloseModal(page: Page) {
   }
 }
 
-// ── テストスイート ──────────────────────────────────────────────────────────
+// ── Test suite ──────────────────────────────────────────────────────────────
 
-test.describe('動的ブランディング・設定の検証', () => {
+test.describe('Dynamic branding / config verification', () => {
 
-  test('appName のみを指定した場合 - ロゴ、タブ名、および自動サニタイズされたデフォルト出力ファイル名の検証', async ({ page }) => {
-    // config.json のリクエストをモックして、appName のみを指定したデータを返す
+  test('appName only - verifies logo, tab title, and auto-sanitized default output filename', async ({ page }) => {
+    // Mock the config.json request to return data that specifies appName only
     await page.route('**/config.json', (route) => {
       route.fulfill({
         contentType: 'application/json',
@@ -34,19 +34,19 @@ test.describe('動的ブランディング・設定の検証', () => {
 
     await gotoAndCloseModal(page);
 
-    // 1. 左上のロゴテキストが更新されていることを確認
+    // 1. Verify the top-left logo text is updated
     const logoText = page.locator('#app-logo-text');
     await expect(logoText).toHaveText('CustomStencilCAD');
 
-    // 2. 隠しタイトルテキストが更新されていることを確認
+    // 2. Verify the hidden title text is updated
     const hiddenTitle = page.locator('#app-title-hidden');
     await expect(hiddenTitle).toHaveText('CustomStencilCAD');
 
-    // 3. ブラウザのタブ名が自動導出されていることを確認（デフォルト: "{docName} - {appName}" → "Untitled - CustomStencilCAD"）
+    // 3. Verify the browser tab title is auto-derived (default: "{docName} - {appName}" -> "Untitled - CustomStencilCAD")
     await expect(page).toHaveTitle('Untitled - CustomStencilCAD');
 
-    // 4. DXF出力時に自動で小文字＆サニタイズされたファイル名が使われることを確認
-    // 空ファイルだと出力エラーになるため、仮の矩形を1個描画する
+    // 4. Verify DXF export auto-uses a lowercased & sanitized filename
+    // An empty file would cause an export error, so draw one temporary rectangle
     await page.click('[data-tool="rect"]');
     const canvas = page.locator('#main-canvas');
     const box = await canvas.boundingBox();
@@ -57,7 +57,7 @@ test.describe('動的ブランディング・設定の検証', () => {
       await page.mouse.up();
     }
 
-    // DXFエクスポートを実行し、提案されるファイル名を確認
+    // Run the DXF export and check the suggested filename
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       (async () => {
@@ -68,8 +68,8 @@ test.describe('動的ブランディング・設定の検証', () => {
     expect(download.suggestedFilename()).toBe('customstencilcad.dxf');
   });
 
-  test('全項目を指定した場合 - カスタムのタブ名テンプレートおよびファイル名の検証', async ({ page }) => {
-    // config.json のリクエストをモックして、すべての項目を明示的に指定したデータを返す
+  test('all fields specified - verifies custom tab title template and filename', async ({ page }) => {
+    // Mock the config.json request to return data that explicitly specifies every field
     await page.route('**/config.json', (route) => {
       route.fulfill({
         contentType: 'application/json',
@@ -83,14 +83,14 @@ test.describe('動的ブランディング・設定の検証', () => {
 
     await gotoAndCloseModal(page);
 
-    // 1. ロゴテキストの確認
+    // 1. Verify the logo text
     const logoText = page.locator('#app-logo-text');
     await expect(logoText).toHaveText('LaserCutterCAD');
 
-    // 2. 指定されたカスタムのタブ名テンプレートが反映されていることを確認
+    // 2. Verify the specified custom tab title template is applied
     await expect(page).toHaveTitle('ようこそ LaserCutterCAD へ | Untitled');
 
-    // 3. 仮の矩形を描画
+    // 3. Draw a temporary rectangle
     await page.click('[data-tool="rect"]');
     const canvas = page.locator('#main-canvas');
     const box = await canvas.boundingBox();
@@ -101,7 +101,7 @@ test.describe('動的ブランディング・設定の検証', () => {
       await page.mouse.up();
     }
 
-    // 4. 明示的に設定されたデフォルトファイル名でDXFが保存されることを確認
+    // 4. Verify DXF is saved with the explicitly configured default filename
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       (async () => {
