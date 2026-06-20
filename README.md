@@ -20,7 +20,7 @@ No installation, no backend — open the page and start drawing.
   - [Drawing Tools](#drawing-tools)
   - [Edit Operations](#edit-operations)
   - [Boolean Operations](#boolean-operations)
-  - [DXF Import / Export](#dxf-import--export)
+  - [DXF / DWG Import / Export](#dxf--dwg-import--export)
   - [Design Rule Check (DRC)](#design-rule-check-drc)
   - [View Controls](#view-controls)
   - [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -39,6 +39,7 @@ No installation, no backend — open the page and start drawing.
 | **Editing** | Move, Copy with offset, Array copy (nx × ny grid), Delete |
 | **Boolean ops** | Union (merge), Difference (subtract) via Clipper-lib |
 | **DXF I/O** | Import LWPOLYLINE / LINE entities from DXF; export all shapes as LWPOLYLINE |
+| **DWG import** | Import DWG drawings (LINE / LWPOLYLINE / POLYLINE / ARC / CIRCLE / ELLIPSE / SPLINE, plus INSERT / MINSERT block expansion) via the bundled GNU LibreDWG (WebAssembly), decoded off the main thread in a Web Worker |
 | **DRC** | Minimum aperture check (narrowest passage width), minimum spacing check, overlap detection |
 | **Properties** | Numeric X / Y position and W / H size editing in the right panel |
 | **Grid** | Adaptive major grid + 1/5 sub-grid; snaps to grid, vertices, and midpoints |
@@ -245,13 +246,13 @@ This is used by the included GitHub Actions workflow (`.github/workflows/deploy.
 npm run test:unit
 ```
 
-Runs 203 fast, headless unit tests covering geometry, normalization, DRC, layers, DXF I/O, PDF export, state history, and tools.
+Runs 238 fast, headless unit tests covering geometry, normalization, DRC, layers, DXF / DWG I/O, PDF export, state history, and tools.
 
 ```
- ✓ tests/unit/...                  (17 test files)
+ ✓ tests/unit/...                  (19 test files)
 
- Test Files  17 passed (17)
-       Tests  203 passed (203)
+ Test Files  19 passed (19)
+       Tests  238 passed (238)
 ```
 
 To run in watch mode (re-runs on file change):
@@ -345,14 +346,19 @@ Select **2 or more** shapes and click **Union**. All selected shapes are merged 
 4. The CUT shape is removed from the BASE, leaving a hole.
 5. Press **Esc** at any point to cancel.
 
-### DXF Import / Export
+### DXF / DWG Import / Export
 
-#### Import
-Click **Import** in the header and select a `.dxf` file.
+Import and export actions live in the **File** menu in the header. You can also **drag and drop** a `.dxf`, `.dwg`, or `.stencil` file onto the canvas.
+
+#### Import DXF
+Choose **Import DXF…** from the File menu (or drop a `.dxf` file).
 Supported entities: `LWPOLYLINE`, `LINE`. Closed polylines and line loops are converted to polygons.
 
+#### Import DWG
+Choose **Import DWG…** from the File menu (or drop a `.dwg` file). DWG files are decoded by the bundled GNU LibreDWG (WebAssembly) in a Web Worker, so the UI stays responsive on large drawings. Supported entities: `LINE`, `LWPOLYLINE`, `POLYLINE` (2D / 3D), `ARC`, `CIRCLE`, `ELLIPSE`, `SPLINE`, and `INSERT` / `MINSERT` block references (recursively expanded). Unsupported entity types are skipped and reported. All geometry is converted to integer-µm polygons through the same pipeline as DXF.
+
 #### Export
-Click **Export**. A `stencil.dxf` file is downloaded containing all shapes as `LWPOLYLINE` entities in one layer (`0`).
+Choose **Export DXF** from the File menu to download all shapes as `LWPOLYLINE` entities; **Export as PDF** is also available. (DWG export is not supported.)
 
 ### Design Rule Check (DRC)
 
@@ -430,6 +436,11 @@ src/
 ├── dxf/
 │   ├── importer.ts       — DXF text → Polygon[] pipeline
 │   └── exporter.ts       — Polygon[] → DXF LWPOLYLINE text
+├── dwg/
+│   ├── libredwg.ts       — Lazy WASM loader for GNU LibreDWG
+│   ├── importer.ts       — DWG database → Polygon[] conversion
+│   ├── blocks.ts         — Affine transforms and INSERT block expansion
+│   └── worker.ts         — Off-main-thread DWG decoding (Web Worker)
 ├── ui/
 │   └── app.ts            — Main App class wiring tools, state, and UI
 └── main.ts               — Entry point
@@ -453,6 +464,7 @@ src/
 | Boolean geometry | [Clipper-lib](https://github.com/junmer/clipper-lib) 6.x |
 | DXF import | [dxf-parser](https://github.com/gdsestimating/dxf-parser) 1.x |
 | DXF export | Custom LWPOLYLINE writer |
+| DWG import | [GNU LibreDWG](https://www.gnu.org/software/libredwg/) via [@mlightcad/libredwg-web](https://github.com/mlightcad/libredwg-web) (WebAssembly) |
 | Persistence | [localforage](https://localforage.github.io/localForage/) 1.x (IndexedDB) |
 | Unit tests | [Vitest](https://vitest.dev/) 1.x |
 | E2E tests | [Playwright](https://playwright.dev/) 1.x |
@@ -464,7 +476,7 @@ src/
 
 1. Fork the repository and create a feature branch.
 2. Make your changes — keep all coordinates as integers in µm, call `normalize()` after any geometric edit, and avoid `any` types.
-3. Run `npm run test:unit` and confirm all 203 tests pass.
+3. Run `npm run test:unit` and confirm all 238 tests pass.
 4. Open a pull request with a clear description of the change.
 
 ---
