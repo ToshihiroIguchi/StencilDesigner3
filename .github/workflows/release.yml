@@ -37,8 +37,12 @@ jobs:
       # Build with the default base path ("/") for local/offline serving.
       - run: npm run build
 
+      # Bundle the GPL-3.0 license text and third-party notices alongside the
+      # built app. The dist archive conveys the GPL-licensed LibreDWG WASM
+      # binary, so GPL-3.0 (§4-6) requires the license and corresponding
+      # notices to accompany it.
       - name: Package dist into a zip
-        run: zip -r "stencildesigner3-dist-${{ github.ref_name }}.zip" dist
+        run: zip -r "stencildesigner3-dist-${{ github.ref_name }}.zip" dist LICENSE THIRD-PARTY-LICENSES.md
 
       - name: Create or update the release and upload the archive
         env:
