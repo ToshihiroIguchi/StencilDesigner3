@@ -79,6 +79,7 @@ src/
 - Do not skip `normalize()` after edits
 - No `any` types unless interfacing with external JS libraries (mark with comment)
 - Keep all user interactions, code comments, and documentation in Japanese (code identifiers should remain in standard English)
+- When using high-cost models (e.g., Fable, Opus), restrict their usage to planning, orchestration, and high-difficulty implementation tasks. For all other tasks, utilize subagents.
 
 ---
 
