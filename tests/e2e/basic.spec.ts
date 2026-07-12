@@ -769,6 +769,15 @@ test.describe('17. Keyboard shortcuts', () => {
     expect(await shapeCount(page)).toBe(1);
   });
 
+  test('17-2b Ctrl+Shift+Z redoes', async ({ page }) => {
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(50);
+    // Upper-case 'Z' matches what real browsers put in e.key while Shift is held
+    await page.keyboard.press('Control+Shift+Z');
+    await page.waitForTimeout(50);
+    expect(await shapeCount(page)).toBe(1);
+  });
+
   test('17-3 Delete key deletes selected shape', async ({ page }) => {
     const box = await canvasBox(page);
     await selectShape(page, box.x + 200, box.y + 175);

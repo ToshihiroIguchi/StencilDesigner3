@@ -195,9 +195,14 @@ export class SelectTool extends BaseTool {
         state.shapes, interactiveDims, vt, interactiveAnns, interactiveShapes
       );
       if (sel.length > 0) {
-        const newSel = shift ? [...state.selection, ...sel] : sel;
-        this.ctx.history.execute(new SetSelectionCommand(newSel, state.selection));
-        markDirty();
+        // On shift-add, skip shapes already selected so entries are never duplicated
+        const existingIds = new Set(state.selection.map((s) => s.shapeId));
+        const added = shift ? sel.filter((s) => !existingIds.has(s.shapeId)) : sel;
+        if (!shift || added.length > 0) {
+          const newSel = shift ? [...state.selection, ...added] : added;
+          this.ctx.history.execute(new SetSelectionCommand(newSel, state.selection));
+          markDirty();
+        }
       }
     }
 

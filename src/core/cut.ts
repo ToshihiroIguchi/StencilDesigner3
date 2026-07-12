@@ -73,13 +73,20 @@ function pointInPolygon(p: Point, poly: Polygon): boolean {
 /** Returns true if any ring edge is collinear with (parallel and overlapping) the cut segment. */
 function hasCollinearOverlap(ring: Ring, p1: Point, p2: Point): boolean {
   const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  const lenSq = dx * dx + dy * dy;
   const n = ring.length;
   for (let i = 0; i < n; i++) {
     const a = ring[i], b = ring[(i + 1) % n];
     // Check if a→b is collinear with p1→p2 and they share more than a point
     const c1 = (a.x - p1.x) * dy - (a.y - p1.y) * dx;
     const c2 = (b.x - p1.x) * dy - (b.y - p1.y) * dx;
-    if (c1 === 0 && c2 === 0) return true; // both endpoints collinear → overlap
+    if (c1 !== 0 || c2 !== 0) continue; // not on the cut's infinite line
+    // Both endpoints lie on the cut's line — degenerate only if the spans
+    // truly overlap (an endpoint-to-endpoint touch is a point contact, which
+    // the crossing logic handles like any tangent touch).
+    const ta = (a.x - p1.x) * dx + (a.y - p1.y) * dy;
+    const tb = (b.x - p1.x) * dx + (b.y - p1.y) * dy;
+    if (Math.max(ta, tb) > 0 && Math.min(ta, tb) < lenSq) return true;
   }
   return false;
 }

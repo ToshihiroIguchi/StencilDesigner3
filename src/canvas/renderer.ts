@@ -213,7 +213,7 @@ export class CanvasRenderer {
 
     // In-progress dimension draft
     if (extras?.dimDraft) {
-      this.drawDimDraft(extras.dimDraft, state.shapes, vt);
+      this.drawDimDraft(extras.dimDraft, state.shapes, state.displayUnit, vt);
     }
 
     // Measure overlay
@@ -1050,7 +1050,7 @@ export class CanvasRenderer {
 
   // ─── In-progress drafts ────────────────────────────────────────────────────
 
-  private drawDimDraft(draft: DimDraft, shapes: Polygon[], vt: ViewTransform): void {
+  private drawDimDraft(draft: DimDraft, shapes: Polygon[], unit: 'mm' | 'um', vt: ViewTransform): void {
     const ctx = this.ctx;
     ctx.save();
     ctx.strokeStyle = 'rgba(100,200,100,0.7)';
@@ -1069,9 +1069,7 @@ export class CanvasRenderer {
 
     if (draft.kind === 'centerline' || draft.kind === 'arrow') {
       ctx.restore();
-      // Use mm for dimension draft by default as it's just a preview, or pass proper unit if possible.
-      // Since it's a draft, we'll use mm.
-      this.drawOneDimension(draft.kind, draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', 'mm', vt, false, shapes);
+      this.drawOneDimension(draft.kind, draft.p1, draft.p2, 0, 'rgba(100,200,100,0.7)', unit, vt, false, shapes);
       return;
     }
 
@@ -1083,7 +1081,7 @@ export class CanvasRenderer {
     ctx.strokeStyle = 'rgba(100,200,100,0.7)';
     ctx.fillStyle = 'rgba(100,200,100,0.7)';
     ctx.lineWidth = 1.2;
-    this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', 'mm', vt, false, shapes);
+    this.drawOneDimension(draft.kind, draft.p1, draft.p2, draft.offset, 'rgba(100,200,100,0.7)', unit, vt, false, shapes);
     ctx.restore();
   }
 
