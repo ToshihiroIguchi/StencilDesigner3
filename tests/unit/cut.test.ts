@@ -157,6 +157,35 @@ describe('cutPolygon — polygon with a hole', () => {
   });
 });
 
+// ─── Cut collinear with a non-overlapping edge ───────────────────────────────
+
+describe('cutPolygon — cut collinear with a distant edge', () => {
+  // L-shape: 10000×10000 with top-right 5000×5000 corner removed.
+  // Its inner corner is at (5000, 5000); the vertical edge x=5000 spans y 5000–10000
+  // and the horizontal edge y=5000 spans x 5000–10000.
+  const lShape = makePoly([
+    [0, 0], [10000, 0], [10000, 5000], [5000, 5000], [5000, 10000], [0, 10000],
+  ]);
+
+  it('vertical cut along the inner-corner line splits the lower slab', () => {
+    // x=5000 from below the shape up to exactly the inner corner: collinear with
+    // the x=5000 edge but only touching it at one point → must cut, not degenerate.
+    const result = cutPolygon(lShape, { x: 5000, y: -500 }, { x: 5000, y: 5000 });
+    expect(result.status).toBe('cut');
+    if (result.status !== 'cut') return;
+    expect(result.pieces).toHaveLength(2);
+    expect(Math.abs(totalArea(result.pieces) - 75_000_000)).toBeLessThan(50);
+  });
+
+  it('horizontal cut along the inner-corner line splits the left arm', () => {
+    const result = cutPolygon(lShape, { x: -500, y: 5000 }, { x: 5000, y: 5000 });
+    expect(result.status).toBe('cut');
+    if (result.status !== 'cut') return;
+    expect(result.pieces).toHaveLength(2);
+    expect(Math.abs(totalArea(result.pieces) - 75_000_000)).toBeLessThan(50);
+  });
+});
+
 // ─── Degenerate cases ─────────────────────────────────────────────────────────
 
 describe('cutPolygon — degenerate cases', () => {
@@ -165,6 +194,12 @@ describe('cutPolygon — degenerate cases', () => {
   it('line along an edge returns degenerate', () => {
     // Cut along the bottom edge y=0
     const result = cutPolygon(rect, { x: -500, y: 0 }, { x: 10500, y: 0 });
+    expect(result.status).toBe('degenerate');
+  });
+
+  it('line partially overlapping an edge returns degenerate', () => {
+    // Overlaps the bottom edge y=0 over x 0–5000
+    const result = cutPolygon(rect, { x: -500, y: 0 }, { x: 5000, y: 0 });
     expect(result.status).toBe('degenerate');
   });
 

@@ -636,27 +636,30 @@ export class App {
     }
 
     if (e.ctrlKey || e.metaKey) {
+      // Compare case-insensitively: Shift and CapsLock turn e.key into 'Z' etc.
+      const key = e.key.toLowerCase();
       // Ctrl+Shift+Z must be checked before plain Ctrl+Z
-      if (e.key === 'z' && e.shiftKey) {
+      if (key === 'z' && e.shiftKey) {
         if (editingText) return;
         e.preventDefault(); this.redo(); return;
       }
-      if (e.key === 'z') {
+      if (key === 'z') {
         if (editingText) return;
         e.preventDefault(); this.undo(); return;
       }
-      if (e.key === 'y') {
+      if (key === 'y') {
         if (editingText) return;
         e.preventDefault(); this.redo(); return;
       }
-      if (e.key === 's') { e.preventDefault(); if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state); return; }
-      // Clipboard / selection shortcuts — skip when focus is in an input or text tool is editing
-      if (!inInput && !editingText) {
-        if (e.key === 'a') { e.preventDefault(); this.selectAll(); return; }
-        if (e.key === 'c') { e.preventDefault(); this.copySelectedToClipboard(); return; }
-        if (e.key === 'x') { e.preventDefault(); this.cutSelected(); return; }
-        if (e.key === 'v') { e.preventDefault(); this.pasteFromClipboard(); return; }
-        if (e.key === 'd') { e.preventDefault(); this.duplicateSelected(); return; }
+      if (key === 's') { e.preventDefault(); if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state); return; }
+      // Clipboard / selection shortcuts — skip when focus is in an input or text tool is
+      // editing; leave Shift-modified combos (e.g. Ctrl+Shift+C = devtools) to the browser
+      if (!inInput && !editingText && !e.shiftKey) {
+        if (key === 'a') { e.preventDefault(); this.selectAll(); return; }
+        if (key === 'c') { e.preventDefault(); this.copySelectedToClipboard(); return; }
+        if (key === 'x') { e.preventDefault(); this.cutSelected(); return; }
+        if (key === 'v') { e.preventDefault(); this.pasteFromClipboard(); return; }
+        if (key === 'd') { e.preventDefault(); this.duplicateSelected(); return; }
       }
     }
     if (!inInput && !e.ctrlKey && !e.metaKey) {
