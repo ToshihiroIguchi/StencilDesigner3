@@ -1031,6 +1031,10 @@ export class App {
       }
       markDirty();
       this.fitToContent();
+      const dropped = result.ignoredCounts['DROPPED_DEGENERATE'];
+      if (dropped) {
+        this.showNotify(`Imported ${result.polygons.length} shapes (${dropped} degenerate shapes skipped).`);
+      }
       return;
     }
 
@@ -1060,9 +1064,13 @@ export class App {
     // Show ignored entity counts if any
     const ignored = Object.entries(result.ignoredCounts);
     if (ignored.length > 0) {
+      const formatIgnoredType = (type: string) => {
+        if (type === 'DROPPED_DEGENERATE') return 'degenerate shapes (< 3 points)';
+        return type;
+      };
       const note = document.createElement('p');
       note.style.cssText = 'font-size:11px;color:var(--fg2);margin-top:8px';
-      note.textContent = 'Ignored: ' + ignored.map(([t, c]) => `${c} ${t}`).join(', ');
+      note.textContent = 'Ignored: ' + ignored.map(([t, c]) => `${c} ${formatIgnoredType(t)}`).join(', ');
       layersDiv.appendChild(note);
     }
 
@@ -1100,6 +1108,10 @@ export class App {
         }
         markDirty();
         this.fitToContent();
+        const dropped = result.ignoredCounts['DROPPED_DEGENERATE'];
+        if (dropped) {
+          this.showNotify(`Imported ${result.polygons.length} shapes (${dropped} degenerate shapes skipped).`);
+        }
         resolve();
       };
 

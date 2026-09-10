@@ -1,6 +1,6 @@
 import type { Polygon, Ring, Layer, Vertex } from '../types';
 import { newId } from '../types';
-import { normalizeAll, bbox, pointInRing } from '../normalize';
+import { normalizeAllWithStats, bbox, pointInRing } from '../normalize';
 import { dist, getCircleSegments } from '../core/geometry';
 import { vertex } from '../core/vertex';
 import { aciToHex } from './aci';
@@ -341,7 +341,13 @@ export function buildImportResult(
     }
   }
 
-  return { polygons: normalizeAll(polygons), layers: importedLayers, ignoredCounts: {} };
+  const { polygons: normalized, droppedCount } = normalizeAllWithStats(polygons);
+  const ignoredCounts: Record<string, number> = {};
+  if (droppedCount > 0) {
+    ignoredCounts['DROPPED_DEGENERATE'] = droppedCount;
+  }
+
+  return { polygons: normalized, layers: importedLayers, ignoredCounts };
 }
 
 /** Parse DXF text and return polygons with layer information. */

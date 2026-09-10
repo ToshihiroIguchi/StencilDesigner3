@@ -45,6 +45,18 @@ async function loadJpFont(): Promise<string | null> {
         throw new Error(`Fetched resource starts with '<', indicating it is HTML (dev server 404 fallback).`);
       }
 
+      // Validate TrueType outline format. jsPDF's built-in TTFFont parser only supports TrueType outlines
+      // (0x00010000 or 'true'), and crashes with 'Cannot use in operator on undefined' if given OpenType CFF ('OTTO').
+      if (bytes.length < 4) {
+        throw new Error('Font file is too small to be a valid font.');
+      }
+      const isTrueType = (bytes[0] === 0x00 && bytes[1] === 0x01 && bytes[2] === 0x00 && bytes[3] === 0x00)
+        || (bytes[0] === 0x74 && bytes[1] === 0x72 && bytes[2] === 0x75 && bytes[3] === 0x65);
+      if (!isTrueType) {
+        const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+        throw new Error(`Unsupported font format (magic: '${magic}'). jsPDF requires TrueType outlines (glyf table), not CFF/OTTO.`);
+      }
+
       const base64 = uint8ArrayToBase64(bytes);
       jpFontCache = base64;
       return base64;

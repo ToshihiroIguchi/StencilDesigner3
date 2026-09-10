@@ -132,17 +132,29 @@ export function normalize(polygon: Polygon): Polygon {
   return { ...polygon, outer, holes };
 }
 
-/** Normalize all polygons in a list. Filters out degenerate ones. */
-export function normalizeAll(polygons: Polygon[]): Polygon[] {
+export interface NormalizeAllStats {
+  polygons: Polygon[];
+  droppedCount: number;
+}
+
+/** Normalize all polygons in a list with statistics on dropped degenerate shapes. */
+export function normalizeAllWithStats(polygons: Polygon[]): NormalizeAllStats {
   const result: Polygon[] = [];
+  let droppedCount = 0;
   for (const poly of polygons) {
     try {
       result.push(normalize(poly));
     } catch (e) {
+      droppedCount++;
       console.warn(`normalizeAll: dropped polygon ${poly.id} (layer="${poly.layer}"): ${e}`);
     }
   }
-  return result;
+  return { polygons: result, droppedCount };
+}
+
+/** Normalize all polygons in a list. Filters out degenerate ones. */
+export function normalizeAll(polygons: Polygon[]): Polygon[] {
+  return normalizeAllWithStats(polygons).polygons;
 }
 
 /** Compute signed area in µm² (may be large, use BigInt if needed for very large shapes). */
