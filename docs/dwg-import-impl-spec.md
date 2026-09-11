@@ -1,66 +1,66 @@
-# DWG 読み込み 実装仕様書（実装担当=Sonnet 向けハンドオフ）
+# DWG Import Implementation Specification
 
-本書は `docs/dwg-import-plan.md`（全体計画）を**コードレベルまで具体化**した実装手順書。
-実装者はこの仕様に沿って進めること。型・API・座標変換・ブロック展開・テスト手順を確定値で記載する。
+This document provides concrete, code-level implementation specifications based on `docs/dwg-import-plan.md`.
+It establishes exact types, APIs, coordinate transformations, block expansions, and verification procedures.
 
-> 前提ルール（CLAUDE.md 準拠・厳守）
-> - 幾何座標は **整数 µm**。float源（DWG座標）は必ず `Math.round`。
-> - 幾何編集後は `normalize()`/`normalizeAll()` を呼ぶ。
-> - DWG はI/O専用。内部ジオメトリは必ず `Polygon` に変換。
-> - ドキュメント・コメント・UI 文言は日本語、コード識別子は英語。
-> - PR タイトル/本文・コミット subject は英語（conventional commit）。
-> - 本機能の依存は GPL-3.0。後述の GPL 対応を**依存追加と同一PR**で必ず実施。
+> Core Principles:
+> - Geometric coordinates are **integer micrometers (µm)**. Floating-point sources (DWG coordinates) must be converted with `Math.round`.
+> - Always call `normalize()` / `normalizeAll()` after geometric edits.
+> - DWG is for I/O only. Internal geometry is strictly represented as `Polygon`.
+> - Code, comments, documentation, UI strings, and identifiers must all be in standard English.
+> - PR titles, PR descriptions, and commit messages must follow conventional commits in English.
+> - Dependencies introduced by this feature are under GPL-3.0. Fulfill GPL compliance requirements alongside dependency introduction.
 
 ---
 
-## 0. ライブラリ確定情報
+## 0. Verified Library Details
 
-- パッケージ: `@mlightcad/libredwg-web@^0.7.2`（GPL-3.0）
-- 使い方（ラッパAPI）:
+- Package: `@mlightcad/libredwg-web@^0.7.2` (GPL-3.0)
+- Usage (wrapper API):
   ```ts
   import { LibreDwg, Dwg_File_Type } from '@mlightcad/libredwg-web';
-  const libredwg = await LibreDwg.create(wasmDir); // wasmDir = libredwg-web.wasm のあるディレクトリ
+  const libredwg = await LibreDwg.create(wasmDir); // wasmDir = directory containing libredwg-web.wasm
   const dwg = libredwg.dwg_read_data(new Uint8Array(buf), Dwg_File_Type.DWG);
   const db  = libredwg.convert(dwg);   // => DwgDatabase
-  // ... 変換 ...
-  libredwg.dwg_free(dwg);              // finally で必ず解放
+  // ... conversion ...
+  libredwg.dwg_free(dwg);              // always free in a finally block
   ```
-- `.wasm` 実体: `node_modules/@mlightcad/libredwg-web/wasm/libredwg-web.wasm`（6.3MB）。
-  - `LibreDwg.create(filepath)` は `locateFile` に `${filepath}/libredwg-web.wasm` を渡す実装。
-  - ブラウザでは Vite のアセットURL（`?url`）で解決し、その親ディレクトリ相当を渡す（後述 §5）。
-- 注意: `dwg_read_data` の戻りに `error`（ビットフラグ）がある。**低位（警告）でもデータは取れる**。エンティティが取得できていれば成功扱いにする。
+- WASM binary: `node_modules/@mlightcad/libredwg-web/wasm/libredwg-web.wasm` (6.3 MB).
+  - `LibreDwg.create(filepath)` passes `${filepath}/libredwg-web.wasm` to `locateFile`.
+  - In the browser, resolve via Vite's asset URL (`?url`) and supply the corresponding directory path (see §5).
+- Note: `dwg_read_data` returns an `error` bit flag. **Low-order bits indicate non-fatal warnings; data can still be extracted**. Treat import as successful whenever entities are retrieved.
 
 ---
 
-## 1. 確定済み型スキーマ（実測の .d.ts より。これに従えば推測不要）
+## 1. Verified Type Schemas (Derived from `.d.ts`)
 
-`libredwg.convert(dwg)` が返す `DwgDatabase`:
+`DwgDatabase` returned by `libredwg.convert(dwg)`:
 
 ```ts
 interface DwgDatabase {
   tables: {
     BLOCK_RECORD: { entries: DwgBlockRecordTableEntry[] };
     LAYER:        { entries: DwgLayerTableEntry[] };
-    LTYPE: ...; STYLE: ...; /* 他は未使用 */
+    LTYPE: ...; STYLE: ...; /* Other tables unused */
   };
-  objects: { ... };          // 本機能では未使用
-  header:  DwgHeader;        // 将来 $INSUNITS 参照用
-  entities: DwgEntity[];     // モデル空間エンティティ（便宜フラット配列）
+  objects: { ... };          // Unused by this feature
+  header:  DwgHeader;        // For future $INSUNITS reference
+  entities: DwgEntity[];     // Model space entities (convenience flat array)
   classes:  DwgClass[];
 }
 ```
 
-ベース & 主要エンティティ（必要フィールドのみ抜粋）:
+Base and primary entity interfaces:
 
 ```ts
 interface DwgEntity {
   type: string;            // 'LINE' | 'LWPOLYLINE' | 'POLYLINE2D' | 'ARC' | ...
   handle: string;
   layer: string;
-  colorIndex?: number;     // 負値=レイヤoff, 256=BYLAYER
+  colorIndex?: number;     // Negative value indicates layer is off; 256 = BYLAYER
   lineType?: string;
   lineweight?: number;
-  isInPaperSpace?: boolean;// true はペーパー空間 → スキップ
+  isInPaperSpace?: boolean;// Skip paper space entities
   isVisible?: boolean;
   ownerBlockRecordSoftId: string;
 }
@@ -73,14 +73,14 @@ interface DwgLineEntity extends DwgEntity {           // 'LINE'
 }
 
 interface DwgLWPolylineEntity extends DwgEntity {     // 'LWPOLYLINE'
-  flag: number;                                       // bit0(=1): 閉
+  flag: number;                                       // bit0(=1): closed
   vertices: DwgLWPolylineVertex[];
   elevation: number;
 }
 interface DwgLWPolylineVertex extends DwgPoint2D { id: number; bulge: number; startWidth?: number; endWidth?: number; }
 
 interface DwgPolyline2dEntity extends DwgEntity {     // 'POLYLINE2D'
-  flag: number;                                       // bit0(=1): 閉
+  flag: number;                                       // bit0(=1): closed
   vertices: DwgVertex2dEntity[];                      // DwgVertex2dEntity extends DwgPoint3D, { bulge, id, ... }
   elevation: number;
 }
@@ -95,7 +95,7 @@ interface DwgCircleEntity extends DwgEntity {         // 'CIRCLE'
   center: DwgPoint3D; radius: number;
 }
 interface DwgEllipseEntity extends DwgEntity {        // 'ELLIPSE'
-  center: DwgPoint3D; majorAxisEndPoint: DwgPoint3D;  // 中心からの相対ベクトル
+  center: DwgPoint3D; majorAxisEndPoint: DwgPoint3D;  // Vector relative to center
   axisRatio: number; startAngle: number; endAngle: number;
 }
 interface DwgSplineEntity extends DwgEntity {         // 'SPLINE'
@@ -103,19 +103,19 @@ interface DwgSplineEntity extends DwgEntity {         // 'SPLINE'
   knots: number[]; weights?: number[];
 }
 interface DwgInsertEntity extends DwgEntity {         // 'INSERT'
-  name: string;                                       // 参照ブロック名
+  name: string;                                       // Referenced block name
   insertionPoint: DwgPoint3D;
   xScale: number; yScale: number; zScale: number;
-  rotation: number;                                   // radian（§8で実測確定）
+  rotation: number;                                   // In radians (§8)
   columnCount: number; rowCount: number;
   columnSpacing: number; rowSpacing: number;
   attribs: DwgAttribEntity[];
 }
 
-interface DwgBlockRecordTableEntry {                  // ブロック定義
-  name: string;                                       // 例 '*Model_Space', 'MYBLOCK'
-  basePoint: DwgPoint3D;                              // ブロック原点
-  entities: DwgEntity[];                              // ブロック内エンティティ
+interface DwgBlockRecordTableEntry {                  // Block definition
+  name: string;                                       // e.g. '*Model_Space', 'MYBLOCK'
+  basePoint: DwgPoint3D;                              // Block origin
+  entities: DwgEntity[];                              // Entities within block
 }
 
 interface DwgLayerTableEntry {
@@ -125,17 +125,17 @@ interface DwgLayerTableEntry {
 }
 ```
 
-> ブロック展開の要点: `INSERT.name` を `tables.BLOCK_RECORD.entries` から `name` で検索し、その `entities` を再帰展開する。
-> モデル空間自体もブロック（`*Model_Space`/`*Paper_Space`）。`db.entities` を使えばモデル空間ぶんは取得済みなので、トップレベルは `db.entities` を起点にしてよい。
+> Block expansion key takeaway: Look up `INSERT.name` in `tables.BLOCK_RECORD.entries` by `name`, and recursively expand its `entities`.
+> Model space is itself a block (`*Model_Space`). Using `db.entities` provides all model space entities directly, making `db.entities` the natural starting point for top-level processing.
 
 ---
 
-## 2. 既存コードの再利用と抽出（リファクタ）
+## 2. Existing Code Reuse and Extraction (Refactoring)
 
-`src/dxf/importer.ts` の `importDxf()` 後段を共通関数に抽出する。挙動は不変（既存テストで担保）。
+Extract the downstream processing of `importDxf()` in `src/dxf/importer.ts` into a shared function:
 
 ```ts
-// src/dxf/importer.ts に追加（export）
+// Added and exported in src/dxf/importer.ts
 export function buildImportResult(
   segments: Array<{ seg: [Vertex, Vertex]; layer: string }>,
   closedRings: Array<{ ring: Ring; layer: string }>,
@@ -143,27 +143,27 @@ export function buildImportResult(
 ): ImportResult
 ```
 
-中身は現行 `importDxf` の以下をそのまま移植:
-- open セグメントのレイヤ別 `chainSegments` 連結
-- `closedRings` と結合 → `classifyAndBuildPolygons`
-- レイヤ表構築（`aciToHex` / `normalizeLinetype` / `REGMARK`→`isAperture`）
-- entityで使用されたが表に無いレイヤの補完
-- 戻り: `{ polygons: normalizeAll(polygons), layers, ignoredCounts }`
+Transferred logic:
+- Chaining open segments by layer via `chainSegments`
+- Combining with `closedRings` → `classifyAndBuildPolygons`
+- Constructing the layer table (`aciToHex`, `normalizeLinetype`, `REGMARK` → `isAperture`)
+- Backfilling missing layers referenced by entities
+- Return: `{ polygons: normalizeAll(polygons), layers, ignoredCounts }`
 
-そして `importDxf()` 自身を、抽出した `buildImportResult()` を呼ぶ形に書き換える（DXF専用ロジック＝entityの読み取りだけ残す）。
+`importDxf()` is then refactored to delegate to `buildImportResult()`, leaving only entity-reading logic DXF-specific.
 
-既存ヘルパ（**DWG変換でも再利用**、必要なら export）:
-- `mmToUm(v)` … `Math.round(v*1000)`
-- `arcToPoints(cx,cy,r,startDeg,endDeg,ccw)` … 度入力・Y反転込み
-- `bulgeToArcPoints(p1x,p1y,p2x,p2y,bulge)`
+Reusable helpers (exported as needed):
+- `mmToUm(v)`: `Math.round(v * 1000)`
+- `arcToPoints(cx, cy, r, startDeg, endDeg, ccw)`: Degree-based with Y-negation
+- `bulgeToArcPoints(p1x, p1y, p2x, p2y, bulge)`
 - `expandPolylineVerts(verts, isClosed)`
-- 座標規約: DWG/DXF は Y-up、内部は Y-down。**取り込み時に y を反転**（既存は `vertex(mmToUm(x), mmToUm(-y))`）。
+- Coordinate convention: DWG/DXF is Y-up, internal geometry is Y-down. **Invert Y upon ingestion** (`vertex(mmToUm(x), mmToUm(-y))`).
 
 ---
 
-## 3. 新規ファイル
+## 3. New Modules
 
-### 3.1 `src/dwg/libredwg.ts` — WASM 遅延ロード
+### 3.1 `src/dwg/libredwg.ts` — WASM Lazy Loader
 ```ts
 import wasmUrl from '@mlightcad/libredwg-web/wasm/libredwg-web.wasm?url';
 import type { LibreDwg as LibreDwgType } from '@mlightcad/libredwg-web';
@@ -172,164 +172,158 @@ let instance: LibreDwgType | null = null;
 
 export async function getLibreDwg(): Promise<LibreDwgType> {
   if (instance) return instance;
-  const { LibreDwg } = await import('@mlightcad/libredwg-web'); // 遅延 import
-  // wasmUrl から locateFile 用ディレクトリを解決
+  const { LibreDwg } = await import('@mlightcad/libredwg-web');
   const dir = wasmUrl.slice(0, wasmUrl.lastIndexOf('/'));
   instance = await LibreDwg.create(dir);
   return instance;
 }
 ```
-> `create(dir)` は `${dir}/libredwg-web.wasm` を fetch する。Vite が `?url` でハッシュ付きURLを与えるためファイル名が変わる場合は、`locateFile` を上書きして `wasmUrl` を直接返す実装に変更する（§5参照）。動作確認しながら確実な方を採用。
+> `create(dir)` fetches `${dir}/libredwg-web.wasm`. When Vite appends hashes via `?url`, override `locateFile` to return `wasmUrl` directly if needed (see §5).
 
-### 3.2 `src/dwg/blocks.ts` — 変換行列・ブロック展開
-- 2x3 アフィン行列（µm 整数化は最終段）。
-- `INSERT` → 平行移動(insertionPoint) × 回転(rotation) × スケール(x/y) を合成。`basePoint` を減算してから適用。
-- `MINSERT`（columnCount/rowCount>1）は row×col で平行移動複製。
-- 再帰展開（`visited: Set<blockName>` で循環ガード、`depth` 上限 16）。
+### 3.2 `src/dwg/blocks.ts` — Transformation Matrices & Block Expansion
+- 2x3 affine transformation matrix (µm integer rounding applied at the final stage).
+- `INSERT` transforms: compose translation (`insertionPoint`) × rotation (`rotation`) × scale (`xScale/yScale`). Subtract `basePoint` before transforming.
+- `MINSERT` (`columnCount/rowCount > 1`): replicate across row/column offsets.
+- Recursive expansion (`visited: Set<blockName>` for cycle detection; maximum depth limit of 16).
 
 ```ts
-export interface Mat { a:number;b:number;c:number;d:number;e:number;f:number; } // [[a c e],[b d f]]
+export interface Mat { a: number; b: number; c: number; d: number; e: number; f: number; } // [[a, c, e], [b, d, f]]
 export function identity(): Mat
 export function multiply(m1: Mat, m2: Mat): Mat
-export function apply(m: Mat, x: number, y: number): { x: number; y: number } // float（呼び出し側で round）
+export function apply(m: Mat, x: number, y: number): { x: number; y: number }
 export function insertMatrix(ins: DwgInsertEntity, basePoint: DwgPoint3D): Mat
 ```
 
-### 3.3 `src/dwg/importer.ts` — 変換コア
+### 3.3 `src/dwg/importer.ts` — Core Ingestion
 ```ts
 import type { ImportResult } from '../dxf/importer';
 export async function importDwg(buf: ArrayBuffer): Promise<ImportResult>;
 ```
-処理:
-1. `getLibreDwg()` → `dwg_read_data` → `convert`（try/finally で `dwg_free`）。
-2. `db.entities`（モデル空間）を起点に走査。`isInPaperSpace` は除外。
-3. 各 entity を §4 のマッピングで `segments` / `closedRings` に積む（座標は §2 のヘルパで µm + Y反転）。`INSERT` は §3.2 で展開し、行列適用後に同じマッピングを再帰適用。
-4. レイヤ表は `db.tables.LAYER.entries` を `buildImportResult` の rawLayers 形へ変換。
-5. `buildImportResult(segments, closedRings, rawLayers)` を返す。
-6. 個々 entity の変換は try/catch で囲み、失敗はスキップ＋`ignoredCounts['_error']++`（全体を止めない）。
+Pipeline:
+1. `getLibreDwg()` → `dwg_read_data` → `convert` (`dwg_free` in a `finally` block).
+2. Traverse `db.entities` (model space), filtering out `isInPaperSpace`.
+3. Map each entity per §4 into `segments` and `closedRings` (converting coordinates to µm and inverting Y). Expand `INSERT` per §3.2 and recursively map child entities through the composed matrix.
+4. Convert `db.tables.LAYER.entries` to `buildImportResult` format.
+5. Return `buildImportResult(segments, closedRings, rawLayers)`.
+6. Wrap entity conversions in `try/catch` to log errors, increment `ignoredCounts['_error']`, and continue.
 
 ---
 
-## 4. エンティティ → 中間表現マッピング
+## 4. Entity-to-Intermediate Representation Mapping
 
-| type | 変換 |
+| Type | Mapping |
 |---|---|
-| `LINE` | `startPoint,endPoint` を2頂点セグメント |
-| `LWPOLYLINE` | `flag&1` で閉判定。bulge は `bulgeToArcPoints`。閉→`closedRings`、開→セグメント列 |
-| `POLYLINE2D` | 同上（vertices は `DwgVertex2dEntity`、`x,y,bulge`） |
-| `POLYLINE3D` | z無視、x/yのみ。`flag&1` で閉 |
-| `ARC` | `arcToPoints(center.x,center.y,radius,startAngle,endAngle)`（startAngle/endAngle は radian → `*180/π` で度変換。§8で実測確定）→セグメント列 |
-| `CIRCLE` | `arcToPoints(...,0,360)` の最終点を除いて `closedRings` |
-| `ELLIPSE` | `majorAxisEndPoint`(相対)から長軸長・角度算出、`axisRatio`で短軸。startAngle/endAngle（§8）でパラメトリック分割し折れ線化。閉(全周)なら`closedRings` |
-| `SPLINE` | まず `fitPoints` があればそれを折れ線として使用。無ければ `controlPoints` を de Boor で degree 次評価し許容誤差で分割（簡易実装可: 制御点折れ線でも可だが精度注意）。閉フラグで `closedRings` |
-| `INSERT` | §3.2 でブロック展開（行列適用→子entityを再帰マッピング）。`attribs` は無視 |
-| `POINT` | 既定は無視（必要なら REGMARK 用に対応） |
-| `SOLID`/`3DFACE` | 任意: 角点をリング化 |
-| `HATCH` | 任意・優先度低: 境界パスをリング化 |
-| その他 (`TEXT`/`MTEXT`/`DIMENSION`/`MLINE`/`VIEWPORT`/...) | 無視。`ignoredCounts[type]++` |
-
-> セグメント連結は既存 `chainSegments`（レイヤ別）により自動でリング化される。開いたままのものは線分として扱われる（既存DXFと同じ挙動）。
+| `LINE` | `startPoint, endPoint` into a 2-vertex segment |
+| `LWPOLYLINE` | `flag & 1` tests closure. Bulges via `bulgeToArcPoints`. Closed → `closedRings`, open → chained segments |
+| `POLYLINE2D` | Same as LWPOLYLINE (vertices are `DwgVertex2dEntity` with `x, y, bulge`) |
+| `POLYLINE3D` | Ignore z; x/y only; `flag & 1` tests closure |
+| `ARC` | `arcToPoints(center.x, center.y, radius, startAngle, endAngle)` (convert radians to degrees via `* 180 / π`) → segment sequence |
+| `CIRCLE` | `arcToPoints(..., 0, 360)` excluding duplicate endpoint → `closedRings` |
+| `ELLIPSE` | Derive major axis length/angle from relative `majorAxisEndPoint`; derive minor axis via `axisRatio`. Subdivide parametrically over `startAngle` to `endAngle`. If full sweep, emit `closedRings` |
+| `SPLINE` | Use `fitPoints` directly if present; otherwise evaluate `controlPoints` using de Boor / Catmull-Rom with chord-height subdivision. Closed flag emits `closedRings` |
+| `INSERT` | Expand block per §3.2 (apply transform → recursively map child entities); ignore `attribs` |
+| `POINT` | Ignored by default (optional registration mark support) |
+| `SOLID` / `3DFACE` | Optional: corner vertices into rings |
+| `HATCH` | Optional / low-priority: boundary paths into rings |
+| Other (`TEXT`, `MTEXT`, `DIMENSION`, etc.) | Ignored; increment `ignoredCounts[type]` |
 
 ---
 
-## 5. Vite / WASM 配置（§3.1の確実化）
+## 5. Vite / WASM Asset Configuration
 
-- 最優先: `?url` インポート＋`locateFile` 上書きで**ハッシュ付きURLを直接返す**:
+- Direct URL resolution via `?url` import with `locateFile` override:
   ```ts
-  instance = await LibreDwg.create(); // 引数なし → 既定 locateFile
-  // ↑が data: URL 埋め込み版で失敗する場合は createModule 経由で locateFile を上書き:
+  instance = await LibreDwg.create();
+  // Override locateFile via createModule if data: URL fallback occurs:
   // const { createModule } = await import('@mlightcad/libredwg-web/wasm/libredwg-web.js');
   // const mod = await createModule({ locateFile: () => wasmUrl });
   // instance = LibreDwg.createByWasmInstance(mod);
   ```
-- 受け入れ確認: 本番ビルドで `libredwg-web.wasm` が**別チャンク/アセット**として出力され、初期ロードに含まれないこと（`dist` を確認）。
-- CSP: `wasm-unsafe-eval` 等が必要なら設定。fetch失敗時はユーザーへフォールバック表示。
+- Acceptance check: Ensure production builds isolate `libredwg-web.wasm` into a distinct asset chunk, omitted from the initial bundle.
 
 ---
 
-## 6. Web Worker 化
+## 6. Web Worker Architecture
 
-- `src/dwg/worker.ts`：`{ buf: ArrayBuffer }` を受け取り、`importDwg` 相当を実行、`ImportResult`（プレーンデータ）を `postMessage`。エラーは `{ error: string }`。
-- メインは `loadDwgFile` で Worker を spawn、スピナー表示、完了で `showImportDialog(result)`。
-- 注意: `ImportResult` は構造化複製可能なプレーンオブジェクトであること（関数・クラスインスタンスを含めない）。
-- WASM ロードも Worker 内で行う（メインスレッドを汚さない）。`?url` は Worker からも解決可能なように Vite 設定で対応。
-
----
-
-## 7. UI 配線（`src/ui/app.ts`）
-
-- ドロップ判定（現状 `app.ts:437` 付近 `if (ext === 'dxf')`）に `dwg` を追加 → `this.loadDwgFile(file)`。
-- ファイル入力 `accept` に `.dwg` 追加。メニュー/ハンドラに `importDwg()`（`#dwg-file-input` クリック or 既存入力を拡張）。
-- `loadDwgFile(file)`: `const buf = await file.arrayBuffer();` → Worker 経由で `importDwg` → `showImportDialog(result)`（**既存メソッドをそのまま流用、改変不要**）。
-- 失敗時: `showMessageModal({ title:'DWG取り込み', message: ... })`。0件時は理由＋`ignoredCounts` 内訳を提示。
-- About/フッタに「ソースコード」「ライセンス」リンク（GPL §6、§9）。
+- `src/dwg/worker.ts`: Receives `{ buf: ArrayBuffer }`, runs `importDwg`, and returns `ImportResult` (plain data) via `postMessage`. Errors return `{ error: string }`.
+- Main thread spawns worker in `loadDwgFile`, displays progress spinner, and opens `showImportDialog(result)` upon completion.
+- Ensure `ImportResult` is fully structured-cloneable (no functions, methods, or class instances).
 
 ---
 
-## 8. 実装前に必ず確認する不確実点（VERIFY） — **全て実測で確定済み**
+## 7. UI Wiring (`src/ui/app.ts`)
 
-実フィクスチャ（`example_2018.dwg` 等）で全項目を実測し、以下のとおり確定した。
-
-1. **角度の単位 = radian（確定）**: `ARC.startAngle/endAngle`・`ELLIPSE.startAngle/endAngle`・`INSERT.rotation` はすべて radian。既存 `arcToPoints` は度入力のため、ARC は `*180/π`（`RAD2DEG`）で度変換してから渡す（`src/dwg/importer.ts` の `RAD2DEG` / `arcPointsMm`）。INSERT.rotation は radian のまま回転行列へ（`src/dwg/blocks.ts`）。ELLIPSE はパラメトリック角を radian のまま使用。
-2. **閉フラグ = 確定**: `LWPOLYLINE.flag & 1`・`POLYLINE2D.flag & 1` で閉。実装に反映済み。
-3. **ブロック basePoint = 確定**: 展開時に `basePoint` を減算（`insertMatrix`）。実データで整合を確認。
-4. **`db.entities` の網羅 = 確定**: モデル空間は `db.entities` を起点に取得。ペーパー空間は除外。
-5. **`?url` + locateFile = 確定**: 上流 dist の wasm は `data:application/wasm;base64,` インライン化で emscripten の isDataURI が `application/octet-stream` しか認識せず失敗する罠あり。対策＝wasm を `src/dwg/libredwg-web.wasm` に vendor し `?url` 取り込み、`createModule({ locateFile: () => wasmUrl })` + `createByWasmInstance` で実アセットをロード（`vite.config.ts` の alias / `optimizeDeps.include` 併用）。本番ビルドで実アセット 1 個のみ出力を確認。
+- Add `dwg` extension check to file drop handler → call `this.loadDwgFile(file)`.
+- Update file input `accept` filter to include `.dwg`. Add `importDwg()` handler to menu.
+- `loadDwgFile(file)`: Read `file.arrayBuffer()`, delegate to worker, and pass result to `showImportDialog(result)`.
+- On failure: display modal notification with reason and breakdown of `ignoredCounts`.
+- Add "Source Code" and "License" links to About modal and footer (GPL §6).
 
 ---
 
-## 9. GPL-3.0 コンプライアンス（依存追加と同一PRで必須）
+## 8. Uncertainties Verified Empirically
 
-- [x] `LICENSE` を **GPL-3.0 全文**へ差し替え（著作権者本人のため再ライセンス可）。
-- [x] `package.json` の `"license"` を `"GPL-3.0-or-later"` に。
-- [x] `THIRD-PARTY-LICENSES.md` 追加: LibreDWG / `@mlightcad/libredwg-web` の著作権・GPL-3.0・取得元URL（バージョン固定）を明記。WASM 同梱の通知は除去しない。
-- [x] README に「DWG機能のため GPL-3.0-or-later で配布」「対応ソース＝本リポジトリ＋上流リンク」を追記。
-- [x] About/フッタにソース・ライセンスへのリンク（GPL §6）。
-- [x] リリースワークフロー（dist公開）に `LICENSE`/`THIRD-PARTY-LICENSES.md`/`wasm` を同梱。`wasm` は `dist` に内包され zip 化される。`LICENSE`/`THIRD-PARTY-LICENSES.md` は `release.yml` の zip 対象へ明示追加済み。
+All items verified through actual drawing fixtures (`example_2018.dwg`, etc.):
 
----
-
-## 10. テスト
-
-### サンプルDWG（テストフィクスチャ。取得元）
-`https://raw.githubusercontent.com/mlightcad/libredwg-web/master/test/test-data/` 配下:
-- `example_r14.dwg`(AC1014) / `example_2000.dwg`(AC1015) / `example_2007.dwg`(AC1021) / `example_2013.dwg`(AC1027) / `example_2018.dwg`(AC1032)
-- `2018/Dynblocks.dwg`（ブロック多用・2.18MB） / `2000/TS1.dwg`
-→ `test/fixtures/dwg/` に保存（リポジトリへコミット可。サイズ留意）。
-
-### Vitest（`src/dwg/*.test.ts`）
-- [x] 各バージョンが読め、entity が **0件にならない**（空取り込み回帰防止）。
-- [x] `LINE/LWPOLYLINE/ARC/CIRCLE` の bbox が妥当（µm整数・Y反転確認）。
-- [x] **INSERT 展開**: ブロック含むDWGで、展開後ジオメトリが現れる（Dynblocks 等）。
-- [x] 角度単位（§8-1）の確定をテストで固定。
-- [x] 警告エラーコードのファイルが成功扱いになる。
-- [x] `buildImportResult` 抽出後も既存DXFテストが全パス。
-
-### Playwright（E2E）
-- [x] `.dwg` をドロップ → 取り込みダイアログ → キャンバス描画。（`tests/e2e/dwg_import.spec.ts`、example_2018.dwg）
-- [x] 重いDWGでUIがフリーズしない（Worker）。（同 spec、Dynblocks.dwg + rAF カウンタで検証）
-
-### ビルド/配布
-- [x] 本番ビルドで wasm が遅延チャンク分離・初期ロード非混入。（dist で wasm は単独アセット、worker は遅延チャンク。PR #7 でチャンクスリム化）
-- [x] 配布物に LICENSE/THIRD-PARTY/wasm 同梱。（`release.yml` の zip 対象に LICENSE/THIRD-PARTY-LICENSES.md を追加、wasm は dist 内）
+1. **Angular Units = Radians (Confirmed)**: `ARC.startAngle/endAngle`, `ELLIPSE.startAngle/endAngle`, and `INSERT.rotation` are all in radians. Converted to degrees for `arcToPoints` via `* 180 / π` (`RAD2DEG`). `INSERT.rotation` is supplied directly to the trigonometric matrix functions.
+2. **Close Flags = Confirmed**: Bit 0 (`flag & 1`) indicates closure for `LWPOLYLINE` and `POLYLINE2D`.
+3. **Block basePoint = Confirmed**: Subtracted during matrix evaluation (`insertMatrix`).
+4. **`db.entities` Completeness = Confirmed**: Model space entities are populated directly in `db.entities`.
+5. **`?url` + locateFile = Confirmed**: Vendored to `src/dwg/libredwg-web.wasm` and resolved via `?url` import with `createModule({ locateFile: () => wasmUrl })`.
 
 ---
 
-## 11. 受け入れ条件（DoD）
-- 代表的な複数バージョン＋ブロック多用DWGが空にならず正しく取り込める。
-- 取り込み結果が既存編集・保存・DXF書き出しと矛盾なく連携。
-- 既存DXF取り込みの挙動・テストが不変。
-- 重い図面でUIがフリーズしない。
-- GPL-3.0 対応（ライセンス・第三者表示・ソース提供リンク）が配布物に反映済み。
+## 9. GPL-3.0 Compliance
+
+- [x] Replaced `LICENSE` with full GPL-3.0 text.
+- [x] Set `"license": "GPL-3.0-or-later"` in `package.json`.
+- [x] Added `THIRD-PARTY-LICENSES.md` documenting upstream repositories, versions, and GPL terms.
+- [x] Documented GPL-3.0 terms and source repository availability in `README.md`.
+- [x] Added source and license links in the application UI (About dialog and footer).
+- [x] Release workflow explicitly packages `LICENSE` and `THIRD-PARTY-LICENSES.md` with distribution archives.
 
 ---
 
-## 12. 推奨コミット分割（subject は英語）
-1. `refactor(dxf): extract buildImportResult from importDxf`（挙動不変・テスト緑）
-2. `chore: add @mlightcad/libredwg-web and relicense to GPL-3.0`（§9 一括）
-3. `feat(dwg): add wasm loader and DwgDatabase->Polygon importer`（§3.1,3.3,§4 基本entity）
-4. `feat(dwg): recursive INSERT/block expansion`（§3.2）
-5. `feat(dwg): add ellipse/spline approximation`（§4）
-6. `perf(dwg): run parsing in a web worker`（§6）
-7. `feat(ui): wire .dwg drop/menu import`（§7）
-8. `test(dwg): fixtures and version/block coverage`（§10）
+## 10. Testing
+
+### Fixtures
+Sourced from `mlightcad/libredwg-web` test suite:
+- `example_r14.dwg`, `example_2000.dwg`, `example_2007.dwg`, `example_2013.dwg`, `example_2018.dwg`
+- `Dynblocks.dwg`, `TS1.dwg`
+Stored in `test/fixtures/dwg/`.
+
+### Vitest Unit Tests (`src/dwg/*.test.ts`)
+- [x] Successfully parse each supported DWG version without 0-entity regressions.
+- [x] Verify integer µm bounding boxes and Y-inversion for LINE, LWPOLYLINE, ARC, and CIRCLE.
+- [x] Block expansion verification on drawings with nested blocks.
+- [x] Non-fatal warning error codes parse successfully.
+- [x] Existing DXF tests pass without regressions after `buildImportResult` extraction.
+
+### Playwright E2E Tests
+- [x] `.dwg` file drop opens import dialog and renders shapes to canvas (`tests/e2e/dwg_import.spec.ts`).
+- [x] Web Worker prevents UI freeze during large drawing parsing.
+
+### Production Build Verification
+- [x] Production build separates WASM into a lazy asset chunk.
+- [x] Distribution bundle packages LICENSE and THIRD-PARTY-LICENSES.
+
+---
+
+## 11. Acceptance Criteria (DoD)
+- Multi-version and block-heavy DWG files import correctly without returning empty results.
+- Import results interoperate with downstream editing, persistence, and DXF export workflows.
+- Existing DXF import functionality remains fully intact.
+- UI remains responsive during parsing.
+- GPL-3.0 compliance items deployed in distribution.
+
+---
+
+## 12. Recommended Commit Breakdown
+1. `refactor(dxf): extract buildImportResult from importDxf`
+2. `chore: add @mlightcad/libredwg-web and relicense to GPL-3.0`
+3. `feat(dwg): add wasm loader and DwgDatabase->Polygon importer`
+4. `feat(dwg): recursive INSERT/block expansion`
+5. `feat(dwg): add ellipse/spline approximation`
+6. `perf(dwg): run parsing in a web worker`
+7. `feat(ui): wire .dwg drop/menu import`
+8. `test(dwg): fixtures and version/block coverage`

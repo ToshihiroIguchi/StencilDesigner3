@@ -116,7 +116,7 @@ describe('exportDxf — annotations (MTEXT)', () => {
   });
 
   it('encodes non-ASCII (Japanese) as \\U+XXXX', () => {
-    const ann = makeAnn('テスト'); // Katakana: U+30C6 U+30B9 U+30C8
+    const ann = makeAnn('\u30C6\u30B9\u30C8'); // Katakana: U+30C6 U+30B9 U+30C8
     const dxf = exportDxf([], layersWithDim, [ann]);
     expect(dxf).toContain('\\U+30C6\\U+30B9\\U+30C8');
   });

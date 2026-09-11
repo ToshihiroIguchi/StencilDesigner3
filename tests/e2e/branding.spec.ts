@@ -75,7 +75,7 @@ test.describe('Dynamic branding / config verification', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           appName: 'LaserCutterCAD',
-          tabTitleTemplate: 'ようこそ {appName} へ | {docName}',
+          tabTitleTemplate: 'Welcome to {appName} | {docName}',
           defaultFilename: 'laser-project-file',
         }),
       });
@@ -88,7 +88,7 @@ test.describe('Dynamic branding / config verification', () => {
     await expect(logoText).toHaveText('LaserCutterCAD');
 
     // 2. Verify the specified custom tab title template is applied
-    await expect(page).toHaveTitle('ようこそ LaserCutterCAD へ | Untitled');
+    await expect(page).toHaveTitle('Welcome to LaserCutterCAD | Untitled');
 
     // 3. Draw a temporary rectangle
     await page.click('[data-tool="rect"]');

@@ -1,47 +1,39 @@
-# 第三者ライセンス表示 (Third-Party Licenses)
+# Third-Party Licenses
 
-本アプリケーション（StencilDesigner3）は、配布物（ブラウザへ配信される成果物）に
-以下の第三者コンポーネントを同梱しています。各コンポーネントの著作権・ライセンス・
-取得元を以下に明記します。GPL-3.0 コンポーネントの組み込みにより、本アプリ全体は
-**GPL-3.0-or-later** で配布されます（ルートの `LICENSE` を参照）。
+This application (StencilDesigner3) bundles the following third-party components within its distribution (artifacts served to the browser). The copyright, license, and source origin for each component are specified below. Due to the inclusion of GPL-3.0 components, the entire application is distributed under **GPL-3.0-or-later** (see `LICENSE` in the root directory).
 
 ---
 
 ## @mlightcad/libredwg-web (GPL-3.0)
 
-- 用途: DWG ファイルの読み込み（WebAssembly。`.wasm` を配布物に同梱）
-- バージョン: ^0.7.2
-- ライセンス: GNU General Public License v3.0 (GPL-3.0)
-- 取得元 / 対応ソース: https://github.com/mlightcad/libredwg-web
+- Purpose: DWG file loading (WebAssembly; `.wasm` bundled in distribution)
+- Version: ^0.7.2
+- License: GNU General Public License v3.0 (GPL-3.0)
+- Source Origin / Corresponding Source: https://github.com/mlightcad/libredwg-web
 - npm: https://www.npmjs.com/package/@mlightcad/libredwg-web
 
-`@mlightcad/libredwg-web` は GNU LibreDWG を Emscripten で WebAssembly 化したもので、
-内部に LibreDWG 由来のコードを含みます。
+`@mlightcad/libredwg-web` is a WebAssembly port of GNU LibreDWG built with Emscripten, and contains code derived from LibreDWG.
 
 ## GNU LibreDWG (GPL-3.0)
 
-- 用途: 上記 `@mlightcad/libredwg-web` の基盤となる DWG/DXF ライブラリ本体
-- ライセンス: GNU General Public License v3.0 (GPL-3.0)
-- 取得元 / 対応ソース: https://www.gnu.org/software/libredwg/
-- ソースリポジトリ: https://git.savannah.gnu.org/cgit/libredwg.git
+- Purpose: Core DWG/DXF library underlying `@mlightcad/libredwg-web`
+- License: GNU General Public License v3.0 (GPL-3.0)
+- Source Origin / Corresponding Source: https://www.gnu.org/software/libredwg/
+- Source Repository: https://git.savannah.gnu.org/cgit/libredwg.git
 
 ---
 
-## 対応するソースの提供について (GPL §6)
+## Provision of Corresponding Source (GPL §6)
 
-- 本アプリケーション自身の完全な対応ソースは、本リポジトリ
-  （https://github.com/ToshihiroIguchi/StencilDesigner3 ）です。
-- 同梱する第三者 GPL コンポーネントの対応ソースは、上記の各「取得元 / 対応ソース」
-  リンク（バージョン固定）から取得できます。
-- 配布物には本ファイルおよび `LICENSE`（GPL-3.0 全文）を同梱します。第三者コンポーネント
-  に含まれる著作権・ライセンス通知は除去・改変しません。
+- The complete Corresponding Source for this application itself is available in this repository (https://github.com/ToshihiroIguchi/StencilDesigner3).
+- The Corresponding Source for bundled third-party GPL components can be obtained from the "Source Origin / Corresponding Source" links listed above (fixed versions).
+- Distributed packages include this file and `LICENSE` (full text of GPL-3.0). Copyright and license notices contained in third-party components are not removed or altered.
 
 ---
 
-## その他の依存ライブラリ
+## Other Dependent Libraries
 
-以下は本アプリが利用するその他の主な依存（ランタイム同梱されるもの）。各ライセンスは
-それぞれのパッケージに従います（多くは MIT 等のパーミッシブライセンス）。
+Below are other primary runtime dependencies utilized by this application. Each library is governed by its respective license (mostly permissive licenses such as MIT):
 
 - clipper-lib (Boost Software License)
 - dxf-parser (MIT)
@@ -50,5 +42,4 @@
 - localforage (Apache-2.0)
 - opentype.js (MIT)
 
-各ライブラリの正確なライセンス条文は `node_modules/<package>/` 配下の LICENSE 等を参照
-してください。
+For the exact license terms of each library, please refer to the LICENSE files located under `node_modules/<package>/`.

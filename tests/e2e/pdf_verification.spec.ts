@@ -13,11 +13,11 @@ test('verify PDF export with annotations, date-time, and Japanese text', async (
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1000);
 
-  // 1. Rename document to a Japanese name
+  // 1. Rename document to a Japanese (CJK) name
   const docLabel = page.locator('#doc-name-label');
   await docLabel.click();
   const docInput = page.locator('.doc-name-input');
-  await docInput.fill('日本語図面設計');
+  await docInput.fill('\u65E5\u672C\u8A9E\u56F3\u9762\u8A2D\u8A08');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
 
@@ -33,7 +33,7 @@ test('verify PDF export with annotations, date-time, and Japanese text', async (
     await page.waitForTimeout(300);
   }
 
-  // 3. Add a Japanese text annotation
+  // 3. Add a Japanese (CJK) text annotation
   await page.keyboard.press('n'); // Annotation / Note tool
   if (box) {
     // Click at some spot on the canvas to open the annotation input
@@ -42,7 +42,7 @@ test('verify PDF export with annotations, date-time, and Japanese text', async (
     
     const input = page.locator('#annotation-input');
     await expect(input).toBeVisible();
-    await input.fill('日本語注記テスト\n改行あり');
+    await input.fill('\u65E5\u672C\u8A9E\u6CE8\u8A18\u30C6\u30B9\u30C8\n\u6539\u884C\u3042\u308A');
     await page.keyboard.press('Control+Enter'); // commit the note
     await page.waitForTimeout(300);
   }
@@ -51,8 +51,8 @@ test('verify PDF export with annotations, date-time, and Japanese text', async (
   await page.keyboard.press('Home');
   await page.waitForTimeout(300);
 
-  // Take a screenshot of the app so we can see the Japanese text in the browser
-  await page.screenshot({ path: 'verify_pdf_ui_japanese.png' });
+  // Take a screenshot of the app so we can see the CJK text in the browser
+  await page.screenshot({ path: 'verify_pdf_ui_cjk.png' });
 
   // 4. Open File Menu and export to PDF
   await page.click('#btn-file-menu'); // Open file menu
