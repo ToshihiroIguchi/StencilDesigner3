@@ -10,7 +10,6 @@ No installation, no backend — open the page and start drawing.
 ## Table of Contents
 
 - [Features](#features)
-- [Screenshots](#screenshots)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Starting the App](#starting-the-app)
@@ -18,9 +17,10 @@ No installation, no backend — open the page and start drawing.
 - [Running Tests](#running-tests)
 - [Usage Guide](#usage-guide)
   - [Drawing Tools](#drawing-tools)
+  - [Annotations and Dimensions](#annotations-and-dimensions)
   - [Edit Operations](#edit-operations)
   - [Boolean Operations](#boolean-operations)
-  - [DXF / DWG Import / Export](#dxf--dwg-import--export)
+  - [Document Management & File I/O](#document-management--file-io)
   - [Design Rule Check (DRC)](#design-rule-check-drc)
   - [View Controls](#view-controls)
   - [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -35,18 +35,21 @@ No installation, no backend — open the page and start drawing.
 
 | Category | Details |
 |---|---|
-| **Drawing** | Rectangle, Circle (64-sided polygon approximation), free Polygon, Fillet tool |
-| **Editing** | Move, Copy with offset, Array copy (nx × ny grid), Delete |
+| **Drawing** | Rectangle (Box), Circle (64-sided polygon approximation), free Polygon, Fillet tool, Text tool (stencil font converted to aperture polygons via opentype.js), Slice tool (cut polygons along a straight line) |
+| **Editing** | Move, Duplicate / Array dialog (nx × ny grid with pitch), Clipboard operations (Cut, Copy, Paste, Duplicate), Delete |
+| **Annotations / Dimensions** | Interactive linear dimensions (horizontal & vertical with smart anchors tracking geometry), Centerlines between parallel edges, Leader arrows, Text notes (exported to DXF as MTEXT), Distance measurement tool |
 | **Boolean ops** | Union (merge), Difference (subtract) via Clipper-lib |
-| **DXF I/O** | Import LWPOLYLINE / LINE entities from DXF; export all shapes as LWPOLYLINE |
+| **DXF I/O** | Import LWPOLYLINE / LINE entities from DXF; export all shapes as LWPOLYLINE and text notes as MTEXT |
 | **DWG import** | Import DWG drawings (LINE / LWPOLYLINE / POLYLINE / ARC / CIRCLE / ELLIPSE / SPLINE, plus INSERT / MINSERT block expansion) via the bundled GNU LibreDWG (WebAssembly), decoded off the main thread in a Web Worker |
+| **PDF export** | Production-ready vector PDF export (A4 auto-orientation, scale ratio & scale bar, layers, dimensions, notes, Japanese font embedding via Noto Sans JP) |
 | **DRC** | Minimum aperture check (narrowest passage width), minimum spacing check, overlap detection |
 | **Properties** | Numeric X / Y position and W / H size editing in the right panel |
-| **Grid** | Adaptive major grid + 1/5 sub-grid; snaps to grid, vertices, and midpoints |
+| **Grid & Snapping** | Adaptive major grid + 1/5 sub-grid; smart proximity corner-to-corner snapping, vertex/edge/center/midpoint snap, temporary reference point (G / O) |
 | **Rulers** | Horizontal and vertical rulers with major and minor tick marks |
+| **Document management** | Multi-document manager (IndexedDB docStore), document renaming, storage usage tracking, local `.stencil` file save & open |
 | **History** | 50-level undo / redo |
 | **Persistence** | Auto-save to IndexedDB (survives page refresh) |
-| **Theme** | Dark / Light mode toggle |
+| **Theme & Units** | Dark / Light mode toggle; switchable display units (mm / µm) |
 | **Coordinate system** | Integer µm (micrometers) throughout; no floating-point geometry |
 
 ---
@@ -246,13 +249,13 @@ This is used by the included GitHub Actions workflow (`.github/workflows/deploy.
 npm run test:unit
 ```
 
-Runs 238 fast, headless unit tests covering geometry, normalization, DRC, layers, DXF / DWG I/O, PDF export, state history, and tools.
+Runs 241 fast, headless unit tests covering geometry, normalization, DRC, layers, DXF / DWG I/O, PDF export, state history, and tools.
 
 ```
  ✓ tests/unit/...                  (19 test files)
 
  Test Files  19 passed (19)
-       Tests  238 passed (238)
+       Tests  241 passed (241)
 ```
 
 To run in watch mode (re-runs on file change):
@@ -315,6 +318,12 @@ Select tools from the **left toolbar** or press the keyboard shortcut.
 - **Backspace** removes the last placed vertex.
 - **Esc** cancels the current polygon.
 
+#### Text (T)
+- Switch to the Text tool or press `T`.
+- Configure the text size (cap-height in mm) and letter spacing in the right panel.
+- Click the canvas to open an in-place text entry box.
+- Press **Enter** to convert the text into stencil aperture polygons using the bundled *Big Shoulders Stencil Display* font, or **Esc** to cancel.
+
 #### Fillet (F)
 - Select a polygon, then switch to the Fillet tool.
 - The right panel shows the fillet radius input (`R`, in µm).
@@ -323,16 +332,54 @@ Select tools from the **left toolbar** or press the keyboard shortcut.
 - Use **mouse wheel** while hovering a vertex to adjust the radius in real time.
 - Vertices are color-coded: green = applicable, yellow = skippable (too small), red = invalid (would cross edges).
 
+#### Slice / Cut (K)
+- Switch to the Slice tool or press `K`.
+- **Click and drag** a cutting line across any shapes you want to split.
+- Hold **Shift** while dragging to constrain the cutting angle in 15° increments.
+- Release the mouse button to split the intersected polygons along the line.
+
+### Annotations and Dimensions
+
+#### Measure (M)
+- Click the first point on the canvas, then move the mouse to measure the distance, $\Delta X$, and $\Delta Y$ to the second point in real time.
+- Hold **Shift** to snap to 45° angle increments.
+- Press **Esc** to clear the measurement.
+
+#### Dimension (D)
+- Click the first anchor point (snaps to vertex, midpoint, or edge).
+- Click the second anchor point (hold **Shift** for 45° angle constraint).
+- Move the mouse and click to place the dimension line offset (horizontal or vertical).
+- Dimensions feature **smart anchors**: when connected to polygon vertices or edges, dimensions dynamically track the shape as it is moved or edited.
+
+#### Centerline (L)
+- Click the first edge of a shape.
+- Click a second, parallel edge.
+- A dashed centerline is generated midway between the two edges.
+
+#### Arrow (A)
+- Click and drag from the start point to the tip of the arrow.
+- Hold **Shift** for 45° angle constraint.
+- Creates an associative leader arrow line.
+
+#### Note / Annotation (N)
+- Click on the canvas to place a text note.
+- Enter your note text (supports multi-line with Shift+Enter).
+- Notes are displayed on the canvas, included in PDF exports, and exported to DXF as `MTEXT` entities.
+
 ### Edit Operations
 
 #### Delete (Del)
 Select one or more shapes, then press `Del` / `Backspace`, or click **Delete** in the toolbar.
 
-#### Copy
-Select shapes, click **Copy** in the toolbar, enter the offset in µm as `X,Y` (e.g. `1000,0` for 1 mm to the right).
+#### Copy & Array Duplicate
+- Click **Copy** in the toolbar or press `Ctrl+D` to open the duplicate dialog.
+- Specify copies ($n_x \times n_y$) and pitch ($P_x, P_y$) in µm to replicate selected shapes across a rectangular grid.
 
-#### Array
-Select shapes, click **Array**, then enter `nx,ny,pitchX,pitchY` in µm (e.g. `3,4,2000,2000` for a 3 × 4 grid at 2 mm pitch).
+#### Clipboard Operations
+- **Select All:** `Ctrl+A`
+- **Copy:** `Ctrl+C` copies selected shapes to the internal clipboard.
+- **Cut:** `Ctrl+X` copies and deletes selected shapes.
+- **Paste:** `Ctrl+V` pastes shapes with a slight offset.
 
 ### Boolean Operations
 
@@ -346,9 +393,15 @@ Select **2 or more** shapes and click **Union**. All selected shapes are merged 
 4. The CUT shape is removed from the BASE, leaving a hole.
 5. Press **Esc** at any point to cancel.
 
-### DXF / DWG Import / Export
+### Document Management & File I/O
 
 Import and export actions live in the **File** menu in the header. You can also **drag and drop** a `.dxf`, `.dwg`, or `.stencil` file onto the canvas.
+
+#### Document Management
+- **New Document:** Creates a blank document in the local workspace.
+- **Open Document…:** Opens the document manager modal listing all local documents stored in IndexedDB, with storage space usage and per-document delete/rename options.
+- **Open from Disk…:** Loads a previously saved `.stencil` or `.json` file from local disk.
+- **Document Renaming:** Click the document name label in the header to rename the active document.
 
 #### Import DXF
 Choose **Import DXF…** from the File menu (or drop a `.dxf` file).
@@ -357,8 +410,16 @@ Supported entities: `LWPOLYLINE`, `LINE`. Closed polylines and line loops are co
 #### Import DWG
 Choose **Import DWG…** from the File menu (or drop a `.dwg` file). DWG files are decoded by the bundled GNU LibreDWG (WebAssembly) in a Web Worker, so the UI stays responsive on large drawings. Supported entities: `LINE`, `LWPOLYLINE`, `POLYLINE` (2D / 3D), `ARC`, `CIRCLE`, `ELLIPSE`, `SPLINE`, and `INSERT` / `MINSERT` block references (recursively expanded). Unsupported entity types are skipped and reported. All geometry is converted to integer-µm polygons through the same pipeline as DXF.
 
-#### Export
-Choose **Export DXF** from the File menu to download all shapes as `LWPOLYLINE` entities; **Export as PDF** is also available. (DWG export is not supported.)
+#### Export DXF
+Choose **Export DXF** from the File menu to download shapes as `LWPOLYLINE` entities and notes as `MTEXT` entities on their corresponding layers. (DWG export is not supported.)
+
+#### Export as PDF
+Choose **Export as PDF** from the File menu to generate a clean, vector A4 document:
+- Automatically selects portrait or landscape orientation based on drawing aspect ratio.
+- Renders visible shape layers with their configured line types and colors.
+- Embeds linear dimensions, centerlines, arrows, and multi-line notes.
+- Includes a title bar, layer legend, scale ratio, and an adaptive scale bar respecting the chosen display unit (`mm` or `µm`).
+- Dynamically loads and embeds Japanese font support (*Noto Sans JP*) when annotations or layer names contain Japanese characters.
 
 ### Design Rule Check (DRC)
 
@@ -379,31 +440,51 @@ The DRC panel is always visible in the **right panel**. DRC runs automatically e
 | Action | Method |
 |---|---|
 | **Pan** | Middle-mouse drag, or hold `Space` + left-drag |
-| **Zoom in / out** | Mouse wheel |
+| **Zoom in / out** | Mouse wheel, or `+` / `-` keys, or footer `+` / `−` buttons |
+| **Zoom presets** | Click the **Zoom** label in the footer to select 5, 10, 50, 100, 500 px/mm, or Fit |
 | **Fit to content** | Click **Fit** in header, or press `Home` |
-| **Reset zoom to 100%** | Click the **Zoom%** label in the footer |
-| **Toggle grid snap** | Click **Snap** in header |
+| **Reset zoom** | Press `0` key |
+| **Toggle grid snap** | Click **Snap** in header, or press `S` / `F9` |
+| **Toggle units** | Click the **Unit** label in footer to switch between `mm` and `µm` |
+| **Temporary reference point** | Press `G` to set a reference point at the cursor; press `O` to clear (displays $\Delta X, \Delta Y$ in footer) |
 | **Toggle theme** | Click **Theme** in header |
 | **Undo** | `Ctrl+Z` (50 levels) |
 | **Redo** | `Ctrl+Y` or `Ctrl+Shift+Z` |
-| **Clear all** | Click **Clear** in header (confirmation required) |
+| **Reset document** | Click **Reset** in header (confirmation required) |
+| **Help** | Click **Help** in header, or press `?` |
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |---|---|
 | `V` | Select tool |
-| `R` | Rectangle tool |
+| `R` | Box / Rectangle tool |
 | `C` | Circle tool |
 | `P` | Polygon tool |
 | `F` | Fillet tool |
+| `T` | Text tool |
+| `K` | Slice / Cut tool |
+| `M` | Measure tool |
+| `D` | Dimension tool |
+| `L` | Centerline tool |
+| `A` | Arrow tool |
+| `N` | Note / Annotation tool |
 | `Del` / `Backspace` | Delete selected shapes |
+| `Ctrl+A` | Select all shapes |
+| `Ctrl+C` | Copy selection to clipboard |
+| `Ctrl+X` | Cut selection to clipboard |
+| `Ctrl+V` | Paste clipboard selection |
+| `Ctrl+D` | Array duplicate dialog |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | Redo |
+| `S` / `F9` | Toggle snap on / off |
+| `G` / `O` | Set / clear temporary reference point |
 | `Home` | Fit all shapes in view |
-| `Esc` | Cancel current operation, clear temporary reference point |
-| `G` / `O` | Set/clear temporary reference point (snap tracker) |
-| `Enter` | Commit polygon (while drawing) |
+| `+` / `-` | Zoom in / out |
+| `0` | Reset zoom |
+| `Esc` | Cancel current operation, deselect, clear temporary reference point |
+| `Enter` | Commit polygon or text placement |
+| `?` | Show keyboard shortcuts help modal |
 
 ---
 
@@ -411,38 +492,66 @@ The DRC panel is always visible in the **right panel**. DRC runs automatically e
 
 ```
 src/
-├── types.ts              — Point, Ring, Polygon, AppState, Command interfaces
+├── types.ts              — Point, Ring, Polygon, AppState, Command, Dimension, Annotation
+├── config.ts             — Application branding and file-naming configuration
 ├── normalize/            — Polygon cleanup (dedup, collinear removal, winding order)
 ├── core/
 │   ├── geometry.ts       — Shape factories, snap, distance, DRC geometry helpers
 │   ├── selection.ts      — Hit testing and snap point resolution
-│   ├── transform.ts      — Move / copy / delete / array operations
+│   ├── transform.ts      — Move / resize / copy / delete / array operations
 │   ├── boolean.ts        — Union / difference via Clipper-lib
 │   ├── fillet.ts         — Arc interpolation and fillet geometry
-│   └── drc.ts            — Design rule checks (aperture, spacing, overlap)
+│   ├── cut.ts            — Slice/cut polygon splitting along lines
+│   ├── drc.ts            — Design rule checks (aperture, spacing, overlap)
+│   ├── snap.ts           — Proximity smart snapping core
+│   ├── anchor-from-snap.ts — Associative dimension anchor resolution from snaps
+│   ├── dimension-resolve.ts — Runtime anchor tracking for dynamic dimensions
+│   ├── centerline-geometry.ts — Midline calculation between parallel edges
+│   ├── font-loader.ts    — Lazy OpenType font loader (Big Shoulders Stencil)
+│   ├── text-to-polygon.ts — Glyphs to aperture polygon conversion
+│   ├── format.ts         — Coordinate and unit formatting (mm / µm)
+│   └── vertex.ts         — Persistent vertex identity management
 ├── state/
-│   ├── commands.ts       — Command implementations (AddShape, Delete, Union, …)
+│   ├── commands.ts       — Command implementations (AddShape, Delete, Move, Resize, Cut, …)
 │   ├── history.ts        — Undo / redo stack (max 50)
-│   └── autosave.ts       — IndexedDB persistence via localforage
+│   ├── autosave.ts       — Application preferences persistence via localforage
+│   └── docStore.ts       — Multi-document IndexedDB persistence and auto-save
 ├── canvas/
-│   └── renderer.ts       — Canvas 2D rendering (grid, rulers, shapes, DRC markers)
+│   └── renderer.ts       — Canvas 2D rendering (grid, rulers, shapes, dimensions, DRC markers)
 ├── tools/
-│   ├── base.ts           — BaseTool abstract class
-│   ├── select.ts         — Selection, move, rubber-band
-│   ├── rect.ts           — Rectangle drawing
-│   ├── circle.ts         — Circle drawing
+│   ├── base.ts           — BaseTool abstract class and ToolContext
+│   ├── select.ts         — Selection, move, rubber-band, proximity guide lines
+│   ├── rect.ts           — Rectangle / box drawing and numeric placement
+│   ├── circle.ts         — Circle drawing and numeric placement
 │   ├── polygon.ts        — Free polygon drawing
-│   └── fillet.ts         — Fillet tool with vertex-click and radius adjustment
+│   ├── fillet.ts         — Fillet tool with vertex-click and radius adjustment
+│   ├── text.ts           — Text-to-polygon stencil placement tool
+│   ├── cut.ts            — Slice / cut tool for splitting shapes with a line
+│   ├── measure.ts        — Interactive two-point measurement tool
+│   ├── dimension.ts      — Associative linear dimension tool (H / V)
+│   ├── centerline.ts     — Centerline tool between parallel edges
+│   ├── arrow.ts          — Leader arrow drawing tool
+│   ├── annotation.ts     — Text note annotation tool
+│   └── textarea-overlay.ts — Floating in-place text entry overlay helper
 ├── dxf/
 │   ├── importer.ts       — DXF text → Polygon[] pipeline
-│   └── exporter.ts       — Polygon[] → DXF LWPOLYLINE text
+│   ├── exporter.ts       — Polygon[] → DXF LWPOLYLINE / MTEXT text
+│   └── aci.ts            — AutoCAD Color Index (ACI) lookup table
 ├── dwg/
 │   ├── libredwg.ts       — Lazy WASM loader for GNU LibreDWG
 │   ├── importer.ts       — DWG database → Polygon[] conversion
 │   ├── blocks.ts         — Affine transforms and INSERT block expansion
 │   └── worker.ts         — Off-main-thread DWG decoding (Web Worker)
+├── pdf/
+│   └── exporter.ts       — Vector PDF generation via jsPDF with font embedding
 ├── ui/
-│   └── app.ts            — Main App class wiring tools, state, and UI
+│   ├── app.ts            — Main App class wiring tools, state, and UI
+│   ├── fileManager.ts    — Document manager modal controller
+│   ├── layerPanel.ts     — Layer management UI (visibility, locking, colors)
+│   ├── menus.ts          — Dropdown menus (File, Zoom presets)
+│   ├── modals.ts         — Generic dialogs (alerts, prompts, confirm)
+│   ├── panelBindings.ts  — Two-way bindings for right-side properties panel
+│   └── rightPanel.ts     — Dynamic right panel section visibility
 └── main.ts               — Entry point
 ```
 
@@ -463,8 +572,10 @@ src/
 | Rendering | HTML5 Canvas 2D |
 | Boolean geometry | [Clipper-lib](https://github.com/junmer/clipper-lib) 6.x |
 | DXF import | [dxf-parser](https://github.com/gdsestimating/dxf-parser) 1.x |
-| DXF export | Custom LWPOLYLINE writer |
+| DXF export | Custom LWPOLYLINE / MTEXT writer with [@tarikjabiri/dxf](https://github.com/tarikjabiri/dxf) |
 | DWG import | [GNU LibreDWG](https://www.gnu.org/software/libredwg/) via [@mlightcad/libredwg-web](https://github.com/mlightcad/libredwg-web) (WebAssembly) |
+| PDF export | [jsPDF](https://github.com/parallax/jsPDF) 4.x with Noto Sans JP font embedding |
+| Font & glyphs | [opentype.js](https://opentype.js.org/) 2.x (*Big Shoulders Stencil Display*) |
 | Persistence | [localforage](https://localforage.github.io/localForage/) 1.x (IndexedDB) |
 | Unit tests | [Vitest](https://vitest.dev/) 1.x |
 | E2E tests | [Playwright](https://playwright.dev/) 1.x |
@@ -476,7 +587,7 @@ src/
 
 1. Fork the repository and create a feature branch.
 2. Make your changes — keep all coordinates as integers in µm, call `normalize()` after any geometric edit, and avoid `any` types.
-3. Run `npm run test:unit` and confirm all 238 tests pass.
+3. Run `npm run test:unit` and confirm all 241 tests pass.
 4. Open a pull request with a clear description of the change.
 
 ---

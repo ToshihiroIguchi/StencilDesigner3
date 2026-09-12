@@ -43,3 +43,16 @@ Below are other primary runtime dependencies utilized by this application. Each 
 - opentype.js (MIT)
 
 For the exact license terms of each library, please refer to the LICENSE files located under `node_modules/<package>/`.
+
+---
+
+## Bundled Fonts (OFL-1.1)
+
+The application bundles the following font files in `public/fonts/`:
+
+- **Big Shoulders Stencil Display** (`BigShouldersStencilDisplay-Regular.ttf`)
+  - Copyright 2019 The Big Shoulders Stencil Display Project Authors (https://github.com/xotypeco/big_shoulders_stencil)
+  - License: SIL Open Font License, Version 1.1 (see `public/fonts/OFL.txt`)
+- **Noto Sans JP** (`NotoSansJP-Regular.ttf`)
+  - Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Noto Sans'.
+  - License: SIL Open Font License, Version 1.1
