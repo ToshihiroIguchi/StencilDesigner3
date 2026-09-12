@@ -1,9 +1,22 @@
 import type { Polygon, Ring, Layer, Vertex } from '../types';
 import { newId } from '../types';
-import { normalizeAllWithStats, bbox, pointInRing } from '../normalize';
-import { dist, getCircleSegments } from '../core/geometry';
+import { normalizeAllWithStats, bbox, pointInRing, hasSelfIntersection } from '../normalize';
+import { dist } from '../core/geometry';
 import { vertex } from '../core/vertex';
 import { aciToHex } from './aci';
+import {
+  mmToUm,
+  arcPointsMm,
+  bulgeArcMm,
+  expandVertsMm,
+  bsplinePointsMm,
+  fitSplinePointsMm,
+  ellipsePointsMm,
+  type Pt,
+} from '../core/curve-approx';
+import { type Mat, identity, multiply, apply } from '../dwg/blocks';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import * as ClipperLib from 'clipper-lib';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DxfEntity = any;
@@ -12,31 +25,35 @@ export interface ImportResult {
   polygons: Polygon[];
   layers: Layer[];
   ignoredCounts: Record<string, number>;
+  unitName?: string;
+  scale?: number;
 }
 
-/** Convert mm to µm (integer). */
-export function mmToUm(v: number): number {
-  return Math.round(v * 1000);
+export { mmToUm };
+
+/**
+ * Resolves the scaling factor to convert DXF/DWG file coordinates to integer µm.
+ * Based on the AutoCAD $INSUNITS header variable.
+ */
+export function resolveUnitScale(insunits: number | undefined): { scale: number; unitName: string } {
+  switch (insunits) {
+    case 1:  return { scale: 25400, unitName: 'in' };
+    case 2:  return { scale: 304800, unitName: 'ft' };
+    case 4:  return { scale: 1000, unitName: 'mm' };
+    case 5:  return { scale: 10000, unitName: 'cm' };
+    case 6:  return { scale: 1000000, unitName: 'm' };
+    case 8:  return { scale: 0.0254, unitName: 'µin' };
+    case 9:  return { scale: 25.4, unitName: 'mil' };
+    case 13: return { scale: 1, unitName: 'µm' };
+    case 14: return { scale: 100000, unitName: 'dm' };
+    default: return { scale: 1000, unitName: 'mm' }; // Screen printing default is mm
+  }
 }
 
 /** Approximate arc as polyline segments. Returns vertices with new IDs. */
-export function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number, ccw = true): Vertex[] {
-  const points: Vertex[] = [];
-  let start = startAngle;
-  let end = endAngle;
-  if (ccw) {
-    while (end < start) end += 360;   // span ∈ (0, 360]
-  } else {
-    while (end > start) end -= 360;   // span ∈ [-360, 0)
-  }
-  const span = end - start;
-  const fullCircleSegments = getCircleSegments(mmToUm(r));
-  const steps = Math.max(2, Math.ceil((Math.abs(span) / 360) * fullCircleSegments));
-  for (let i = 0; i <= steps; i++) {
-    const angle = ((start + (span * i) / steps) * Math.PI) / 180;
-    points.push(vertex(mmToUm(cx + r * Math.cos(angle)), mmToUm(-(cy + r * Math.sin(angle)))));
-  }
-  return points;
+export function arcToPoints(cx: number, cy: number, r: number, startAngle: number, endAngle: number, ccw = true, scale = 1000): Vertex[] {
+  const pts = arcPointsMm(cx, cy, r, startAngle, endAngle, ccw);
+  return pts.map((p) => vertex(Math.round(p.x * scale), Math.round(-p.y * scale)));
 }
 
 /**
@@ -47,38 +64,11 @@ export function arcToPoints(cx: number, cy: number, r: number, startAngle: numbe
 export function bulgeToArcPoints(
   p1x: number, p1y: number,
   p2x: number, p2y: number,
-  bulge: number
+  bulge: number,
+  scale = 1000
 ): Vertex[] {
-  const dx = p2x - p1x;
-  const dy = p2y - p1y;
-  const chord = Math.sqrt(dx * dx + dy * dy);
-  if (chord < 1e-9) return [vertex(mmToUm(p1x), mmToUm(-p1y))];
-
-  // Left-perpendicular unit vector (in DXF Y-up space)
-  const px = -dy / chord;
-  const py = dx / chord;
-
-  // Sagitta (signed: positive = arc bows to the left of p1→p2)
-  const sagitta = bulge * chord / 2;
-  const r = (chord * chord / 4 + sagitta * sagitta) / (2 * Math.abs(sagitta));
-
-  // Center offset along left-perp: sign(bulge)*(r-|sagitta|).
-  // For CCW (bulge>0, small arc): offset = +(r-s) > 0 → center to the left.
-  // For CCW (bulge>0, large arc): offset = +(r-s) < 0 → center to the right (correct for >180°).
-  // For CW  (bulge<0, small arc): offset = -(r-|s|) < 0 → center to the right.
-  // For CW  (bulge<0, large arc): offset = -(r-|s|) > 0 → center to the left.
-  const perpOffset = Math.sign(bulge) * (r - Math.abs(sagitta));
-  const cx = (p1x + p2x) / 2 + px * perpOffset;
-  const cy = (p1y + p2y) / 2 + py * perpOffset;
-
-  const startAngle = Math.atan2(p1y - cy, p1x - cx) * (180 / Math.PI);
-  const endAngle   = Math.atan2(p2y - cy, p2x - cx) * (180 / Math.PI);
-
-  if (bulge > 0) {
-    return arcToPoints(cx, cy, r, startAngle, endAngle, true);
-  } else {
-    return arcToPoints(cx, cy, r, startAngle, endAngle, false);
-  }
+  const pts = bulgeArcMm(p1x, p1y, p2x, p2y, bulge);
+  return pts.map((p) => vertex(Math.round(p.x * scale), Math.round(-p.y * scale)));
 }
 
 /**
@@ -89,39 +79,140 @@ export function bulgeToArcPoints(
  */
 export function expandPolylineVerts(
   dxfVerts: Array<{ x: number; y: number; bulge?: number }>,
-  isClosed: boolean
+  isClosed: boolean,
+  scale = 1000
 ): Vertex[] {
-  const pts: Vertex[] = [];
-  const n = dxfVerts.length;
-  if (n === 0) return pts;
+  const pts = expandVertsMm(dxfVerts, isClosed);
+  return pts.map((p) => vertex(Math.round(p.x * scale), Math.round(-p.y * scale)));
+}
 
-  // Number of segments to process (last vertex of open polyline has no outgoing segment)
-  const segCount = isClosed ? n : n - 1;
+/**
+ * Applies matrix transform to mm-space points, applies scale, and converts to screen µm (Y-flipped).
+ */
+function toScreenVertices(m: Mat, pts: Pt[], scale: number): Vertex[] {
+  return pts.map((pt) => {
+    const p = apply(m, pt.x, pt.y);
+    return vertex(Math.round(p.x * scale), Math.round(-p.y * scale));
+  });
+}
 
-  for (let i = 0; i < n; i++) {
-    const v = dxfVerts[i];
-    const bulge = v.bulge ?? 0;
+/**
+ * Builds the affine transform matrix for a DXF INSERT entity.
+ * DXF rotation is in degrees.
+ */
+export function dxfInsertMatrix(
+  ins: { position?: { x: number; y: number }; xScale?: number; yScale?: number; rotation?: number },
+  basePoint?: { x: number; y: number }
+): Mat {
+  const sx = ins.xScale ?? 1;
+  const sy = ins.yScale ?? 1;
+  const rot = (ins.rotation ?? 0) * (Math.PI / 180);
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  const ip = ins.position ?? { x: 0, y: 0 };
+  const bp = basePoint ?? { x: 0, y: 0 };
 
-    if (i >= segCount || Math.abs(bulge) < 1e-9) {
-      // Straight segment or last vertex of open polyline — just add the point
-      pts.push(vertex(mmToUm(v.x), mmToUm(-v.y)));
-    } else {
-      const nextV = dxfVerts[(i + 1) % n];
-      const arcPts = bulgeToArcPoints(v.x, v.y, nextV.x, nextV.y, bulge);
-      // Include all arc points except the last, which will be added by the next iteration
-      pts.push(...arcPts.slice(0, -1));
+  const rs: Mat = {
+    a: cos * sx, b: sin * sx,
+    c: -sin * sy, d: cos * sy,
+    e: ip.x, f: ip.y,
+  };
+  const tNegBase: Mat = { a: 1, b: 0, c: 0, d: 1, e: -bp.x, f: -bp.y };
+  return multiply(rs, tNegBase);
+}
+
+export interface PlacedDxfEntity {
+  entity: any;
+  matrix: Mat;
+}
+
+/**
+ * Recursively flattens DXF entities by expanding INSERT (block references).
+ * Entities defined on layer "0" inherit the layer of their parent INSERT block.
+ */
+export function flattenDxfEntities(
+  entities: any[],
+  blockMap: Record<string, { position?: { x: number; y: number }; entities?: any[] }>
+): PlacedDxfEntity[] {
+  const out: PlacedDxfEntity[] = [];
+
+  function recurse(ents: any[], matrix: Mat, visited: Set<string>, depth: number, parentLayer?: string): void {
+    if (depth > 16) return;
+    for (const ent of ents) {
+      const effectiveLayer = (ent.layer === '0' || !ent.layer) && parentLayer ? parentLayer : (ent.layer ?? '0');
+      const resolvedEnt = ent.layer !== effectiveLayer ? { ...ent, layer: effectiveLayer } : ent;
+
+      if (ent.type === 'INSERT') {
+        const block = blockMap[ent.name];
+        if (!block) continue;
+        if (visited.has(ent.name)) continue;
+        const cols = Math.max(1, ent.columnCount ?? 1);
+        const rows = Math.max(1, ent.rowCount ?? 1);
+        const colSp = ent.columnSpacing ?? 0;
+        const rowSp = ent.rowSpacing ?? 0;
+        const rot = (ent.rotation ?? 0) * (Math.PI / 180);
+        const cos = Math.cos(rot);
+        const sin = Math.sin(rot);
+        const baseM = dxfInsertMatrix(ent, block.position);
+        const nextVisited = new Set(visited);
+        nextVisited.add(ent.name);
+        const insLayer = effectiveLayer;
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const lx = c * colSp;
+            const ly = r * rowSp;
+            const dx = lx * cos - ly * sin;
+            const dy = lx * sin + ly * cos;
+            const offset: Mat = { a: 1, b: 0, c: 0, d: 1, e: dx, f: dy };
+            const cellM = multiply(offset, baseM);
+            recurse(block.entities ?? [], multiply(matrix, cellM), nextVisited, depth + 1, insLayer);
+          }
+        }
+      } else {
+        out.push({ entity: resolvedEnt, matrix });
+      }
     }
   }
 
-  return pts;
+  recurse(entities, identity(), new Set<string>(), 0);
+  return out;
+}
+
+/**
+ * Repairs a self-intersecting ring using Clipper.SimplifyPolygon.
+ * Splits complex self-intersecting loops (e.g. figure-8) into sound simple rings.
+ */
+export function repairSelfIntersectingRing(ring: Ring): Ring[] {
+  if (ring.length < 4 || !hasSelfIntersection(ring)) return [ring];
+
+  const SCALE = 100;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const C = ClipperLib as any;
+  const path = ring.map((p) => ({ X: p.x * SCALE, Y: p.y * SCALE }));
+  const simplified = C.Clipper.SimplifyPolygon(path, C.PolyFillType.pftEvenOdd);
+  if (!simplified || simplified.length === 0) return [ring];
+
+  const result: Ring[] = [];
+  for (const p of simplified) {
+    if (p.length < 3) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: Ring = p.map((pt: any) => vertex(Math.round(pt.X / SCALE), Math.round(pt.Y / SCALE)));
+    result.push(r);
+  }
+  return result.length > 0 ? result : [ring];
 }
 
 /**
  * Chain open segments into closed rings using a spatial endpoint hash.
  * Average O(n) with SNAP µm grid tolerance.
  */
-function chainSegments(segments: [Vertex, Vertex][]): Ring[] {
-  if (segments.length === 0) return [];
+/**
+ * Chain open segments into closed rings using a spatial endpoint hash.
+ * Also returns open chains that could not be closed.
+ */
+function chainSegments(segments: [Vertex, Vertex][]): { rings: Ring[]; openChains: Vertex[][] } {
+  if (segments.length === 0) return { rings: [], openChains: [] };
 
   const SNAP = 10; // µm gap tolerance for chaining
   const CELL = SNAP; // grid cell size matches snap tolerance
@@ -150,7 +241,6 @@ function chainSegments(segments: [Vertex, Vertex][]): Ring[] {
   function findNeighbour(x: number, y: number, excludeIdx: number): { idx: number; end: 0 | 1 } | null {
     const cx = Math.round(x / CELL);
     const cy = Math.round(y / CELL);
-    // Check 3×3 neighbourhood to handle points near cell boundaries
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         const key = `${cx + dx},${cy + dy}`;
@@ -176,6 +266,7 @@ function chainSegments(segments: [Vertex, Vertex][]): Ring[] {
 
   const used = new Array(segments.length).fill(false);
   const rings: Ring[] = [];
+  const openChains: Vertex[][] = [];
 
   for (let start = 0; start < segments.length; start++) {
     if (used[start]) continue;
@@ -196,7 +287,6 @@ function chainSegments(segments: [Vertex, Vertex][]): Ring[] {
         used[nb.idx] = true;
         unregister(nb.idx, 0, na.x, na.y);
         unregister(nb.idx, 1, nb2.x, nb2.y);
-        // Append the far end of the found segment
         chain.push(nb.end === 0 ? nb2 : na);
         extended = true;
       }
@@ -204,17 +294,44 @@ function chainSegments(segments: [Vertex, Vertex][]): Ring[] {
 
     if (chain.length >= 3 && dist(chain[0], chain[chain.length - 1]) <= SNAP) {
       chain.pop(); // Remove closing duplicate
-      rings.push(chain);
+      // Repair self-intersection if present
+      const repaired = repairSelfIntersectingRing(chain);
+      rings.push(...repaired);
+    } else if (chain.length >= 2) {
+      openChains.push(chain);
     }
   }
 
-  return rings;
+  return { rings, openChains };
+}
+
+/**
+ * Checks whether two rings are geometric duplicates (identical vertices).
+ */
+function ringsAreDuplicate(r1: Ring, r2: Ring): boolean {
+  if (r1.length !== r2.length) return false;
+  const n = r1.length;
+  let matchForward = true;
+  for (let i = 0; i < n; i++) {
+    if (Math.abs(r1[i].x - r2[i].x) > 1 || Math.abs(r1[i].y - r2[i].y) > 1) {
+      matchForward = false;
+      break;
+    }
+  }
+  if (matchForward) return true;
+  let matchReverse = true;
+  for (let i = 0; i < n; i++) {
+    if (Math.abs(r1[i].x - r2[n - 1 - i].x) > 1 || Math.abs(r1[i].y - r2[n - 1 - i].y) > 1) {
+      matchReverse = false;
+      break;
+    }
+  }
+  return matchReverse;
 }
 
 /**
  * Classify a flat list of rings into Polygons with correct outer/hole nesting.
- * Uses bbox pre-filtering to avoid O(n²×m) pointInRing calls for dense data.
- * Grouping is per-layer; cross-layer containment is ignored.
+ * Deduplicates identical rings to avoid hole-cancellation and repairs self-intersections.
  */
 function classifyAndBuildPolygons(allRings: Array<{ ring: Ring; layer: string }>): Polygon[] {
   const valid = allRings.filter(({ ring }) => ring.length >= 3);
@@ -229,25 +346,30 @@ function classifyAndBuildPolygons(allRings: Array<{ ring: Ring; layer: string }>
     byLayer.get(layer)!.push(ring);
   }
 
-  for (const [layer, rings] of byLayer) {
-    const n = rings.length;
+  for (const [layer, rawRings] of byLayer) {
+    // Deduplicate identical rings to prevent duplicate CAD lines from cancelling outer rings
+    const rings: Ring[] = [];
+    for (const r of rawRings) {
+      if (!rings.some((existing) => ringsAreDuplicate(existing, r))) {
+        rings.push(r);
+      }
+    }
 
+    const n = rings.length;
     if (n === 1) {
       polygons.push({ id: newId(), outer: rings[0], holes: [], layer });
       continue;
     }
 
-    // Pre-compute bounding boxes once
     const bboxes = rings.map((r) => bbox(r));
 
-    // Compute nesting depth: how many other rings contain rings[i][0]
+    // Compute nesting depth: test if ring[i][0] lies inside rings[j]
     const depths = new Array<number>(n).fill(0);
     for (let i = 0; i < n; i++) {
       const testPt = rings[i][0];
       for (let j = 0; j < n; j++) {
         if (i === j) continue;
         const bb = bboxes[j];
-        // Cheap bbox pre-filter before expensive pointInRing
         if (testPt.x < bb.minX || testPt.x > bb.maxX ||
             testPt.y < bb.minY || testPt.y > bb.maxY) continue;
         if (pointInRing(testPt, rings[j])) depths[i]++;
@@ -256,12 +378,11 @@ function classifyAndBuildPolygons(allRings: Array<{ ring: Ring; layer: string }>
 
     // Even depth = outer, odd depth = hole
     for (let oi = 0; oi < n; oi++) {
-      if (depths[oi] % 2 !== 0) continue; // skip holes in this pass
+      if (depths[oi] % 2 !== 0) continue;
 
       const holes: Ring[] = [];
       for (let hi = 0; hi < n; hi++) {
         if (depths[hi] !== depths[oi] + 1) continue;
-        // Assign this hole to the nearest outer (direct parent only)
         if (pointInRing(rings[hi][0], rings[oi])) {
           holes.push(rings[hi]);
         }
@@ -281,20 +402,59 @@ function normalizeLinetype(lt: string | undefined): Layer['linetype'] {
 }
 
 /**
+ * Converts open line chains into thin rectangular polygons (stroked lines)
+ * so that fiducials, centerlines, and slit cuts are preserved for screen-printing.
+ */
+function strokeOpenChains(chains: Vertex[][], widthUm: number, layer: string): Polygon[] {
+  const half = Math.max(1, Math.round(widthUm / 2));
+  const polys: Polygon[] = [];
+
+  for (const chain of chains) {
+    for (let i = 0; i < chain.length - 1; i++) {
+      const p1 = chain[i];
+      const p2 = chain[i + 1];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len < 1) continue;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const ox = Math.round(nx * half);
+      const oy = Math.round(ny * half);
+
+      const outer: Ring = [
+        vertex(p1.x + ox, p1.y + oy),
+        vertex(p2.x + ox, p2.y + oy),
+        vertex(p2.x - ox, p2.y - oy),
+        vertex(p1.x - ox, p1.y - oy),
+      ];
+      polys.push({ id: newId(), outer, holes: [], layer });
+    }
+  }
+  return polys;
+}
+
+export interface BuildImportOptions {
+  strokeOpenPaths?: boolean;
+  strokeWidthUm?: number;
+  unitName?: string;
+  scale?: number;
+}
+
+/**
  * Shared back-end stage that builds an ImportResult from segments, closed rings,
- * and layer info. Extracted so both the DXF and DWG import paths can reuse it.
- *
- * @param segments    open segments (with layer)
- * @param closedRings closed rings (with layer)
- * @param rawLayers   layer info (name required; other fields optional)
+ * and layer info. Used by both DXF and DWG importers.
  */
 export function buildImportResult(
   segments: Array<{ seg: [Vertex, Vertex]; layer: string }>,
   closedRings: Array<{ ring: Ring; layer: string }>,
   rawLayers: Array<Partial<Layer> & { name: string; colorIndex?: number; frozen?: boolean; lineType?: string; lineweight?: number; locked?: boolean; plot?: boolean }>,
+  options: BuildImportOptions = {}
 ): ImportResult {
-  // Group open segments by layer and chain each group into rings via chainSegments.
   const chainedRings: Array<{ ring: Ring; layer: string }> = [];
+  const openChainsByLayer = new Map<string, Vertex[][]>();
+  let totalOpenChains = 0;
+
   if (segments.length > 0) {
     const layerGroups = new Map<string, [Vertex, Vertex][]>();
     for (const { seg, layer } of segments) {
@@ -302,18 +462,41 @@ export function buildImportResult(
       layerGroups.get(layer)!.push(seg);
     }
     for (const [layer, segs] of layerGroups) {
-      const rings = chainSegments(segs);
+      const { rings, openChains } = chainSegments(segs);
       for (const ring of rings) {
         chainedRings.push({ ring, layer });
+      }
+      if (openChains.length > 0) {
+        openChainsByLayer.set(layer, openChains);
+        totalOpenChains += openChains.length;
       }
     }
   }
 
-  // Combine the closed rings and the chained rings, then classify into polygons.
-  const allRings = [...closedRings, ...chainedRings];
-  const polygons = classifyAndBuildPolygons(allRings);
+  // Repair self-intersections in closed rings as well
+  const repairedClosedRings: Array<{ ring: Ring; layer: string }> = [];
+  for (const { ring, layer } of closedRings) {
+    const repaired = repairSelfIntersectingRing(ring);
+    for (const r of repaired) {
+      repairedClosedRings.push({ ring: r, layer });
+    }
+  }
 
-  // Build the layer table (aciToHex / normalizeLinetype / REGMARK → isAperture).
+  const allRings = [...repairedClosedRings, ...chainedRings];
+  const classifiedPolygons = classifyAndBuildPolygons(allRings);
+
+  // Preserve open paths as stroked guide polygons only if explicitly requested
+  const strokedPolygons: Polygon[] = [];
+  if (options.strokeOpenPaths === true && totalOpenChains > 0) {
+    const width = options.strokeWidthUm ?? 100; // 0.1 mm default stroke
+    for (const [layer, chains] of openChainsByLayer) {
+      strokedPolygons.push(...strokeOpenChains(chains, width, layer));
+    }
+  }
+
+  const allPolygons = [...classifiedPolygons, ...strokedPolygons];
+
+  // Build the layer table
   const importedLayers: Layer[] = rawLayers.map((rl) => {
     const colorIndex = Math.abs(rl.colorIndex ?? 7);
     const visible = (rl.colorIndex ?? 7) >= 0 && !rl.frozen;
@@ -326,32 +509,41 @@ export function buildImportResult(
       visible,
       locked: !!rl.locked,
       plot: rl.plot !== false,
-      isAperture: name === 'REGMARK',
+      isAperture: name === 'REGMARK' || name.toUpperCase().includes('PASTE') || name.toUpperCase().includes('PAD'),
     };
   });
 
-  // Add any layer referenced by an entity but missing from the layer table.
-  const usedLayerNames = new Set(polygons.map((p) => p.layer));
+  const usedLayerNames = new Set(allPolygons.map((p) => p.layer));
   for (const name of usedLayerNames) {
     if (!importedLayers.some((l) => l.name === name)) {
       importedLayers.push({
         name, color: '#ffffff', linetype: 'CONTINUOUS', lineweight: -1,
-        visible: true, locked: false, plot: true, isAperture: name === 'REGMARK',
+        visible: true, locked: false, plot: true,
+        isAperture: name === 'REGMARK' || name.toUpperCase().includes('PASTE') || name.toUpperCase().includes('PAD'),
       });
     }
   }
 
-  const { polygons: normalized, droppedCount } = normalizeAllWithStats(polygons);
+  const { polygons: normalized, droppedCount } = normalizeAllWithStats(allPolygons);
   const ignoredCounts: Record<string, number> = {};
   if (droppedCount > 0) {
     ignoredCounts['DROPPED_DEGENERATE'] = droppedCount;
   }
+  if (totalOpenChains > 0 && !options.strokeOpenPaths) {
+    ignoredCounts['OPEN_PATHS'] = totalOpenChains;
+  }
 
-  return { polygons: normalized, layers: importedLayers, ignoredCounts };
+  return {
+    polygons: normalized,
+    layers: importedLayers,
+    ignoredCounts,
+    unitName: options.unitName ?? 'mm',
+    scale: options.scale ?? 1000,
+  };
 }
 
 /** Parse DXF text and return polygons with layer information. */
-export async function importDxf(dxfText: string): Promise<ImportResult> {
+export async function importDxf(dxfText: string, options: BuildImportOptions = {}): Promise<ImportResult> {
   const DxfParser = await import('dxf-parser');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parser = new (DxfParser as any).default();
@@ -363,58 +555,109 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     throw new Error(`DXF parse error: ${e}`);
   }
 
-  const entities: DxfEntity[] = dxf?.entities ?? [];
+  // Resolve units from $INSUNITS header
+  const insunits = typeof dxf?.header?.$INSUNITS === 'number' ? dxf.header.$INSUNITS : undefined;
+  const { scale, unitName } = resolveUnitScale(insunits);
+
+  const blockMap: Record<string, any> = dxf?.blocks ?? {};
+  const rawEntities: DxfEntity[] = dxf?.entities ?? [];
+  const placed = flattenDxfEntities(rawEntities, blockMap);
+
   const segments: Array<{ seg: [Vertex, Vertex]; layer: string }> = [];
   const closedRings: Array<{ ring: Ring; layer: string }> = [];
   const ignoredCounts: Record<string, number> = {};
 
-  for (const ent of entities) {
+  for (const { entity: ent, matrix } of placed) {
     const lyrName: string = ent.layer ?? '0';
     switch (ent.type) {
       case 'LINE': {
-        const a = vertex(mmToUm(ent.vertices[0].x), mmToUm(-ent.vertices[0].y));
-        const b = vertex(mmToUm(ent.vertices[1].x), mmToUm(-ent.vertices[1].y));
-        segments.push({ seg: [a, b], layer: lyrName });
+        const a = apply(matrix, ent.vertices[0].x, ent.vertices[0].y);
+        const b = apply(matrix, ent.vertices[1].x, ent.vertices[1].y);
+        const va = vertex(Math.round(a.x * scale), Math.round(-a.y * scale));
+        const vb = vertex(Math.round(b.x * scale), Math.round(-b.y * scale));
+        segments.push({ seg: [va, vb], layer: lyrName });
         break;
       }
 
       case 'ARC': {
-        const pts = arcToPoints(ent.center.x, ent.center.y, ent.radius, ent.startAngle, ent.endAngle);
-        for (let i = 0; i < pts.length - 1; i++) {
-          segments.push({ seg: [pts[i], pts[i + 1]], layer: lyrName });
+        const pts = arcPointsMm(ent.center.x, ent.center.y, ent.radius, ent.startAngle, ent.endAngle, true);
+        const verts = toScreenVertices(matrix, pts, scale);
+        for (let i = 0; i < verts.length - 1; i++) {
+          segments.push({ seg: [verts[i], verts[i + 1]], layer: lyrName });
         }
         break;
       }
 
       case 'CIRCLE': {
-        const pts = arcToPoints(ent.center.x, ent.center.y, ent.radius, 0, 360);
-        const ring: Ring = pts.slice(0, -1);
-        closedRings.push({ ring, layer: lyrName });
+        const pts = arcPointsMm(ent.center.x, ent.center.y, ent.radius, 0, 360, true);
+        const verts = toScreenVertices(matrix, pts.slice(0, -1), scale);
+        closedRings.push({ ring: verts, layer: lyrName });
         break;
       }
 
-      case 'LWPOLYLINE': {
+      case 'LWPOLYLINE':
+      case 'POLYLINE': {
         const isClosed = !!(ent.shape || ent.closed);
-        const pts = expandPolylineVerts(ent.vertices ?? [], isClosed);
+        const pts = expandVertsMm(ent.vertices ?? [], isClosed);
+        const verts = toScreenVertices(matrix, pts, scale);
         if (isClosed) {
-          closedRings.push({ ring: pts, layer: lyrName });
+          closedRings.push({ ring: verts, layer: lyrName });
         } else {
-          for (let i = 0; i < pts.length - 1; i++) {
-            segments.push({ seg: [pts[i], pts[i + 1]], layer: lyrName });
+          for (let i = 0; i < verts.length - 1; i++) {
+            segments.push({ seg: [verts[i], verts[i + 1]], layer: lyrName });
           }
         }
         break;
       }
 
-      case 'POLYLINE': {
-        const isClosed = !!(ent.shape || ent.closed);
-        const pts = expandPolylineVerts(ent.vertices ?? [], isClosed);
-        if (isClosed) {
-          closedRings.push({ ring: pts, layer: lyrName });
+      case 'ELLIPSE': {
+        const isFull = Math.abs((ent.endAngle - ent.startAngle) - 2 * Math.PI) < 1e-6
+          || (Math.abs(ent.startAngle) < 1e-9 && (Math.abs(ent.endAngle) < 1e-9 || Math.abs(ent.endAngle - 2 * Math.PI) < 1e-6));
+        const pts = ellipsePointsMm(
+          ent.center.x, ent.center.y,
+          ent.majorAxisEndPoint.x, ent.majorAxisEndPoint.y,
+          ent.axisRatio,
+          ent.startAngle, isFull ? ent.startAngle + 2 * Math.PI : ent.endAngle,
+        );
+        if (isFull) {
+          closedRings.push({ ring: toScreenVertices(matrix, pts.slice(0, -1), scale), layer: lyrName });
         } else {
-          for (let i = 0; i < pts.length - 1; i++) {
-            segments.push({ seg: [pts[i], pts[i + 1]], layer: lyrName });
+          const verts = toScreenVertices(matrix, pts, scale);
+          for (let i = 0; i < verts.length - 1; i++) {
+            segments.push({ seg: [verts[i], verts[i + 1]], layer: lyrName });
           }
+        }
+        break;
+      }
+
+      case 'SPLINE': {
+        const isClosed = !!ent.closed;
+        let mmPts: Pt[] | null = null;
+        if ((ent.controlPoints?.length ?? 0) >= 2 && ent.knotValues?.length === (ent.controlPoints.length + ent.degreeOfSplineCurve + 1)) {
+          mmPts = bsplinePointsMm(ent.degreeOfSplineCurve, ent.controlPoints, ent.knotValues, undefined, isClosed);
+        }
+        if (mmPts === null && (ent.fitPoints?.length ?? 0) >= 2) {
+          mmPts = fitSplinePointsMm(ent.fitPoints, isClosed);
+        }
+        if (mmPts === null) {
+          const src = (ent.fitPoints?.length ?? 0) >= 2 ? ent.fitPoints : (ent.controlPoints ?? []);
+          if (src.length >= 2) mmPts = src.map((p: any) => ({ x: p.x, y: p.y }));
+        }
+        if (mmPts && mmPts.length >= 2) {
+          const verts = toScreenVertices(matrix, mmPts, scale);
+          if (isClosed) {
+            const ring = (verts.length > 1 && verts[0].x === verts[verts.length - 1].x && verts[0].y === verts[verts.length - 1].y)
+              ? verts.slice(0, -1)
+              : verts;
+            closedRings.push({ ring, layer: lyrName });
+          } else {
+            for (let i = 0; i < verts.length - 1; i++) {
+              segments.push({ seg: [verts[i], verts[i + 1]], layer: lyrName });
+            }
+          }
+        } else {
+          // Spline with insufficient points (< 2) is ignored
+          ignoredCounts[ent.type] = (ignoredCounts[ent.type] ?? 0) + 1;
         }
         break;
       }
@@ -440,7 +683,6 @@ export async function importDxf(dxfText: string): Promise<ImportResult> {
     plot: rl.plot as boolean | undefined,
   }));
 
-  // Run the shared back-end stage and merge ignoredCounts before returning.
-  const result = buildImportResult(segments, closedRings, rawLayers);
+  const result = buildImportResult(segments, closedRings, rawLayers, { ...options, unitName, scale });
   return { ...result, ignoredCounts: { ...result.ignoredCounts, ...ignoredCounts } };
 }

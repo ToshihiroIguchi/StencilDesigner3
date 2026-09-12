@@ -211,3 +211,116 @@ describe('importDxf — ignoredCounts', () => {
     expect(ignoredCounts['SPLINE']).toBe(1);
   });
 });
+
+// =============================================================================
+
+describe('importDxf — BLOCKS and INSERT expansion', () => {
+  it('expands block references with rotation, scale, and inherits layer "0"', async () => {
+    const dxf = [
+      '0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n0\nENDSEC',
+      '0\nSECTION\n2\nBLOCKS',
+      '0\nBLOCK\n2\nPAD\n70\n0\n10\n0\n20\n0\n30\n0\n3\nPAD\n1\n\n8\n0',
+      '0\nLWPOLYLINE\n8\n0\n70\n1\n90\n4',
+      '10\n-5\n20\n-5',
+      '10\n5\n20\n-5',
+      '10\n5\n20\n5',
+      '10\n-5\n20\n5',
+      '0\nENDBLK',
+      '0\nENDSEC',
+      '0\nSECTION\n2\nENTITIES',
+      // Insert block "PAD" at (100, 50), on layer "APERTURE", scale 2.0
+      '0\nINSERT\n8\nAPERTURE\n2\nPAD\n10\n100\n20\n50\n30\n0\n41\n2\n42\n2\n43\n1\n50\n0',
+      '0\nENDSEC',
+      '0\nEOF',
+    ].join('\n');
+
+    const { polygons, layers } = await importDxf(dxf);
+    expect(polygons).toHaveLength(1);
+    const poly = polygons[0];
+    // Must inherit parent INSERT layer
+    expect(poly.layer).toBe('APERTURE');
+    expect(layers.some((l) => l.name === 'APERTURE')).toBe(true);
+
+    // Bbox should be centered at (100mm, -50mm) in µm, sized 20mm x 20mm (scaled 2x from 10mm)
+    const xs = poly.outer.map((v) => v.x);
+    const ys = poly.outer.map((v) => v.y);
+    expect(Math.min(...xs)).toBe(90000);  // 100 - 10 = 90 mm = 90,000 µm
+    expect(Math.max(...xs)).toBe(110000); // 100 + 10 = 110 mm = 110,000 µm
+    expect(Math.min(...ys)).toBe(-60000); // -(50 + 10) = -60 mm
+    expect(Math.max(...ys)).toBe(-40000); // -(50 - 10) = -40 mm
+  });
+});
+
+// =============================================================================
+
+describe('importDxf — $INSUNITS unit scaling', () => {
+  it('correctly scales inches ($INSUNITS=1) to integer µm', async () => {
+    // 1 inch square at origin
+    const dxf = [
+      '0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015',
+      '9\n$INSUNITS\n70\n1', // 1 = Inches (1 in = 25400 µm)
+      '0\nENDSEC',
+      '0\nSECTION\n2\nENTITIES',
+      '0\nLWPOLYLINE\n8\n0\n70\n1\n90\n4',
+      '10\n0\n20\n0',
+      '10\n1\n20\n0',
+      '10\n1\n20\n1',
+      '10\n0\n20\n1',
+      '0\nENDSEC',
+      '0\nEOF',
+    ].join('\n');
+
+    const result = await importDxf(dxf);
+    expect(result.polygons).toHaveLength(1);
+    expect(result.unitName).toBe('in');
+    expect(result.scale).toBe(25400);
+
+    const poly = result.polygons[0];
+    const xs = poly.outer.map((v) => v.x);
+    expect(Math.min(...xs)).toBe(0);
+    expect(Math.max(...xs)).toBe(25400);
+  });
+});
+
+// =============================================================================
+
+describe('importDxf — ELLIPSE support', () => {
+  it('imports full ellipse as closed polygon ring', async () => {
+    // Ellipse center (10, 20), major axis end (5, 0), ratio 0.5 (semi-minor = 2.5)
+    const ellipse = [
+      '0\nELLIPSE',
+      '8\n0',
+      '10\n10\n20\n20\n30\n0',
+      '11\n5\n21\n0\n31\n0',
+      '40\n0.5',
+      '41\n0',
+      '42\n6.283185307179586',
+    ].join('\n');
+
+    const dxf = wrapEntities(ellipse);
+    const { polygons } = await importDxf(dxf);
+    expect(polygons).toHaveLength(1);
+    expect(polygons[0].outer.length).toBeGreaterThan(16);
+
+    const xs = polygons[0].outer.map((v) => v.x);
+    expect(Math.min(...xs)).toBeCloseTo(5000, -2);
+    expect(Math.max(...xs)).toBeCloseTo(15000, -2);
+  });
+});
+
+// =============================================================================
+
+describe('importDxf — duplicate ring deduplication', () => {
+  it('does not turn duplicate concentric rings into cancelled holes', async () => {
+    // Two identical squares on the same layer
+    const dxf = wrapEntities([
+      lineRect(0, 0, 10, 10),
+      lineRect(0, 0, 10, 10),
+    ].join('\n'));
+
+    const { polygons } = await importDxf(dxf);
+    // Dedup merges duplicate identical rings, keeping exactly 1 polygon (no hole cancellation)
+    expect(polygons).toHaveLength(1);
+    expect(polygons[0].holes).toHaveLength(0);
+  });
+});

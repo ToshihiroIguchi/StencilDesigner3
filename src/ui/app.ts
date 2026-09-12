@@ -1,4 +1,4 @@
-import type { AppState, Layer, Point, Selection, ToolType } from '../types';
+import type { AppState, Layer, Point, Selection, ToolType, Polygon } from '../types';
 import { createDefaultState, canvasToWorld } from '../types';
 import { History } from '../state/history';
 import { CanvasRenderer } from '../canvas/renderer';
@@ -17,10 +17,12 @@ import { CutTool } from '../tools/cut';
 import { hitTest, hitTestAnnotation } from '../core/selection';
 import { findSnap, type SnapResult, findSelectionSnap, type SelectionSnapResult } from '../core/snap';
 import {
-  AddShapeCommand, DeleteCommand, UnionCommand, DifferenceCommand,
+  DeleteCommand, UnionCommand, DifferenceCommand,
   DuplicateCommand, MoveCommand,
-  AddLayerCommand, PasteCommand, SetSelectionCommand,
+  PasteCommand, SetSelectionCommand,
+  ImportBatchCommand,
 } from '../state/commands';
+import { normalizeAll } from '../normalize';
 import { loadPrefs } from '../state/autosave';
 import {
   listDocs, loadDoc, saveDoc, createDoc, deleteDoc, renameDoc,
@@ -946,7 +948,27 @@ export class App {
   }
 
   private async loadDxfFile(file: File): Promise<void> {
-    const text = await file.text();
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+
+    // Auto-detect Shift-JIS vs UTF-8
+    let detectedEncoding = 'utf-8';
+    const headerSnippet = new TextDecoder('ascii', { fatal: false }).decode(bytes.slice(0, 4096));
+    if (headerSnippet.includes('ANSI_932') || headerSnippet.includes('DOS932') || headerSnippet.includes('932')) {
+      detectedEncoding = 'shift-jis';
+    }
+
+    let text = '';
+    try {
+      text = new TextDecoder(detectedEncoding, { fatal: true }).decode(bytes);
+    } catch {
+      try {
+        text = new TextDecoder(detectedEncoding === 'utf-8' ? 'shift-jis' : 'utf-8').decode(bytes);
+      } catch {
+        text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      }
+    }
+
     try {
       const result = await importDxf(text);
       await this.showImportDialog(result);
@@ -1021,44 +1043,137 @@ export class App {
   }
 
   private async showImportDialog(result: ImportResult): Promise<void> {
-    const existingNames = new Set(this.history.state.layers.map((l) => l.name));
-    const newLayers = result.layers.filter((l) => !existingNames.has(l.name));
-
-    // No new layers — import shapes directly without showing a dialog
-    if (newLayers.length === 0) {
-      for (const poly of result.polygons) {
-        this.history.execute(new AddShapeCommand(poly));
-      }
-      markDirty();
-      this.fitToContent();
-      const dropped = result.ignoredCounts['DROPPED_DEGENERATE'];
-      if (dropped) {
-        this.showNotify(`Imported ${result.polygons.length} shapes (${dropped} degenerate shapes skipped).`);
-      }
+    if (result.polygons.length === 0) {
+      const ignored = Object.entries(result.ignoredCounts)
+        .map(([k, n]) => `${k}: ${n}`)
+        .join('\n');
+      await this.showMessageModal({
+        title: 'Import CAD Drawing',
+        message: `No importable geometry was found.\n${ignored ? `\nUnsupported / skipped entities:\n${ignored}` : ''}`,
+      });
       return;
     }
 
     const modal = document.getElementById('dxf-import-modal') as HTMLElement;
     const layersDiv = document.getElementById('dxf-import-layers') as HTMLElement;
+    const unitSelect = document.getElementById('dxf-import-unit') as HTMLSelectElement | null;
+    const bboxEl = document.getElementById('dxf-import-bbox') as HTMLElement | null;
     const okBtn = document.getElementById('dxf-import-ok') as HTMLButtonElement;
     const cancelBtn = document.getElementById('dxf-import-cancel') as HTMLButtonElement;
 
-    // Build layer list showing only new layers, all pre-checked
+    const detectedUnit = result.unitName ?? 'mm';
+    const detectedScale = result.scale ?? 1000;
+
+    // Configure unit dropdown options
+    if (unitSelect) {
+      unitSelect.innerHTML = `
+        <option value="auto">Auto (Detected: ${detectedUnit})</option>
+        <option value="mm">Millimeters (mm)</option>
+        <option value="in">Inches (in)</option>
+        <option value="um">Micrometers (µm)</option>
+        <option value="mil">Mils (0.001 in)</option>
+      `;
+      unitSelect.value = 'auto';
+    }
+
+    const computeTotalBbox = (polys: Polygon[]) => {
+      if (polys.length === 0) return null;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of polys) {
+        const b = polygonBbox(p);
+        if (b.minX < minX) minX = b.minX;
+        if (b.minY < minY) minY = b.minY;
+        if (b.maxX > maxX) maxX = b.maxX;
+        if (b.maxY > maxY) maxY = b.maxY;
+      }
+      return { minX, minY, maxX, maxY };
+    };
+
+    const getRatio = (): number => {
+      if (!unitSelect || unitSelect.value === 'auto') return 1;
+      let targetScale = detectedScale;
+      switch (unitSelect.value) {
+        case 'mm': targetScale = 1000; break;
+        case 'in': targetScale = 25400; break;
+        case 'um': targetScale = 1; break;
+        case 'mil': targetScale = 25.4; break;
+      }
+      return targetScale / detectedScale;
+    };
+
+    const updateDimensionsText = () => {
+      if (!bboxEl) return;
+      const b = computeTotalBbox(result.polygons);
+      if (!b) {
+        bboxEl.textContent = 'Dimensions: 0 × 0 mm';
+        return;
+      }
+      const ratio = getRatio();
+      const wMm = Math.abs(b.maxX - b.minX) * ratio / 1000;
+      const hMm = Math.abs(b.maxY - b.minY) * ratio / 1000;
+      const wIn = wMm / 25.4;
+      const hIn = hMm / 25.4;
+      bboxEl.textContent = `Dimensions: ${wMm.toFixed(2)} × ${hMm.toFixed(2)} mm (${wIn.toFixed(3)} × ${hIn.toFixed(3)} in)`;
+    };
+
+    updateDimensionsText();
+    const onUnitChange = () => updateDimensionsText();
+    unitSelect?.addEventListener('change', onUnitChange);
+
+    const existingNames = new Set(this.history.state.layers.map((l) => l.name));
+
+    // Build layer list
     layersDiv.innerHTML = '';
-    for (const layer of newLayers) {
-      const label = document.createElement('label');
-      label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = true;
-      cb.value = layer.name;
-      const swatch = document.createElement('span');
-      swatch.style.cssText = `display:inline-block;width:12px;height:12px;background:${layer.color};border:1px solid #555`;
+    for (const layer of result.layers) {
       const shapeCount = result.polygons.filter((p) => p.layer === layer.name).length;
-      label.appendChild(cb);
-      label.appendChild(swatch);
-      label.appendChild(document.createTextNode(` ${layer.name} (${shapeCount} shapes)`));
-      layersDiv.appendChild(label);
+      const isExisting = existingNames.has(layer.name);
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border,#333)';
+
+      // Import checkbox + label
+      const importLabel = document.createElement('label');
+      importLabel.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0';
+
+      const importCb = document.createElement('input');
+      importCb.type = 'checkbox';
+      importCb.className = 'dxf-import-check';
+      importCb.checked = true;
+      importCb.value = layer.name;
+
+      const swatch = document.createElement('span');
+      swatch.style.cssText = `display:inline-block;width:12px;height:12px;background:${layer.color};border:1px solid #555;border-radius:2px;flex-shrink:0`;
+
+      const nameText = document.createElement('span');
+      nameText.style.cssText = 'font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      nameText.textContent = ` ${layer.name} (${shapeCount} shapes)${isExisting ? ' [existing]' : ''}`;
+
+      importLabel.appendChild(importCb);
+      importLabel.appendChild(swatch);
+      importLabel.appendChild(nameText);
+
+      // Aperture checkbox
+      const apertureLabel = document.createElement('label');
+      apertureLabel.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--fg2,#aaa);flex-shrink:0';
+      apertureLabel.title = 'Mark as aperture layer (DRC-checked & stencil export target)';
+
+      const apertureCb = document.createElement('input');
+      apertureCb.type = 'checkbox';
+      apertureCb.className = 'dxf-aperture-check';
+      apertureCb.checked = layer.isAperture;
+      apertureCb.value = layer.name;
+
+      apertureLabel.appendChild(apertureCb);
+      apertureLabel.appendChild(document.createTextNode('Aperture'));
+
+      importCb.addEventListener('change', () => {
+        apertureCb.disabled = !importCb.checked;
+        row.style.opacity = importCb.checked ? '1' : '0.4';
+      });
+
+      row.appendChild(importLabel);
+      row.appendChild(apertureLabel);
+      layersDiv.appendChild(row);
     }
 
     // Show ignored entity counts if any
@@ -1066,6 +1181,7 @@ export class App {
     if (ignored.length > 0) {
       const formatIgnoredType = (type: string) => {
         if (type === 'DROPPED_DEGENERATE') return 'degenerate shapes (< 3 points)';
+        if (type === 'OPEN_PATHS') return 'open line/arc paths';
         return type;
       };
       const note = document.createElement('p');
@@ -1079,39 +1195,65 @@ export class App {
     return new Promise<void>((resolve) => {
       const cleanup = () => {
         modal.style.display = 'none';
+        unitSelect?.removeEventListener('change', onUnitChange);
         okBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
       };
 
       const onOk = () => {
         cleanup();
-        const checkedNames = new Set(
-          [...layersDiv.querySelectorAll('input[type=checkbox]:checked')].map(
-            (el) => (el as HTMLInputElement).value
-          )
+
+        const selectedLayers = new Set(
+          [...layersDiv.querySelectorAll<HTMLInputElement>('.dxf-import-check:checked')].map((el) => el.value)
         );
 
-        // Merge with existing layers: only add new layer names
+        const apertureLayers = new Set(
+          [...layersDiv.querySelectorAll<HTMLInputElement>('.dxf-aperture-check:checked')].map((el) => el.value)
+        );
+
+        const ratio = getRatio();
+        const basePolys = result.polygons.filter((p) => selectedLayers.has(p.layer));
+
+        if (basePolys.length === 0 && selectedLayers.size === 0) {
+          this.showNotify('Import canceled: No layers selected.');
+          resolve();
+          return;
+        }
+
+        const polygonsToImport = ratio === 1
+          ? basePolys
+          : normalizeAll(
+              basePolys.map((p) => ({
+                ...p,
+                outer: p.outer.map((v) => ({ ...v, x: Math.round(v.x * ratio), y: Math.round(v.y * ratio) })),
+                holes: p.holes.map((h) => h.map((v) => ({ ...v, x: Math.round(v.x * ratio), y: Math.round(v.y * ratio) }))),
+              }))
+            );
+
+        // Determine new layers to create in document
         const state = this.history.state;
-        const existingNames = new Set(state.layers.map((l) => l.name));
+        const currentExisting = new Set(state.layers.map((l) => l.name));
+        const newLayersToCreate: Layer[] = [];
 
         for (const layer of result.layers) {
-          if (!existingNames.has(layer.name)) {
-            const newLayer: Layer = { ...layer, isAperture: checkedNames.has(layer.name) };
-            this.history.execute(new AddLayerCommand(newLayer));
+          if (selectedLayers.has(layer.name) && !currentExisting.has(layer.name)) {
+            newLayersToCreate.push({
+              ...layer,
+              isAperture: apertureLayers.has(layer.name),
+            });
           }
-          // Preserve existing layer settings (including isAperture)
         }
 
-        for (const poly of result.polygons) {
-          this.history.execute(new AddShapeCommand(poly));
-        }
+        this.history.execute(new ImportBatchCommand(newLayersToCreate, polygonsToImport));
         markDirty();
         this.fitToContent();
+
         const dropped = result.ignoredCounts['DROPPED_DEGENERATE'];
+        let msg = `Imported ${polygonsToImport.length} shapes across ${selectedLayers.size} layers.`;
         if (dropped) {
-          this.showNotify(`Imported ${result.polygons.length} shapes (${dropped} degenerate shapes skipped).`);
+          msg += ` (${dropped} degenerate shapes skipped)`;
         }
+        this.showNotify(msg);
         resolve();
       };
 

@@ -353,12 +353,25 @@
   </div>
 </div>
 
-<!-- DXF Import Modal -->
+<!-- DXF / DWG Import Modal -->
 <div id="dxf-import-modal" class="modal-overlay" style="display:none">
-  <div class="modal-box">
-    <div class="modal-title">Import DXF</div>
-    <p style="font-size:12px;margin-bottom:8px">Check the layers to treat as apertures (DRC-checked and included in DXF export):</p>
-    <div id="dxf-import-layers" style="max-height:200px;overflow-y:auto"></div>
+  <div class="modal-box" style="min-width:380px;max-width:540px">
+    <div class="modal-title" id="dxf-import-title">Import CAD Drawing</div>
+    <div id="dxf-import-info" style="font-size:12px;margin-bottom:10px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <label for="dxf-import-unit" style="font-weight:bold;color:var(--fg2)">Drawing Units:</label>
+        <select id="dxf-import-unit" style="background:var(--bg2);border:1px solid var(--border);color:var(--fg);padding:2px 6px;border-radius:3px;font-size:12px">
+          <option value="auto">Auto (Detected)</option>
+          <option value="mm">Millimeters (mm)</option>
+          <option value="in">Inches (in)</option>
+          <option value="um">Micrometers (µm)</option>
+          <option value="mil">Mils (0.001 in)</option>
+        </select>
+      </div>
+      <div id="dxf-import-bbox" style="color:var(--fg2);font-size:11px">Dimensions: —</div>
+    </div>
+    <p style="font-size:12px;margin-bottom:8px">Select layers to import and configure apertures for stencil fabrication:</p>
+    <div id="dxf-import-layers" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:6px;background:var(--bg2)"></div>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
       <button id="dxf-import-cancel" class="hdr-btn">Cancel</button>
       <button id="dxf-import-ok" class="hdr-btn">Import</button>

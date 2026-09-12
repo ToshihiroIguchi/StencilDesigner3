@@ -83,6 +83,56 @@ export class AddShapesCommand implements Command {
   }
 }
 
+// ─── Import Batch (atomic shapes & layers addition) ──────────────────────────
+
+export class ImportBatchCommand implements Command {
+  private addedShapeIds: Set<string>;
+  private actuallyAddedLayers: Layer[] = [];
+
+  constructor(
+    private newLayers: Layer[],
+    private polygons: Polygon[],
+  ) {
+    this.addedShapeIds = new Set(polygons.map((p) => p.id));
+  }
+
+  do(state: AppState): AppState {
+    const existingLayerNames = new Set(state.layers.map((l) => l.name));
+    this.actuallyAddedLayers = this.newLayers.filter((l) => !existingLayerNames.has(l.name));
+
+    let shapes = state.shapes;
+    for (const p of this.polygons) {
+      shapes = addShape(shapes, p);
+    }
+
+    return {
+      ...state,
+      layers: [...state.layers, ...this.actuallyAddedLayers],
+      shapes,
+      selection: [],
+    };
+  }
+
+  undo(state: AppState): AppState {
+    const addedLayerNames = new Set(this.actuallyAddedLayers.map((l) => l.name));
+    const shapes = state.shapes.filter((s) => !this.addedShapeIds.has(s.id));
+    let layers = state.layers.filter((l) => !addedLayerNames.has(l.name));
+    if (layers.length === 0) {
+      layers = [{ name: '0', color: '#ffffff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: true }];
+    }
+    const activeLayerName = layers.some((l) => l.name === state.activeLayerName) ? state.activeLayerName : layers[0].name;
+
+    return {
+      ...state,
+      layers,
+      activeLayerName,
+      shapes,
+      selection: [],
+    };
+  }
+}
+
+
 // ─── Move ────────────────────────────────────────────────────────────────────
 
 export class MoveCommand implements Command {

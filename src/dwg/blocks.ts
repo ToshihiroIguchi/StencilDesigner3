@@ -91,10 +91,14 @@ export function flattenEntities(
 ): PlacedEntity[] {
   const out: PlacedEntity[] = [];
 
-  function recurse(ents: DwgEntity[], matrix: Mat, visited: Set<string>, depth: number): void {
+  function recurse(ents: DwgEntity[], matrix: Mat, visited: Set<string>, depth: number, parentLayer?: string): void {
     if (depth > MAX_DEPTH) return;
     for (const ent of ents) {
       if (ent.isInPaperSpace) continue;
+      // AutoCAD standard: entities on layer "0" inherit the layer of their parent INSERT
+      const effectiveLayer = (ent.layer === '0' || !ent.layer) && parentLayer ? parentLayer : (ent.layer ?? '0');
+      const resolvedEnt = ent.layer !== effectiveLayer ? { ...ent, layer: effectiveLayer } : ent;
+
       if (ent.type === 'INSERT') {
         const ins = ent as DwgInsertEntity;
         const block = blockMap.get(ins.name);
@@ -104,20 +108,28 @@ export function flattenEntities(
         const rows = Math.max(1, ins.rowCount ?? 1);
         const colSp = ins.columnSpacing ?? 0;
         const rowSp = ins.rowSpacing ?? 0;
+        const rot = ins.rotation ?? 0;
+        const cos = Math.cos(rot);
+        const sin = Math.sin(rot);
         const baseM = insertMatrix(ins, block.basePoint);
         const nextVisited = new Set(visited);
         nextVisited.add(ins.name);
+        const insLayer = effectiveLayer;
+
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
-            // MINSERT offsets form a grid in the insertion coordinate frame (pre-rotation),
-            // added as a translation on the insertion side.
-            const offset: Mat = { a: 1, b: 0, c: 0, d: 1, e: c * colSp, f: r * rowSp };
+            // MINSERT grid offsets follow the block's rotation axis
+            const lx = c * colSp;
+            const ly = r * rowSp;
+            const dx = lx * cos - ly * sin;
+            const dy = lx * sin + ly * cos;
+            const offset: Mat = { a: 1, b: 0, c: 0, d: 1, e: dx, f: dy };
             const cellM = multiply(offset, baseM);
-            recurse(block.entities ?? [], multiply(matrix, cellM), nextVisited, depth + 1);
+            recurse(block.entities ?? [], multiply(matrix, cellM), nextVisited, depth + 1, insLayer);
           }
         }
       } else {
-        out.push({ entity: ent, matrix });
+        out.push({ entity: resolvedEnt, matrix });
       }
     }
   }

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { History } from '../../src/state/history';
 import { createDefaultState } from '../../src/types';
-import { AddShapeCommand, DeleteCommand, MoveCommand, SetSelectionCommand } from '../../src/state/commands';
+import { AddShapeCommand, DeleteCommand, MoveCommand, SetSelectionCommand, ImportBatchCommand } from '../../src/state/commands';
 import { rectToPolygon } from '../../src/core/geometry';
+import type { Layer } from '../../src/types';
 
 function makeTestState() {
   return createDefaultState();
@@ -128,3 +129,39 @@ describe('DeleteCommand', () => {
     expect(history.state.shapes.length).toBe(1);
   });
 });
+
+describe('ImportBatchCommand', () => {
+  it('adds multiple shapes and new layers atomically', () => {
+    const history = new History(makeTestState());
+    const poly1 = { ...rectToPolygon(0, 0, 100, 100), layer: 'PASTE_TOP' };
+    const poly2 = { ...rectToPolygon(200, 200, 300, 300), layer: 'OUTLINE' };
+    const newLayers: Layer[] = [
+      { name: 'PASTE_TOP', color: '#ff0000', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: true },
+      { name: 'OUTLINE', color: '#00ff00', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: false },
+      { name: '0', color: '#ffffff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: true }, // already exists
+    ];
+
+    const cmd = new ImportBatchCommand(newLayers, [poly1, poly2]);
+    history.execute(cmd);
+
+    expect(history.state.shapes.length).toBe(2);
+    expect(history.state.layers.some((l) => l.name === 'PASTE_TOP')).toBe(true);
+    expect(history.state.layers.some((l) => l.name === 'OUTLINE')).toBe(true);
+    // Should not duplicate layer '0'
+    expect(history.state.layers.filter((l) => l.name === '0').length).toBe(1);
+
+    // Single undo removes both shapes and the newly added layers
+    history.undo();
+    expect(history.state.shapes.length).toBe(0);
+    expect(history.state.layers.some((l) => l.name === 'PASTE_TOP')).toBe(false);
+    expect(history.state.layers.some((l) => l.name === 'OUTLINE')).toBe(false);
+    expect(history.state.layers.some((l) => l.name === '0')).toBe(true);
+
+    // Redo restores both shapes and layers
+    history.redo();
+    expect(history.state.shapes.length).toBe(2);
+    expect(history.state.layers.some((l) => l.name === 'PASTE_TOP')).toBe(true);
+    expect(history.state.layers.some((l) => l.name === 'OUTLINE')).toBe(true);
+  });
+});
+
