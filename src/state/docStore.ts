@@ -82,8 +82,22 @@ export async function saveDoc(id: string, state: AppState): Promise<void> {
   }
 }
 
+/**
+ * crypto.randomUUID exists only in secure contexts (HTTPS or localhost), so it is undefined when the
+ * app is opened over plain HTTP from another machine on the LAN. Fall back to getRandomValues,
+ * which is available everywhere.
+ */
+export function newDocId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 export async function createDoc(name?: string): Promise<DocMetadata> {
-  const id = crypto.randomUUID();
+  const id = newDocId();
   const state = createDefaultState();
   await localforage.setItem(`doc:${id}`, JSON.parse(JSON.stringify(state)));
   const meta: DocMetadata = {
