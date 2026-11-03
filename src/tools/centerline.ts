@@ -20,6 +20,7 @@ export class CenterlineTool extends BaseTool {
   }
 
   onMouseDown(worldPt: Point, _canvasPt: Point, _shift: boolean, state: AppState): void {
+    if (this.isDimensionsLayerBlocked(state)) return;
     const s = this.ctx.getSnap(worldPt);
     if (s.ref?.kind !== 'edge') return; // require edge snap
 

@@ -559,12 +559,27 @@ export class SetSelectionCommand implements Command {
   }
 }
 
+// ─── Layer naming rules ──────────────────────────────────────────────────────
+
+/** DXF layer names are case-insensitive, so "Wall" and "WALL" are the same layer. */
+export function layerNameTaken(layers: Layer[], name: string, exceptName?: string): boolean {
+  const key = name.toUpperCase();
+  return layers.some((l) => l.name !== exceptName && l.name.toUpperCase() === key);
+}
+
+/** DIMENSIONS is auto-managed: it can be neither renamed nor used as a rename target. */
+export function canRenameLayer(layers: Layer[], oldName: string, newName: string): boolean {
+  if (oldName === 'DIMENSIONS' || newName.toUpperCase() === 'DIMENSIONS') return false;
+  if (!newName.trim() || !layers.some((l) => l.name === oldName)) return false;
+  return !layerNameTaken(layers, newName, oldName);
+}
+
 // ─── Add Layer ───────────────────────────────────────────────────────────────
 export class AddLayerCommand implements Command {
   private applied = false;
   constructor(private layer: Layer) {}
   do(state: AppState): AppState {
-    this.applied = !state.layers.some((l) => l.name === this.layer.name);
+    this.applied = !layerNameTaken(state.layers, this.layer.name);
     if (!this.applied) return state;
     return { ...state, layers: [...state.layers, this.layer] };
   }
@@ -663,7 +678,7 @@ export class RenameLayerCommand implements Command {
   private applied = false;
   constructor(private oldName: string, private newName: string) {}
   do(state: AppState): AppState {
-    this.applied = !state.layers.some((l) => l.name === this.newName);
+    this.applied = canRenameLayer(state.layers, this.oldName, this.newName);
     if (!this.applied) return state;
     return {
       ...state,
