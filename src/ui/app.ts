@@ -615,7 +615,10 @@ export class App {
   private onKeyUp(e: KeyboardEvent): void {
     if (e.key === ' ' || e.code === 'Space') {
       const target = e.target as HTMLElement;
-      const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+      const inInput = target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement
+        || (target instanceof HTMLElement && target.isContentEditable);
       const editingText = (this.activeTool instanceof TextTool && this.activeTool.isEditing())
         || (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing());
 
@@ -628,7 +631,10 @@ export class App {
 
   private onKeyDown(e: KeyboardEvent): void {
     const target = e.target as HTMLElement;
-    const inInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+    const inInput = target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || target instanceof HTMLSelectElement
+      || (target instanceof HTMLElement && target.isContentEditable);
     const editingText = (this.activeTool instanceof TextTool && this.activeTool.isEditing())
       || (this.activeTool instanceof AnnotationTool && this.activeTool.isEditing());
 
@@ -749,8 +755,9 @@ export class App {
     if (e.key === 'Escape') {
       this.cancelDiffMode();
       this.closeHelpModal();
-      this.activeTool.cancel();
-      if (this.tempRefPoint) {
+      // Let focused inputs and open modals handle Escape themselves
+      if (!inInput && !this.isAnyModalOpen()) this.activeTool.cancel();
+      if (!inInput && this.tempRefPoint) {
         this.tempRefPoint = null;
         this.showNotify("Temporary reference point cleared.");
         const relCoords = document.getElementById('footer-rel-coords');
@@ -1451,14 +1458,32 @@ export class App {
 
   async openDoc(id: string): Promise<void> {
     if (this.currentDocId && this.currentDocId !== id && getIsDirty()) {
+      // Re-save until the state stops changing during the awaited save, so no edit is lost
+      try {
+        let saved: AppState;
+        do {
+          saved = this.history.state;
+          await saveDoc(this.currentDocId, saved);
+        } while (saved !== this.history.state);
+      } catch (e) {
+        console.error('Failed to auto-save current document before switching:', e);
+        this.showNotify('Could not save the current document. Document switch canceled to avoid data loss.');
+        return;
+      }
+    }
+    const stateBeforeLoad = this.history.state;
+    const state = await loadDoc(id);
+    if (!state) return;
+    if (this.currentDocId && this.currentDocId !== id && this.history.state !== stateBeforeLoad) {
+      // Edited while loading: persist those edits before they are discarded
       try {
         await saveDoc(this.currentDocId, this.history.state);
       } catch (e) {
-        console.error('Failed to auto-save current document before switching:', e);
+        console.error('Failed to save edits made while switching documents:', e);
+        this.showNotify('Could not save the current document. Document switch canceled to avoid data loss.');
+        return;
       }
     }
-    const state = await loadDoc(id);
-    if (!state) return;
     this.cancelDiffMode();
     this.activeTool.cancel();
     this.isPanning = false;

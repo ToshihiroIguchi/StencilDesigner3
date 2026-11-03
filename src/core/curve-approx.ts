@@ -170,7 +170,15 @@ export function bsplinePointsMm(
     if (depth >= ADAPTIVE_MAX_DEPTH) return;
     const tMid = (t0 + t1) * 0.5;
     const pMid = deBoor(tMid);
-    if (chordHeight(p0.x, p0.y, pMid.x, pMid.y, p1.x, p1.y) > chordTol(p0.x, p0.y, p1.x, p1.y)) {
+    // Test extra samples too: S-shaped spans can have a midpoint on the chord.
+    const pQ1 = deBoor(t0 + (t1 - t0) * 0.25);
+    const pQ3 = deBoor(t0 + (t1 - t0) * 0.75);
+    const tol = chordTol(p0.x, p0.y, p1.x, p1.y);
+    if (
+      chordHeight(p0.x, p0.y, pMid.x, pMid.y, p1.x, p1.y) > tol ||
+      chordHeight(p0.x, p0.y, pQ1.x, pQ1.y, p1.x, p1.y) > tol ||
+      chordHeight(p0.x, p0.y, pQ3.x, pQ3.y, p1.x, p1.y) > tol
+    ) {
       subdivide(t0, p0, tMid, pMid, depth + 1, out);
       out.push(pMid);
       subdivide(tMid, pMid, t1, p1, depth + 1, out);
@@ -288,7 +296,14 @@ export function fitSplinePointsMm(
     const pp3 = getPoint(s + 2);
     const tMid = (t0 + t1) * 0.5;
     const ptMid = catmullRomAt(pp0.x, pp0.y, pp1.x, pp1.y, pp2.x, pp2.y, pp3.x, pp3.y, tMid);
-    if (chordHeight(pt0.x, pt0.y, ptMid.x, ptMid.y, pt1.x, pt1.y) > chordTol(pt0.x, pt0.y, pt1.x, pt1.y)) {
+    const q1 = catmullRomAt(pp0.x, pp0.y, pp1.x, pp1.y, pp2.x, pp2.y, pp3.x, pp3.y, t0 + (t1 - t0) * 0.25);
+    const q3 = catmullRomAt(pp0.x, pp0.y, pp1.x, pp1.y, pp2.x, pp2.y, pp3.x, pp3.y, t0 + (t1 - t0) * 0.75);
+    const tolS = chordTol(pt0.x, pt0.y, pt1.x, pt1.y);
+    if (
+      chordHeight(pt0.x, pt0.y, ptMid.x, ptMid.y, pt1.x, pt1.y) > tolS ||
+      chordHeight(pt0.x, pt0.y, q1.x, q1.y, pt1.x, pt1.y) > tolS ||
+      chordHeight(pt0.x, pt0.y, q3.x, q3.y, pt1.x, pt1.y) > tolS
+    ) {
       subdivideSpan(s, t0, pt0, tMid, ptMid, depth + 1, out);
       out.push(ptMid);
       subdivideSpan(s, tMid, ptMid, t1, pt1, depth + 1, out);
@@ -310,7 +325,14 @@ export function fitSplinePointsMm(
 
     const tMid = 0.5;
     const ptMid = catmullRomAt(pp0.x, pp0.y, pp1.x, pp1.y, pp2.x, pp2.y, pp3.x, pp3.y, tMid);
-    if (chordHeight(spanStart.x, spanStart.y, ptMid.x, ptMid.y, spanEnd.x, spanEnd.y) > chordTol(spanStart.x, spanStart.y, spanEnd.x, spanEnd.y)) {
+    const sq1 = catmullRomAt(pp0.x, pp0.y, pp1.x, pp1.y, pp2.x, pp2.y, pp3.x, pp3.y, 0.25);
+    const sq3 = catmullRomAt(pp0.x, pp0.y, pp1.x, pp1.y, pp2.x, pp2.y, pp3.x, pp3.y, 0.75);
+    const tolTop = chordTol(spanStart.x, spanStart.y, spanEnd.x, spanEnd.y);
+    if (
+      chordHeight(spanStart.x, spanStart.y, ptMid.x, ptMid.y, spanEnd.x, spanEnd.y) > tolTop ||
+      chordHeight(spanStart.x, spanStart.y, sq1.x, sq1.y, spanEnd.x, spanEnd.y) > tolTop ||
+      chordHeight(spanStart.x, spanStart.y, sq3.x, sq3.y, spanEnd.x, spanEnd.y) > tolTop
+    ) {
       subdivideSpan(s, 0, spanStart, tMid, ptMid, 1, pts);
       pts.push(ptMid);
       subdivideSpan(s, tMid, ptMid, 1, spanEnd, 1, pts);

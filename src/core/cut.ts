@@ -209,8 +209,9 @@ export function cutPolygon(poly: Polygon, p1: Point, p2: Point): CutResult {
   for (let i = 0; i < crossings.length - 1; i++) {
     const cA = crossings[i], cB = crossings[i + 1];
     // Midpoint of sub-segment
-    const mx = Math.round(p1.x + (cA.t + cB.t) / 2 * (p2.x - p1.x));
-    const my = Math.round(p1.y + (cA.t + cB.t) / 2 * (p2.y - p1.y));
+    // Exact (unrounded) midpoint: rounding can push a very short chord onto the boundary.
+    const mx = p1.x + (cA.t + cB.t) / 2 * (p2.x - p1.x);
+    const my = p1.y + (cA.t + cB.t) / 2 * (p2.y - p1.y);
     if (pointInPolygon({ x: mx, y: my }, poly)) {
       chords.push({ fromNode: cA.nodeId, toNode: cB.nodeId });
     }
@@ -352,10 +353,12 @@ export function cutPolygon(poly: Polygon, p1: Point, p2: Point): CutResult {
   for (const mf of materialFaces) {
     const outerRing: Ring = mf.nodeIds.map((id) => vertex(nodes[id].x, nodes[id].y));
 
-    // Assign holes whose centroid is inside this outer face
+    // Assign holes by containment of a hole vertex (a vertex-mean centroid of a concave
+    // hole may lie outside the hole itself).
     const assignedHoles: Ring[] = [];
     for (const hf of holeFaces) {
-      if (pointInNodeRing(hf.centroid.x, hf.centroid.y, nodes, mf.nodeIds)) {
+      const hv = nodes[hf.nodeIds[0]];
+      if (pointInNodeRing(hv.x, hv.y, nodes, mf.nodeIds)) {
         assignedHoles.push(hf.nodeIds.map((id) => vertex(nodes[id].x, nodes[id].y)));
       }
     }

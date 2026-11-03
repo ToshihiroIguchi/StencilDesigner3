@@ -3,7 +3,7 @@ import { DIMENSIONS_LAYER } from '../types';
 import { addShape, moveShapes, deleteShapes, arrayCopyShapes } from '../core/transform';
 import { union, difference } from '../core/boolean';
 import { normalize, normalizeAll } from '../normalize';
-import { resolveAnchor, resolveEdge } from '../core/dimension-resolve';
+import { resolveAnchor, resolveEdge, resolveDimension } from '../core/dimension-resolve';
 import { centerlineEndpoints } from '../core/centerline-geometry';
 
 /**
@@ -47,6 +47,24 @@ function freezeDimsForRemovedShapes(
     }
 
     return { ...dim, anchor1: frozenAnchor1, anchor2: frozenAnchor2, frozen: true };
+  });
+}
+
+/**
+ * After a shape edit (fillet), freeze dimensions whose anchors can no longer be
+ * resolved against the new shapes, refreshing every cachedPoint from the live
+ * (pre-edit) positions so a frozen dimension does not show stale points.
+ */
+function freezeUnresolvableDims(
+  dims: Dimension[],
+  shapesBefore: Polygon[],
+  shapesAfter: Polygon[],
+): Dimension[] {
+  const allIds = new Set(shapesBefore.map((s) => s.id));
+  return dims.map((dim) => {
+    if (dim.frozen) return dim;
+    if (!resolveDimension(dim, shapesAfter).frozen) return dim;
+    return freezeDimsForRemovedShapes([dim], shapesBefore, allIds)[0];
   });
 }
 
@@ -452,6 +470,7 @@ export class DifferenceCommand implements Command {
 export class FilletCommand implements Command {
   private originalShape: Polygon;
   private newShape: Polygon;
+  private dimsBefore: Dimension[] | null = null;
 
   constructor(originalShape: Polygon, holeIndex: number, newRing: Ring) {
     this.originalShape = originalShape;
@@ -464,9 +483,12 @@ export class FilletCommand implements Command {
   }
 
   do(state: AppState): AppState {
+    const shapes = state.shapes.map((s) => (s.id === this.originalShape.id ? this.newShape : s));
+    this.dimsBefore = state.dimensions;
     return {
       ...state,
-      shapes: state.shapes.map((s) => (s.id === this.originalShape.id ? this.newShape : s)),
+      shapes,
+      dimensions: freezeUnresolvableDims(state.dimensions, state.shapes, shapes),
     };
   }
 
@@ -474,6 +496,7 @@ export class FilletCommand implements Command {
     return {
       ...state,
       shapes: state.shapes.map((s) => (s.id === this.newShape.id ? this.originalShape : s)),
+      dimensions: this.dimsBefore ?? state.dimensions,
     };
   }
 }
@@ -481,6 +504,8 @@ export class FilletCommand implements Command {
 // ─── Fillet All Corners ───────────────────────────────────────────────────────
 
 export class FilletAllCommand implements Command {
+  private dimsBefore: Dimension[] | null = null;
+
   constructor(
     private readonly before: Polygon[],
     private readonly after: Polygon[],
@@ -488,12 +513,22 @@ export class FilletAllCommand implements Command {
 
   do(state: AppState): AppState {
     const map = new Map(this.after.map((s) => [s.id, s]));
-    return { ...state, shapes: state.shapes.map((s) => map.get(s.id) ?? s) };
+    const shapes = state.shapes.map((s) => map.get(s.id) ?? s);
+    this.dimsBefore = state.dimensions;
+    return {
+      ...state,
+      shapes,
+      dimensions: freezeUnresolvableDims(state.dimensions, state.shapes, shapes),
+    };
   }
 
   undo(state: AppState): AppState {
     const map = new Map(this.before.map((s) => [s.id, s]));
-    return { ...state, shapes: state.shapes.map((s) => map.get(s.id) ?? s) };
+    return {
+      ...state,
+      shapes: state.shapes.map((s) => map.get(s.id) ?? s),
+      dimensions: this.dimsBefore ?? state.dimensions,
+    };
   }
 }
 

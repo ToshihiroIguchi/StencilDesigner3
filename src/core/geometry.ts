@@ -197,27 +197,52 @@ export function ringsEdgesIntersect(a: Ring, b: Ring): boolean {
   return false;
 }
 
-/** Returns true if polygon a and b overlap (edge intersection or containment). */
+/** True if p lies exactly on any edge of the ring. */
+function pointOnRingBoundary(p: Point, ring: Ring): boolean {
+  const n = ring.length;
+  for (let i = 0; i < n; i++) {
+    if (distSqPointToSegment(p, ring[i], ring[(i + 1) % n]) === 0) return true;
+  }
+  return false;
+}
+
+/** True if p is strictly inside the polygon body (inside outer, not on any boundary, not in a hole). */
+function pointStrictlyInPolygon(p: Point, poly: Polygon): boolean {
+  if (pointOnRingBoundary(p, poly.outer) || !pointInRing(p, poly.outer)) return false;
+  for (const hole of poly.holes) {
+    if (pointOnRingBoundary(p, hole) || pointInRing(p, hole)) return false;
+  }
+  return true;
+}
+
+/** Sample points of an outer ring: vertices and (unrounded, test-only) edge midpoints. */
+function ringSamples(ring: Ring): Point[] {
+  const out: Point[] = [];
+  const n = ring.length;
+  for (let i = 0; i < n; i++) {
+    const p = ring[i], q = ring[(i + 1) % n];
+    out.push(p, { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+  }
+  return out;
+}
+
+/**
+ * Returns true if polygon a and b share AREA (interiors intersect).
+ * Merely touching along an edge or at a point is NOT an overlap (the edge
+ * distance of such polygons is still 0, see polygonEdgeDistance).
+ * Detection: a proper edge crossing, or any vertex / edge midpoint of one
+ * polygon strictly inside the other, or identical outlines.
+ */
 export function polygonsOverlap(a: Polygon, b: Polygon): boolean {
   if (ringsEdgesIntersect(a.outer, b.outer)) return true;
-  if (pointInRing(a.outer[0], b.outer)) {
-    if (b.holes.length > 0) {
-      for (const hole of b.holes) {
-        if (pointInRing(a.outer[0], hole) && !ringsEdgesIntersect(a.outer, hole)) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-  if (pointInRing(b.outer[0], a.outer)) {
-    if (a.holes.length > 0) {
-      for (const hole of a.holes) {
-        if (pointInRing(b.outer[0], hole) && !ringsEdgesIntersect(b.outer, hole)) {
-          return false;
-        }
-      }
-    }
+  for (const h of b.holes) if (ringsEdgesIntersect(a.outer, h)) return true;
+  for (const h of a.holes) if (ringsEdgesIntersect(b.outer, h)) return true;
+  for (const p of ringSamples(a.outer)) if (pointStrictlyInPolygon(p, b)) return true;
+  for (const p of ringSamples(b.outer)) if (pointStrictlyInPolygon(p, a)) return true;
+  // Identical outlines: every sample lies on the other's boundary.
+  const sa = ringSamples(a.outer), sb = ringSamples(b.outer);
+  if (sa.every((p) => pointOnRingBoundary(p, b.outer)) &&
+      sb.every((p) => pointOnRingBoundary(p, a.outer))) {
     return true;
   }
   return false;
