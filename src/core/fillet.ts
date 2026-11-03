@@ -18,7 +18,7 @@ export type FilletResult =
  * Returns null with reason when the fillet cannot be applied.
  */
 function filletSegment(
-  ring: Ring, idx: number, R: number
+  ring: Ring, idx: number, R: number, shareEdges = false
 ): { ok: true; pts: Ring } | { ok: false; reason: FilletSkipReason } {
   const n = ring.length;
   const P = ring[(idx - 1 + n) % n];
@@ -45,6 +45,10 @@ function filletSegment(
 
   if (d1 === 0) return { ok: false, reason: 'r-too-small' };
   if (d1 >= dpLen || d1 >= dnLen) return { ok: false, reason: 'r-too-large' };
+  // When every corner is filleted, neighbours share each edge: each side may use at most half
+  if (shareEdges && (d1Float * 2 > dpLen || d1Float * 2 > dnLen)) {
+    return { ok: false, reason: 'r-too-large' };
+  }
 
   // Tangent points (new geometric vertices, get new IDs)
   const T1 = vertex(V.x + d1Float * dpUx, V.y + d1Float * dpUy);
@@ -101,7 +105,7 @@ export function roundAllCorners(
   const parts: Ring[] = [];
   let applied = 0, skipped = 0;
   for (let i = 0; i < ring.length; i++) {
-    const seg = filletSegment(ring, i, R);
+    const seg = filletSegment(ring, i, R, true);
     if (!seg.ok) { parts.push([ring[i]]); skipped++; }
     else          { parts.push(seg.pts);  applied++; }
   }

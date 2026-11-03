@@ -1,4 +1,5 @@
-import type { Polygon, Ring, Layer, Vertex } from '../types';
+import type { Polygon, Ring, Layer, Vertex, Annotation } from '../types';
+import { decodeMtext, decodePercentCodes } from './mtext';
 import { newId } from '../types';
 import { normalizeAllWithStats, bbox, pointInRing, hasSelfIntersection } from '../normalize';
 import { dist } from '../core/geometry';
@@ -27,6 +28,8 @@ export interface ImportResult {
   ignoredCounts: Record<string, number>;
   unitName?: string;
   scale?: number;
+  /** Free text annotations recovered from MTEXT / TEXT entities (optional, DXF only). */
+  annotations?: Annotation[];
 }
 
 export { mmToUm };
@@ -143,9 +146,10 @@ export function flattenDxfEntities(
       const resolvedEnt = ent.layer !== effectiveLayer ? { ...ent, layer: effectiveLayer } : ent;
 
       if (ent.type === 'INSERT') {
-        const block = blockMap[ent.name];
+        const blockName = ent.name;
+        const block = blockMap[blockName] ?? (typeof blockName === 'string' ? (blockMap[blockName.toUpperCase()] ?? blockMap[blockName.toLowerCase()]) : undefined);
         if (!block) continue;
-        if (visited.has(ent.name)) continue;
+        if (visited.has(blockName)) continue;
         const cols = Math.max(1, ent.columnCount ?? 1);
         const rows = Math.max(1, ent.rowCount ?? 1);
         const colSp = ent.columnSpacing ?? 0;
@@ -566,10 +570,12 @@ export async function importDxf(dxfText: string, options: BuildImportOptions = {
   const segments: Array<{ seg: [Vertex, Vertex]; layer: string }> = [];
   const closedRings: Array<{ ring: Ring; layer: string }> = [];
   const ignoredCounts: Record<string, number> = {};
+  const annotations: Annotation[] = [];
 
   for (const { entity: ent, matrix } of placed) {
     const lyrName: string = ent.layer ?? '0';
-    switch (ent.type) {
+    try {
+      switch (ent.type) {
       case 'LINE': {
         const a = apply(matrix, ent.vertices[0].x, ent.vertices[0].y);
         const b = apply(matrix, ent.vertices[1].x, ent.vertices[1].y);
@@ -662,12 +668,44 @@ export async function importDxf(dxfText: string, options: BuildImportOptions = {
         break;
       }
 
+      case 'MTEXT':
+      case 'TEXT': {
+        // Dimension labels written by the exporter (MTEXT, attachment 5 = Middle Center, on the
+        // DIMENSIONS layer) are regenerated from dimension objects, so they are not imported
+        // as free annotations. Annotations use attachment 1 (Top Left).
+        if (ent.type === 'MTEXT' && lyrName === 'DIMENSIONS' && ent.attachmentPoint === 5) {
+          break;
+        }
+        const posSrc = ent.type === 'MTEXT' ? ent.position : ent.startPoint;
+        const rawText: string | undefined = ent.text;
+        if (!posSrc || typeof rawText !== 'string') {
+          ignoredCounts[ent.type] = (ignoredCounts[ent.type] ?? 0) + 1;
+          break;
+        }
+        const text = ent.type === 'MTEXT' ? decodeMtext(rawText) : decodePercentCodes(rawText);
+        if (text.trim() === '') break;
+        const hMm: number = (ent.type === 'MTEXT' ? ent.height : ent.textHeight) ?? 0;
+        const p = apply(matrix, posSrc.x, posSrc.y);
+        annotations.push({
+          id: newId(),
+          text,
+          origin: { x: Math.round(p.x * scale), y: Math.round(-p.y * scale) },
+          heightUm: Math.max(1, Math.round(hMm * scale)),
+          layer: lyrName,
+        });
+        break;
+      }
+
       default: {
         ignoredCounts[ent.type] = (ignoredCounts[ent.type] ?? 0) + 1;
         break;
       }
     }
+  } catch (e) {
+    console.warn(`Error converting DXF entity ${ent.type}:`, e);
+    ignoredCounts[ent.type] = (ignoredCounts[ent.type] ?? 0) + 1;
   }
+}
 
   // Convert the DXF LAYER table into the rawLayers shape expected by buildImportResult.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -684,5 +722,7 @@ export async function importDxf(dxfText: string, options: BuildImportOptions = {
   }));
 
   const result = buildImportResult(segments, closedRings, rawLayers, { ...options, unitName, scale });
-  return { ...result, ignoredCounts: { ...result.ignoredCounts, ...ignoredCounts } };
+  const merged: ImportResult = { ...result, ignoredCounts: { ...result.ignoredCounts, ...ignoredCounts } };
+  if (annotations.length > 0) merged.annotations = annotations;
+  return merged;
 }

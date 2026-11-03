@@ -200,8 +200,26 @@ export function ringsEdgesIntersect(a: Ring, b: Ring): boolean {
 /** Returns true if polygon a and b overlap (edge intersection or containment). */
 export function polygonsOverlap(a: Polygon, b: Polygon): boolean {
   if (ringsEdgesIntersect(a.outer, b.outer)) return true;
-  if (pointInRing(a.outer[0], b.outer)) return true;
-  if (pointInRing(b.outer[0], a.outer)) return true;
+  if (pointInRing(a.outer[0], b.outer)) {
+    if (b.holes.length > 0) {
+      for (const hole of b.holes) {
+        if (pointInRing(a.outer[0], hole) && !ringsEdgesIntersect(a.outer, hole)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  if (pointInRing(b.outer[0], a.outer)) {
+    if (a.holes.length > 0) {
+      for (const hole of a.holes) {
+        if (pointInRing(b.outer[0], hole) && !ringsEdgesIntersect(b.outer, hole)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
   return false;
 }
 

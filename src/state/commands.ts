@@ -89,11 +89,15 @@ export class ImportBatchCommand implements Command {
   private addedShapeIds: Set<string>;
   private actuallyAddedLayers: Layer[] = [];
 
+  private addedAnnotationIds: Set<string>;
+
   constructor(
     private newLayers: Layer[],
     private polygons: Polygon[],
+    private annotations: Annotation[] = [],
   ) {
     this.addedShapeIds = new Set(polygons.map((p) => p.id));
+    this.addedAnnotationIds = new Set(annotations.map((a) => a.id));
   }
 
   do(state: AppState): AppState {
@@ -109,6 +113,7 @@ export class ImportBatchCommand implements Command {
       ...state,
       layers: [...state.layers, ...this.actuallyAddedLayers],
       shapes,
+      annotations: [...state.annotations, ...this.annotations],
       selection: [],
     };
   }
@@ -116,6 +121,7 @@ export class ImportBatchCommand implements Command {
   undo(state: AppState): AppState {
     const addedLayerNames = new Set(this.actuallyAddedLayers.map((l) => l.name));
     const shapes = state.shapes.filter((s) => !this.addedShapeIds.has(s.id));
+    const annotations = state.annotations.filter((a) => !this.addedAnnotationIds.has(a.id));
     let layers = state.layers.filter((l) => !addedLayerNames.has(l.name));
     if (layers.length === 0) {
       layers = [{ name: '0', color: '#ffffff', linetype: 'CONTINUOUS', lineweight: -1, visible: true, locked: false, plot: true, isAperture: true }];
@@ -127,6 +133,7 @@ export class ImportBatchCommand implements Command {
       layers,
       activeLayerName,
       shapes,
+      annotations,
       selection: [],
     };
   }
@@ -135,23 +142,116 @@ export class ImportBatchCommand implements Command {
 
 // ─── Move ────────────────────────────────────────────────────────────────────
 
+function moveDimensions(
+  dimensions: Dimension[],
+  selection: Selection[],
+  movedShapeIds: Set<string>,
+  dx: number,
+  dy: number,
+): Dimension[] {
+  const selectedDimIds = new Set(
+    selection.filter((s) => s.type === 'dimension').map((s) => s.shapeId),
+  );
+
+  return dimensions.map((dim) => {
+    const isSelected = selectedDimIds.has(dim.id);
+    const anchor1Moves =
+      (dim.anchor1.kind === 'vertex' || dim.anchor1.kind === 'edge') &&
+      movedShapeIds.has(dim.anchor1.shapeId);
+    const anchor2Moves =
+      (dim.anchor2.kind === 'vertex' || dim.anchor2.kind === 'edge') &&
+      movedShapeIds.has(dim.anchor2.shapeId);
+    const bothAnchorsMoveWithShapes = anchor1Moves && anchor2Moves;
+
+    if (!isSelected && !bothAnchorsMoveWithShapes) {
+      return dim;
+    }
+
+    let nextOffset = dim.offset;
+    if (dim.kind === 'linear-h') {
+      nextOffset += dy;
+    } else if (dim.kind === 'linear-v') {
+      nextOffset += dx;
+    }
+
+    const translateAnchor = (a: DimensionAnchor, movesWithShape: boolean): DimensionAnchor => {
+      if (a.kind === 'free') {
+        return isSelected
+          ? { ...a, point: { x: a.point.x + dx, y: a.point.y + dy } }
+          : a;
+      }
+      if (movesWithShape) {
+        return {
+          ...a,
+          cachedPoint: { x: a.cachedPoint.x + dx, y: a.cachedPoint.y + dy },
+        };
+      }
+      if (isSelected) {
+        return {
+          kind: 'free',
+          point: { x: a.cachedPoint.x + dx, y: a.cachedPoint.y + dy },
+        };
+      }
+      return a;
+    };
+
+    return {
+      ...dim,
+      offset: nextOffset,
+      anchor1: translateAnchor(dim.anchor1, anchor1Moves),
+      anchor2: translateAnchor(dim.anchor2, anchor2Moves),
+    };
+  });
+}
+
 export class MoveCommand implements Command {
+  /** Original dimension objects that the move changed, keyed by id (restored verbatim on undo). */
+  private changedDimsBefore = new Map<string, Dimension>();
   constructor(
     private selection: Selection[],
     private dx: number,
     private dy: number
   ) {}
   do(state: AppState): AppState {
+    const movedShapeIds = new Set(
+      this.selection
+        .filter((s) => s.type === 'polygon' || s.type === 'vertex' || s.type === 'edge')
+        .map((s) => s.shapeId),
+    );
+    const selAnnIds = new Set(
+      this.selection.filter((s) => s.type === 'annotation').map((s) => s.shapeId),
+    );
+    const newAnnotations = selAnnIds.size > 0
+      ? state.annotations.map((a) => (selAnnIds.has(a.id) ? { ...a, origin: { x: a.origin.x + this.dx, y: a.origin.y + this.dy } } : a))
+      : state.annotations;
+
+    const movedDims = moveDimensions(state.dimensions, this.selection, movedShapeIds, this.dx, this.dy);
+    this.changedDimsBefore = new Map();
+    state.dimensions.forEach((d, i) => {
+      if (movedDims[i] !== d) this.changedDimsBefore.set(d.id, d);
+    });
+
     return {
       ...state,
       shapes: moveShapes(state.shapes, this.selection, this.dx, this.dy),
+      dimensions: movedDims,
+      annotations: newAnnotations,
       selection: this.selection,
     };
   }
   undo(state: AppState): AppState {
+    const selAnnIds = new Set(
+      this.selection.filter((s) => s.type === 'annotation').map((s) => s.shapeId),
+    );
+    const restoredAnnotations = selAnnIds.size > 0
+      ? state.annotations.map((a) => (selAnnIds.has(a.id) ? { ...a, origin: { x: a.origin.x - this.dx, y: a.origin.y - this.dy } } : a))
+      : state.annotations;
+
     return {
       ...state,
       shapes: moveShapes(state.shapes, this.selection, -this.dx, -this.dy),
+      dimensions: state.dimensions.map((d) => this.changedDimsBefore.get(d.id) ?? d),
+      annotations: restoredAnnotations,
       selection: this.selection,
     };
   }
@@ -161,6 +261,7 @@ export class MoveCommand implements Command {
 
 export class DuplicateCommand implements Command {
   private copiedIds: string[] = [];
+  private copies: Polygon[] | null = null;
   constructor(
     private selection: Selection[],
     private nx: number,
@@ -169,10 +270,15 @@ export class DuplicateCommand implements Command {
     private pitchY: number
   ) {}
   do(state: AppState): AppState {
-    const before = new Set(state.shapes.map((s) => s.id));
-    const nextShapes = arrayCopyShapes(state.shapes, this.selection, this.nx, this.ny, this.pitchX, this.pitchY);
-    this.copiedIds = nextShapes.filter((s) => !before.has(s.id)).map((s) => s.id);
-    return { ...state, shapes: nextShapes, selection: this.selection };
+    if (this.copies === null) {
+      // Compute once so redo reuses the same shape ids.
+      const before = new Set(state.shapes.map((s) => s.id));
+      const nextShapes = arrayCopyShapes(state.shapes, this.selection, this.nx, this.ny, this.pitchX, this.pitchY);
+      this.copies = nextShapes.filter((s) => !before.has(s.id));
+      this.copiedIds = this.copies.map((s) => s.id);
+      return { ...state, shapes: nextShapes, selection: this.selection };
+    }
+    return { ...state, shapes: [...state.shapes, ...this.copies], selection: this.selection };
   }
   undo(state: AppState): AppState {
     const ids = new Set(this.copiedIds);
@@ -243,17 +349,25 @@ export class UnionCommand implements Command {
   private originalShapes: Polygon[] = [];
   private resultIds: string[] = [];
   private dimsBefore: Dimension[] = [];
+  private result: Polygon[] | null = null;
+  private applied = false;
 
   constructor(private selection: Selection[]) {}
 
   do(state: AppState): AppState {
     const ids = new Set(this.selection.map((s) => s.shapeId));
     const targets = state.shapes.filter((s) => ids.has(s.id));
-    if (targets.length < 2) return state;
+    if (targets.length < 2) {
+      this.applied = false;
+      return state;
+    }
 
+    this.applied = true;
     this.originalShapes = targets;
     this.dimsBefore = state.dimensions;
-    const result = union(targets);
+    // Compute once so redo reuses the same shape ids.
+    if (this.result === null) this.result = union(targets);
+    const result = this.result;
     this.resultIds = result.map((r) => r.id);
 
     const remaining = state.shapes.filter((s) => !ids.has(s.id));
@@ -268,6 +382,7 @@ export class UnionCommand implements Command {
   }
 
   undo(state: AppState): AppState {
+    if (!this.applied) return state;
     const ids = new Set(this.resultIds);
     const remaining = state.shapes.filter((s) => !ids.has(s.id));
     return {
@@ -286,18 +401,25 @@ export class DifferenceCommand implements Command {
   private originalB: Polygon | null = null;
   private resultIds: string[] = [];
   private dimsBefore: Dimension[] = [];
+  private result: Polygon[] | null = null;
 
   constructor(private selectionA: Selection, private selectionB: Selection) {}
 
   do(state: AppState): AppState {
     const a = state.shapes.find((s) => s.id === this.selectionA.shapeId);
     const b = state.shapes.find((s) => s.id === this.selectionB.shapeId);
-    if (!a || !b) return state;
+    if (!a || !b) {
+      this.originalA = null;
+      this.originalB = null;
+      return state;
+    }
 
     this.originalA = a;
     this.originalB = b;
     this.dimsBefore = state.dimensions;
-    const result = difference(a, b);
+    // Compute once so redo reuses the same shape ids.
+    if (this.result === null) this.result = difference(a, b);
+    const result = this.result;
     this.resultIds = result.map((r) => r.id);
 
     const removedIds = new Set([a.id, b.id]);
@@ -404,12 +526,15 @@ export class SetSelectionCommand implements Command {
 
 // ─── Add Layer ───────────────────────────────────────────────────────────────
 export class AddLayerCommand implements Command {
+  private applied = false;
   constructor(private layer: Layer) {}
   do(state: AppState): AppState {
-    if (state.layers.some((l) => l.name === this.layer.name)) return state;
+    this.applied = !state.layers.some((l) => l.name === this.layer.name);
+    if (!this.applied) return state;
     return { ...state, layers: [...state.layers, this.layer] };
   }
   undo(state: AppState): AppState {
+    if (!this.applied) return state;
     return { ...state, layers: state.layers.filter((l) => l.name !== this.layer.name) };
   }
 }
@@ -417,21 +542,52 @@ export class AddLayerCommand implements Command {
 // ─── Delete Layer ─────────────────────────────────────────────────────────────
 export class DeleteLayerCommand implements Command {
   private savedLayer: Layer | null = null;
+  private savedIndex = -1;
+  private savedWasActive = false;
   private affectedShapes: Polygon[] = [];
+  private savedDimensions: Dimension[] = [];
+  private savedAnnotations: Annotation[] = [];
   constructor(private layerName: string, private mode: 'move' | 'delete', private moveTo?: string) {}
   do(state: AppState): AppState {
     if (state.layers.length <= 1) return state;
-    this.savedLayer = state.layers.find((l) => l.name === this.layerName) ?? null;
-    if (!this.savedLayer) return state;
+    this.savedIndex = state.layers.findIndex((l) => l.name === this.layerName);
+    if (this.savedIndex < 0) return state;
+    this.savedLayer = state.layers[this.savedIndex];
+    this.savedWasActive = state.activeLayerName === this.layerName;
     this.affectedShapes = state.shapes.filter((s) => s.layer === this.layerName);
+    this.savedDimensions = state.dimensions;
+    this.savedAnnotations = state.annotations;
+
     const newLayers = state.layers.filter((l) => l.name !== this.layerName);
     const newShapes =
       this.mode === 'move' && this.moveTo
         ? state.shapes.map((s) => (s.layer === this.layerName ? { ...s, layer: this.moveTo! } : s))
         : state.shapes.filter((s) => s.layer !== this.layerName);
-    const newActive =
-      state.activeLayerName === this.layerName ? newLayers[0].name : state.activeLayerName;
-    return { ...state, layers: newLayers, shapes: newShapes, activeLayerName: newActive, selection: [] };
+
+    let newDims: Dimension[];
+    if (this.mode === 'move' && this.moveTo) {
+      newDims = state.dimensions.map((d) => (d.layer === this.layerName ? { ...d, layer: this.moveTo! } : d));
+    } else {
+      const removedIds = new Set(this.affectedShapes.map((s) => s.id));
+      const remainingDims = state.dimensions.filter((d) => d.layer !== this.layerName);
+      newDims = freezeDimsForRemovedShapes(remainingDims, state.shapes, removedIds);
+    }
+
+    const newAnnotations =
+      this.mode === 'move' && this.moveTo
+        ? state.annotations.map((a) => (a.layer === this.layerName ? { ...a, layer: this.moveTo! } : a))
+        : state.annotations.filter((a) => a.layer !== this.layerName);
+
+    const newActive = this.savedWasActive ? newLayers[0].name : state.activeLayerName;
+    return {
+      ...state,
+      layers: newLayers,
+      shapes: newShapes,
+      dimensions: newDims,
+      annotations: newAnnotations,
+      activeLayerName: newActive,
+      selection: [],
+    };
   }
   undo(state: AppState): AppState {
     if (!this.savedLayer) return state;
@@ -443,27 +599,43 @@ export class DeleteLayerCommand implements Command {
     } else {
       restoredShapes = normalizeAll([...state.shapes, ...this.affectedShapes]);
     }
-    return { ...state, layers: [...state.layers, saved], shapes: restoredShapes };
+    const restoredLayers = [...state.layers];
+    restoredLayers.splice(Math.min(this.savedIndex, restoredLayers.length), 0, saved);
+    return {
+      ...state,
+      layers: restoredLayers,
+      shapes: restoredShapes,
+      dimensions: this.savedDimensions,
+      annotations: this.savedAnnotations,
+      activeLayerName: this.savedWasActive ? this.layerName : state.activeLayerName,
+    };
   }
 }
 
 // ─── Rename Layer ─────────────────────────────────────────────────────────────
 export class RenameLayerCommand implements Command {
+  private applied = false;
   constructor(private oldName: string, private newName: string) {}
   do(state: AppState): AppState {
-    if (state.layers.some((l) => l.name === this.newName)) return state;
+    this.applied = !state.layers.some((l) => l.name === this.newName);
+    if (!this.applied) return state;
     return {
       ...state,
       layers: state.layers.map((l) => (l.name === this.oldName ? { ...l, name: this.newName } : l)),
       shapes: state.shapes.map((s) => (s.layer === this.oldName ? { ...s, layer: this.newName } : s)),
+      dimensions: state.dimensions.map((d) => (d.layer === this.oldName ? { ...d, layer: this.newName } : d)),
+      annotations: state.annotations.map((a) => (a.layer === this.oldName ? { ...a, layer: this.newName } : a)),
       activeLayerName: state.activeLayerName === this.oldName ? this.newName : state.activeLayerName,
     };
   }
   undo(state: AppState): AppState {
+    if (!this.applied) return state;
     return {
       ...state,
       layers: state.layers.map((l) => (l.name === this.newName ? { ...l, name: this.oldName } : l)),
       shapes: state.shapes.map((s) => (s.layer === this.newName ? { ...s, layer: this.oldName } : s)),
+      dimensions: state.dimensions.map((d) => (d.layer === this.newName ? { ...d, layer: this.oldName } : d)),
+      annotations: state.annotations.map((a) => (a.layer === this.newName ? { ...a, layer: this.oldName } : a)),
       activeLayerName: state.activeLayerName === this.newName ? this.oldName : state.activeLayerName,
     };
   }

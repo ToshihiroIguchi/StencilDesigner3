@@ -35,7 +35,7 @@ function removeCollinear(ring: Ring): Ring {
       result.push(curr); // preserve vertex with its ID
     }
   }
-  return result.length >= 3 ? result : ring;
+  return result;
 }
 
 /** Signed area × 2 (integer, no division). Positive = CCW, Negative = CW. */
@@ -110,7 +110,8 @@ function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point): boolean 
 function normalizeRing(ring: Ring, isHole: boolean): Ring {
   let r = removeDuplicates(ring);
   r = removeCollinear(r);
-  if (r.length < 3) return r;
+  // Fewer than 3 points or zero area means a degenerate ring
+  if (r.length < 3 || signedArea2(r) === 0) return [];
   return isHole ? ensureCW(r) : ensureCCW(r);
 }
 

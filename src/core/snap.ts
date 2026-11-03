@@ -121,15 +121,18 @@ export function findSelectionSnap(
   const rawDx = currentMouseWorld.x - dragStartWorld.x;
   const rawDy = currentMouseWorld.y - dragStartWorld.y;
 
-  // Collect all unique vertices from moving shapes' outer rings
+  // Collect all unique vertices from moving shapes' outer rings and holes
   const movingVertices: Point[] = [];
   const seen = new Set<string>();
   for (const shape of movingShapes) {
-    for (const v of shape.outer) {
-      const key = `${v.x},${v.y}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        movingVertices.push({ x: v.x, y: v.y });
+    const rings = [shape.outer, ...shape.holes];
+    for (const ring of rings) {
+      for (const v of ring) {
+        const key = `${v.x},${v.y}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          movingVertices.push({ x: v.x, y: v.y });
+        }
       }
     }
   }

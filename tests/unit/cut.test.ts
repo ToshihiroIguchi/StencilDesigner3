@@ -155,6 +155,21 @@ describe('cutPolygon — polygon with a hole', () => {
     const piecesWithHole = result.pieces.filter((p) => p.holes.length > 0);
     expect(piecesWithHole).toHaveLength(1);
   });
+
+  it('cut through the hole splits annular shape into two solid pieces without holes', () => {
+    // Horizontal cut at y=5000 — crosses outer boundary and centered hole
+    const result = cutPolygon(withHole, { x: -500, y: 5000 }, { x: 10500, y: 5000 });
+    expect(result.status).toBe('cut');
+    if (result.status !== 'cut') return;
+    expect(result.pieces).toHaveLength(2);
+    // Neither piece should retain the severed hole
+    for (const p of result.pieces) {
+      expect(p.holes).toHaveLength(0);
+    }
+    // Total area must equal original area: 10000*10000 - 4000*4000 = 84,000,000
+    const origArea = 10000 * 10000 - 4000 * 4000;
+    expect(Math.abs(totalArea(result.pieces) - origArea)).toBeLessThan(50);
+  });
 });
 
 // ─── Cut collinear with a non-overlapping edge ───────────────────────────────

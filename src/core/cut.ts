@@ -362,6 +362,18 @@ export function cutPolygon(poly: Polygon, p1: Point, p2: Point): CutResult {
 
     // Also keep original holes not crossed by the cut, assigned by containment
     for (const origHole of poly.holes) {
+      // If the cut crossed this hole, the hole was severed and must not be retained
+      let holeCrossed = false;
+      const hn = origHole.length;
+      for (let hi = 0; hi < hn; hi++) {
+        const ha = origHole[hi], hb = origHole[(hi + 1) % hn];
+        if (segmentIntersectionPoint({ x: ha.x, y: ha.y }, { x: hb.x, y: hb.y }, p1, p2)) {
+          holeCrossed = true;
+          break;
+        }
+      }
+      if (holeCrossed) continue;
+
       const testPt = origHole[0];
       if (!pointInNodeRing(testPt.x, testPt.y, nodes, mf.nodeIds)) continue;
       // Check it's not already represented by a hole face (same approximate centroid)
