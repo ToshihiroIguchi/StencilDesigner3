@@ -144,16 +144,16 @@ Output is written to the `dist/` directory.
 
 ```bash
 # Windows (Command Prompt / PowerShell)
-python -m http.server 8000 --directory dist
+python -m http.server 8600 --directory dist
 
 # macOS / Linux
-python3 -m http.server 8000 --directory dist
+python3 -m http.server 8600 --directory dist
 ```
 
-Open **http://localhost:8000** in your browser.
+Open **http://localhost:8600** in your browser.
 
 > **Note:** The `--directory` flag requires Python 3.7 or later.
-> For older versions, `cd dist` first, then run `python3 -m http.server 8000`.
+> For older versions, `cd dist` first, then run `python3 -m http.server 8600`.
 
 **Specify a different port**
 
@@ -218,7 +218,7 @@ python serve.py
 python3 serve.py
 ```
 
-The browser opens at **http://127.0.0.1:8000/**. Useful options: `--port 9090`,
+The browser opens at **http://127.0.0.1:8600/**. Useful options: `--port 9090`,
 `--no-browser`, `--dir <path>`, and `--host 0.0.0.0` to let other machines on the
 network connect. Node.js is never installed on this machine. Press `Ctrl + C` to stop.
 
@@ -246,13 +246,13 @@ To let other devices on the same network (PCs, tablets, phones) open the app:
    hostname -I
    ```
 
-3. On the other device, open **http://192.168.1.20:8000/** (use your own address and port).
+3. On the other device, open **http://192.168.1.20:8600/** (use your own address and port).
 
 Notes:
 
 - **Firewall:** the first time, Windows asks whether Python may accept network connections.
   Allow it for **Private networks**. On Linux, open the port if a firewall is active
-  (for example `sudo ufw allow 8000/tcp`).
+  (for example `sudo ufw allow 8600/tcp`).
 - **No encryption or login:** the server speaks plain HTTP and serves read-only static files to
   anyone who can reach the port. Use it only on a trusted network, and never expose it to the
   internet (no router port forwarding). Press `Ctrl + C` when you are done.
@@ -260,9 +260,9 @@ Notes:
   on one device does not appear on another. To move a drawing, use *File > Open Document…* and its **Download** button to save a
   `.stencil` file, then *File > Open from Disk…* on the other device (or export DXF / PDF).
 - **Plain HTTP is supported:** the app avoids APIs that only work on HTTPS or `localhost`, so it runs
-  from `http://<lan-ip>:8000/`.
+  from `http://<lan-ip>:8600/`.
 
-> **Alternative:** `python -m http.server 8000 --directory dist` also works, but on some
+> **Alternative:** `python -m http.server 8600 --directory dist` also works, but on some
 > Windows machines the registry maps `.js` to `text/plain`, which makes the browser reject
 > the app's scripts and leaves a blank page. If that happens, use `serve.py`.
 
