@@ -1,5 +1,5 @@
 import type { Polygon, Ring, Layer, Vertex, Annotation } from '../types';
-import { decodeMtext, decodePercentCodes } from './mtext';
+import { decodeMtext, decodePercentCodes, estimateTextExtentUm, topLeftOffset } from './mtext';
 import { newId } from '../types';
 import { normalizeAllWithStats, bbox, pointInRing, hasSelfIntersection } from '../normalize';
 import { dist } from '../core/geometry';
@@ -676,7 +676,24 @@ export async function importDxf(dxfText: string, options: BuildImportOptions = {
         if (ent.type === 'MTEXT' && lyrName === 'DIMENSIONS' && ent.attachmentPoint === 5) {
           break;
         }
-        const posSrc = ent.type === 'MTEXT' ? ent.position : ent.startPoint;
+        let posSrc = ent.type === 'MTEXT' ? ent.position : ent.startPoint;
+        // Resolve the anchor alignment (horizontal 0 left / 1 center / 2 right, vertical 0 top / 1 mid / 2 bottom)
+        let hAlign: 0 | 1 | 2 = 0;
+        let vAlign: 0 | 1 | 2 | 3 = 0;
+        if (ent.type === 'MTEXT') {
+          const ap = Number(ent.attachmentPoint) || 1;
+          if (ap >= 1 && ap <= 9) {
+            hAlign = ((ap - 1) % 3) as 0 | 1 | 2;
+            vAlign = Math.floor((ap - 1) / 3) as 0 | 1 | 2;
+          }
+        } else {
+          const h72 = Number(ent.halign) || 0;
+          const v73 = Number(ent.valign) || 0;
+          if ((h72 !== 0 || v73 !== 0) && ent.endPoint) posSrc = ent.endPoint;
+          hAlign = h72 === 1 || h72 === 4 ? 1 : h72 === 2 ? 2 : 0;
+          vAlign = v73 === 3 ? 0 : v73 === 2 ? 1 : v73 === 1 ? 2 : 3; // 0 baseline, 1 bottom, 2 middle, 3 top
+        }
+        if (ent.rotation) console.warn('DXF text rotation is ignored on import:', ent.rotation);
         const rawText: string | undefined = ent.text;
         if (!posSrc || typeof rawText !== 'string') {
           ignoredCounts[ent.type] = (ignoredCounts[ent.type] ?? 0) + 1;
@@ -686,11 +703,14 @@ export async function importDxf(dxfText: string, options: BuildImportOptions = {
         if (text.trim() === '') break;
         const hMm: number = (ent.type === 'MTEXT' ? ent.height : ent.textHeight) ?? 0;
         const p = apply(matrix, posSrc.x, posSrc.y);
+        const heightUm = Math.max(1, Math.round(hMm * scale));
+        const ext = estimateTextExtentUm(text, heightUm);
+        const off = topLeftOffset(ext.w, ext.h, hAlign, vAlign, heightUm);
         annotations.push({
           id: newId(),
           text,
-          origin: { x: Math.round(p.x * scale), y: Math.round(-p.y * scale) },
-          heightUm: Math.max(1, Math.round(hMm * scale)),
+          origin: { x: Math.round(p.x * scale) + off.dx, y: Math.round(-p.y * scale) + off.dy },
+          heightUm,
           layer: lyrName,
         });
         break;

@@ -39,6 +39,7 @@ export function renderLayerPanel(deps: LayerPanelDeps, state: AppState): void {
       <input type="color" class="lyr-color" value="${layer.color}" title="Layer color">
       <span class="lyr-name" title="${escHtml(layer.name)}">${escHtml(layer.name)}</span>
       <button class="lyr-btn lyr-vis${isActive ? ' lyr-btn-disabled' : ''}" title="${isActive ? 'Active layer cannot be hidden' : 'Toggle visibility'}">${layer.visible ? 'V' : 'H'}</button>
+      <button class="lyr-btn lyr-lock${layer.locked ? ' on' : ''}" title="${layer.locked ? 'Unlock layer' : 'Lock layer'}" aria-pressed="${layer.locked ? 'true' : 'false'}">${layer.locked ? '\u{1F512}' : '\u{1F513}'}</button>
       <button class="lyr-btn lyr-apt${layer.isAperture ? ' on' : ''}${layer.name === 'DIMENSIONS' ? ' lyr-btn-disabled' : ''}" title="${layer.name === 'DIMENSIONS' ? 'DIMENSIONS layer is never an aperture' : 'Toggle aperture (DRC + DXF export)'}">A</button>
       <button class="lyr-btn lyr-del" title="Delete layer">×</button>
     `;
@@ -57,6 +58,9 @@ export function renderLayerPanel(deps: LayerPanelDeps, state: AppState): void {
     row.querySelector('.lyr-vis')?.addEventListener('click', () => {
       toggleLayerVisible(deps, layer.name);
     });
+    row.querySelector('.lyr-lock')?.addEventListener('click', () => {
+      toggleLayerLocked(deps, layer.name);
+    });
     row.querySelector('.lyr-apt')?.addEventListener('click', () => {
       deps.history.execute(new UpdateLayerStyleCommand(layer.name, { isAperture: !layer.isAperture }));
       markDirty();
@@ -74,6 +78,7 @@ function setActiveLayer(deps: LayerPanelDeps, name: string): void {
   const state = deps.history.state;
   const layer = state.layers.find((l) => l.name === name);
   if (!layer) return;
+  if (layer.locked) return; // A locked layer cannot be the drawing target.
   state.activeLayerName = name;
   if (!layer.visible) {
     state.layers = state.layers.map((l) => l.name === name ? { ...l, visible: true } : l);
@@ -98,6 +103,31 @@ function toggleLayerVisible(deps: LayerPanelDeps, name: string): void {
       ...state.annotations.filter((a) => a.layer === name).map((a) => a.id),
     ]);
     const newSel = state.selection.filter((s) => !hiddenIds.has(s.shapeId));
+    if (newSel.length !== state.selection.length) {
+      cmds.push(new SetSelectionCommand(newSel, state.selection));
+    }
+  }
+
+  deps.history.execute(cmds.length === 1 ? cmds[0] : new CompoundCommand(cmds));
+  markDirty();
+  deps.requestRender();
+}
+
+function toggleLayerLocked(deps: LayerPanelDeps, name: string): void {
+  const state = deps.history.state;
+  const layer = state.layers.find((l) => l.name === name);
+  if (!layer) return;
+
+  const cmds: Command[] = [new UpdateLayerStyleCommand(name, { locked: !layer.locked })];
+
+  if (!layer.locked) {
+    // Locking: purge any selection entries that belong to this layer.
+    const lockedIds = new Set<string>([
+      ...state.shapes.filter((s) => s.layer === name).map((s) => s.id),
+      ...state.dimensions.filter((d) => d.layer === name).map((d) => d.id),
+      ...state.annotations.filter((a) => a.layer === name).map((a) => a.id),
+    ]);
+    const newSel = state.selection.filter((s) => !lockedIds.has(s.shapeId));
     if (newSel.length !== state.selection.length) {
       cmds.push(new SetSelectionCommand(newSel, state.selection));
     }

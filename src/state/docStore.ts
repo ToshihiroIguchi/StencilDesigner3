@@ -32,6 +32,14 @@ export function setAutosavePaused(paused: boolean): void {
   autosavePaused = paused;
 }
 
+// Serializes every read-modify-write of the doc list. Never acquire it re-entrantly.
+let listLock: Promise<unknown> = Promise.resolve();
+function withListLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = listLock.then(fn, fn);
+  listLock = run.catch(() => undefined);
+  return run;
+}
+
 async function setList(list: DocMetadata[]): Promise<void> {
   await localforage.setItem(DOC_LIST_KEY, list);
 }
@@ -59,13 +67,15 @@ export async function saveDoc(id: string, state: AppState): Promise<void> {
   isDirty = false;
   try {
     await localforage.setItem(`doc:${id}`, snapshot);
-    const list = await listDocs();
-    const idx = list.findIndex((d) => d.id === id);
-    if (idx >= 0) {
-      list[idx].lastModified = Date.now();
-      list[idx].sizeBytes = JSON.stringify(snapshot).length;
-      await setList(list);
-    }
+    await withListLock(async () => {
+      const list = await listDocs();
+      const idx = list.findIndex((d) => d.id === id);
+      if (idx >= 0) {
+        list[idx].lastModified = Date.now();
+        list[idx].sizeBytes = JSON.stringify(snapshot).length;
+        await setList(list);
+      }
+    });
   } catch (e) {
     isDirty = true;
     throw e;
@@ -82,25 +92,31 @@ export async function createDoc(name?: string): Promise<DocMetadata> {
     lastModified: Date.now(),
     sizeBytes: JSON.stringify(state).length,
   };
-  const list = await listDocs();
-  list.push(meta);
-  await setList(list);
+  await withListLock(async () => {
+    const list = await listDocs();
+    list.push(meta);
+    await setList(list);
+  });
   return meta;
 }
 
 export async function deleteDoc(id: string): Promise<void> {
   await localforage.removeItem(`doc:${id}`);
-  const list = await listDocs();
-  await setList(list.filter((d) => d.id !== id));
+  await withListLock(async () => {
+    const list = await listDocs();
+    await setList(list.filter((d) => d.id !== id));
+  });
 }
 
 export async function renameDoc(id: string, name: string): Promise<void> {
-  const list = await listDocs();
-  const meta = list.find((d) => d.id === id);
-  if (meta) {
-    meta.name = name;
-    await setList(list);
-  }
+  await withListLock(async () => {
+    const list = await listDocs();
+    const meta = list.find((d) => d.id === id);
+    if (meta) {
+      meta.name = name;
+      await setList(list);
+    }
+  });
 }
 
 export async function getCurrentDocId(): Promise<string | null> {
@@ -272,10 +288,23 @@ function migrateState(s: Partial<AppState>): AppState {
     }
     return l;
   });
-  if (finalState.activeLayerName === 'DIMENSIONS') {
-    const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);
-    if (fallback) finalState.activeLayerName = fallback.name;
+  if (!finalState.layers.some((l) => l.name === '0')) {
+    finalState.layers = [defaultLayers()[0], ...finalState.layers];
   }
+  const layerNames = new Set(finalState.layers.map((l) => l.name));
+  if (
+    finalState.activeLayerName === 'DIMENSIONS' ||
+    !layerNames.has(finalState.activeLayerName)
+  ) {
+    const fallback = finalState.layers.find((l) => l.name !== 'DIMENSIONS' && l.visible);
+    finalState.activeLayerName = fallback ? fallback.name : '0';
+  }
+  const fixLayer = <T extends { layer: string }>(o: T): T =>
+    layerNames.has(o.layer) ? o : { ...o, layer: '0' };
+  finalState.shapes = finalState.shapes.map(fixLayer);
+  finalState.dimensions = finalState.dimensions.map(fixLayer);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  finalState.annotations = (finalState.annotations as any[]).map(fixLayer) as typeof finalState.annotations;
 
   finalState.shapes = normalizeAll(finalState.shapes);
 

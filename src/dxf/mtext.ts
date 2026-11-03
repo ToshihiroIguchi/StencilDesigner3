@@ -57,3 +57,45 @@ export function decodePercentCodes(s: string): string {
     .replace(/%%[uUoO]/g, '')
     .replace(/%%(\d{3})/g, (_m, d: string) => String.fromCharCode(parseInt(d, 10)));
 }
+
+/**
+ * Vertical metrics of the annotation renderer (canvas textBaseline = 'top', measured in the browser):
+ * the baseline sits ~0.88 em below the annotation origin and the em box is 1.0 em tall.
+ * Lines are spaced 1.2 em apart.
+ */
+export const TEXT_ASCENT_RATIO = 0.88;
+export const TEXT_BOX_RATIO = 1.0;
+export const TEXT_LINE_PITCH = 1.2;
+
+/** Estimated text extent in µm: width ~0.6 em per narrow char (1.0 em for wide chars), line pitch 1.2 em. */
+export function estimateTextExtentUm(text: string, heightUm: number): { w: number; h: number } {
+  const lines = text.split('\n');
+  let maxEm = 0;
+  for (const line of lines) {
+    let em = 0;
+    for (const ch of line) {
+      const cp = ch.codePointAt(0) ?? 0;
+      em += cp >= 0x2e80 ? 1.0 : 0.6;
+    }
+    maxEm = Math.max(maxEm, em);
+  }
+  return {
+    w: Math.round(maxEm * heightUm),
+    h: Math.round(((lines.length - 1) * TEXT_LINE_PITCH + TEXT_BOX_RATIO) * heightUm),
+  };
+}
+
+/**
+ * Offset (dx, dy in Y-down world µm) from an anchor point to the text's top-left corner.
+ * hAlign: 0 left, 1 center, 2 right. vAlign: 0 top, 1 middle, 2 bottom, 3 first-line baseline.
+ * heightUm is the font size, needed for the baseline case.
+ */
+export function topLeftOffset(
+  w: number, h: number, hAlign: 0 | 1 | 2, vAlign: 0 | 1 | 2 | 3, heightUm = 0,
+): { dx: number; dy: number } {
+  const dy = vAlign === 0 ? 0 : vAlign === 1 ? -h / 2 : vAlign === 2 ? -h : -TEXT_ASCENT_RATIO * heightUm;
+  return {
+    dx: Math.round(hAlign === 0 ? 0 : hAlign === 1 ? -w / 2 : -w),
+    dy: Math.round(dy),
+  };
+}

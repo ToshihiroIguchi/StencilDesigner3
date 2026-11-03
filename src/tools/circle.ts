@@ -31,6 +31,7 @@ export class CircleTool extends BaseTool {
   placeFromPanel(state: AppState): void {
     const r = Math.round(this.diameterUm / 2);
     if (r < 1) return;
+    if (this.isActiveLayerLocked(state)) return;
     try {
       const poly = circleToPolygon(this.placeX, this.placeY, r, undefined, state.activeLayerName);
       this.ctx.history.execute(new AddShapeCommand(poly));
@@ -80,7 +81,7 @@ export class CircleTool extends BaseTool {
       const dy = snap.point.y - this.centerPt.y;
       const r = Math.round(Math.sqrt(dx * dx + dy * dy));
 
-      if (r >= 1) {
+      if (r >= 1 && !this.isActiveLayerLocked(state)) {
         try {
           const poly = circleToPolygon(this.centerPt.x, this.centerPt.y, r, undefined, state.activeLayerName);
           this.ctx.history.execute(new AddShapeCommand(poly));
@@ -97,7 +98,7 @@ export class CircleTool extends BaseTool {
       this.placeX = this.centerPt.x;
       this.placeY = this.centerPt.y;
       const r = Math.round(this.diameterUm / 2);
-      if (r >= 1) {
+      if (r >= 1 && !this.isActiveLayerLocked(state)) {
         try {
           const poly = circleToPolygon(this.placeX, this.placeY, r, undefined, state.activeLayerName);
           this.ctx.history.execute(new AddShapeCommand(poly));
@@ -114,6 +115,13 @@ export class CircleTool extends BaseTool {
     this.draft = null;
     this.snap = null;
     this.ctx.requestRender();
+  }
+
+  override cancel(): void {
+    this.centerPt = null;
+    this.dragStartCanvas = null;
+    this.dragThresholdReached = false;
+    super.cancel();
   }
 
   /** Returns HUD label and canvas position for overlay during drag. */

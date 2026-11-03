@@ -668,6 +668,7 @@ export class CanvasRenderer {
     for (const poly of polys) {
       ctx.beginPath();
       const o = poly.outer;
+      if (o.length === 0) continue;
       const f = worldToCanvas(o[0].x, o[0].y, vt);
       ctx.moveTo(f.x, f.y);
       for (let i = 1; i < o.length; i++) {
@@ -676,6 +677,7 @@ export class CanvasRenderer {
       }
       ctx.closePath();
       for (const hole of poly.holes) {
+        if (hole.length === 0) continue;
         const fh = worldToCanvas(hole[0].x, hole[0].y, vt);
         ctx.moveTo(fh.x, fh.y);
         for (let i = 1; i < hole.length; i++) {
@@ -1193,7 +1195,10 @@ export class CanvasRenderer {
       if (unit === 'mm') {
         const val = w / 1000;
         // Optimization: show integer mm if possible to save space on ruler
-        return (val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)) + 'mm';
+        // Use enough decimals that adjacent minor/major labels never repeat.
+        const decimals = subStep < 100 ? 3 : subStep < 1000 ? 2 : 1;
+        if (val % 1 === 0) return val.toFixed(0) + 'mm';
+        return parseFloat(val.toFixed(decimals)).toString() + 'mm';
       } else {
         return Math.round(w) + 'µ';
       }

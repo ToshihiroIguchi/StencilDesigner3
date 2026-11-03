@@ -25,6 +25,7 @@ export class TextareaOverlay {
 
   private readonly boundKeyDown: (e: KeyboardEvent) => void;
   private readonly boundInput: () => void;
+  private readonly boundBlur: () => void;
 
   constructor(opts: TextareaOverlayOptions) {
     this.opts = opts;
@@ -34,6 +35,7 @@ export class TextareaOverlay {
       : null;
     this.boundKeyDown = (e) => this.handleKeyDown(e);
     this.boundInput = () => this.handleInput();
+    this.boundBlur = () => this.handleBlur();
   }
 
   get isOpen(): boolean { return this._isOpen; }
@@ -47,6 +49,10 @@ export class TextareaOverlay {
     cbs: TextareaOverlayCallbacks,
   ): void {
     if (!this.el) return;
+    this.cancelBlurTimer();
+    this.el.removeEventListener('keydown', this.boundKeyDown);
+    this.el.removeEventListener('input', this.boundInput);
+    this.el.removeEventListener('blur', this.boundBlur);
     this.callbacks = cbs;
 
     this.el.value = initialText;
@@ -60,12 +66,7 @@ export class TextareaOverlay {
 
     this.el.addEventListener('keydown', this.boundKeyDown);
     this.el.addEventListener('input', this.boundInput);
-    this.el.addEventListener('blur', () => {
-      this.blurTimer = setTimeout(() => {
-        this.blurTimer = null;
-        this.commit();
-      }, 80);
-    }, { once: true });
+    this.el.addEventListener('blur', this.boundBlur);
 
     setTimeout(() => { this.el?.focus(); this.el?.select(); }, 0);
     if (this.hint && this.opts.hintEditing) this.hint.textContent = this.opts.hintEditing;
@@ -88,8 +89,18 @@ export class TextareaOverlay {
     cbs?.onDiscard();
   }
 
+  private handleBlur(): void {
+    this.cancelBlurTimer();
+    this.blurTimer = setTimeout(() => {
+      this.blurTimer = null;
+      if (this._isOpen) this.commit();
+    }, 80);
+  }
+
   private hide(): void {
     if (!this.el) return;
+    this.cancelBlurTimer();
+    this.el.removeEventListener('blur', this.boundBlur);
     this.el.removeEventListener('keydown', this.boundKeyDown);
     this.el.removeEventListener('input', this.boundInput);
     this.el.style.display = 'none';
@@ -100,6 +111,7 @@ export class TextareaOverlay {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') {
       if (this.opts.allowNewlines && e.shiftKey) return;
       e.preventDefault();

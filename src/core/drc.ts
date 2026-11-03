@@ -24,6 +24,8 @@ function bboxClearance(a: Bbox, b: Bbox): number {
 }
 
 const MAX_ERRORS = 20;
+// Aperture findings use at most half of the budget so spacing/overlap checks always get room.
+const MAX_APERTURE_ERRORS = MAX_ERRORS / 2;
 
 export function runDrc(shapes: Polygon[], layers: Layer[], config: DrcConfig): DrcError[] {
   const apertureNames = new Set(layers.filter((l) => l.isAperture).map((l) => l.name));
@@ -32,9 +34,12 @@ export function runDrc(shapes: Polygon[], layers: Layer[], config: DrcConfig): D
   const items = targets.map((s) => ({ shape: s, bb: polygonBbox(s) }));
 
   // Aperture check: narrowest passage width (catches thin arms, not just bbox dimensions)
+  let apertureCount = 0;
   for (const { shape } of items) {
+    if (apertureCount >= MAX_APERTURE_ERRORS) break;
     const { width, loc } = polygonNarrowestPassage(shape);
     if (width < config.minApertureUm) {
+      apertureCount++;
       errors.push({
         shapeId: shape.id,
         message: `Aperture ${Math.round(width)}µm < ${config.minApertureUm}µm`,

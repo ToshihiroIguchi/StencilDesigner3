@@ -32,6 +32,16 @@ export abstract class BaseTool {
   abstract onMouseMove(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void;
   abstract onMouseUp(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void;
 
+  /** Returns true (and notifies the user) when the active layer is locked and drawing must be refused. */
+  protected isActiveLayerLocked(state: AppState): boolean {
+    const layer = state.layers.find((l) => l.name === state.activeLayerName);
+    if (layer?.locked) {
+      this.ctx.notify('Active layer is locked');
+      return true;
+    }
+    return false;
+  }
+
   onKeyDown(_key: string, _state: AppState): void {}
 
   cancel(): void {

@@ -20,8 +20,21 @@ export function downloadDocAsStencil(name: string, state: AppState): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = `${name}.stencil`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  // Delay revocation: Firefox may cancel the download if the URL is revoked immediately.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Throws if parsed JSON cannot plausibly be a stencil document. */
+export function validateStencilJson(raw: unknown): void {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('Invalid stencil file');
+  }
+  const o = raw as Record<string, unknown>;
+  if (o.shapes !== undefined && !Array.isArray(o.shapes)) throw new Error('Invalid stencil file: shapes must be an array');
+  if (o.layers !== undefined && !Array.isArray(o.layers)) throw new Error('Invalid stencil file: layers must be an array');
 }
 
 export interface FileManagerDeps {
@@ -172,7 +185,7 @@ export async function importStencilFile(
   try {
     const text = await file.text();
     const raw = JSON.parse(text) as unknown;
-    if (typeof raw !== 'object' || raw === null) throw new Error('Invalid JSON');
+    validateStencilJson(raw);
     const docs = await listDocs();
     const baseName = file.name.replace(/\.(stencil|json)$/i, '');
     const allNames = docs.map((d) => d.name);
@@ -184,9 +197,14 @@ export async function importStencilFile(
       name = `${baseName} ${i}`;
     }
     const meta = await createDoc(name);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await saveDoc(meta.id, raw as any);
-    await openDoc(meta.id);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await saveDoc(meta.id, raw as any);
+      await openDoc(meta.id);
+    } catch (err) {
+      await deleteDoc(meta.id).catch(() => undefined);
+      throw err;
+    }
   } catch (e) {
     await showMessageModal({ title: 'Import Stencil', message: `Import failed: ${e}` });
   }

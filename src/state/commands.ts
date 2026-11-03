@@ -579,6 +579,8 @@ export class DeleteLayerCommand implements Command {
   private savedLayer: Layer | null = null;
   private savedIndex = -1;
   private savedWasActive = false;
+  private savedActiveName = '';
+  private savedSelection: AppState['selection'] = [];
   private affectedShapes: Polygon[] = [];
   private savedDimensions: Dimension[] = [];
   private savedAnnotations: Annotation[] = [];
@@ -589,6 +591,8 @@ export class DeleteLayerCommand implements Command {
     if (this.savedIndex < 0) return state;
     this.savedLayer = state.layers[this.savedIndex];
     this.savedWasActive = state.activeLayerName === this.layerName;
+    this.savedActiveName = state.activeLayerName;
+    this.savedSelection = state.selection;
     this.affectedShapes = state.shapes.filter((s) => s.layer === this.layerName);
     this.savedDimensions = state.dimensions;
     this.savedAnnotations = state.annotations;
@@ -613,7 +617,7 @@ export class DeleteLayerCommand implements Command {
         ? state.annotations.map((a) => (a.layer === this.layerName ? { ...a, layer: this.moveTo! } : a))
         : state.annotations.filter((a) => a.layer !== this.layerName);
 
-    const newActive = this.savedWasActive ? newLayers[0].name : state.activeLayerName;
+    const newActive = this.savedWasActive ? pickFallbackActiveLayer(newLayers) : state.activeLayerName;
     return {
       ...state,
       layers: newLayers,
@@ -642,9 +646,16 @@ export class DeleteLayerCommand implements Command {
       shapes: restoredShapes,
       dimensions: this.savedDimensions,
       annotations: this.savedAnnotations,
-      activeLayerName: this.savedWasActive ? this.layerName : state.activeLayerName,
+      activeLayerName: this.savedWasActive ? this.savedActiveName : state.activeLayerName,
+      selection: this.savedSelection,
     };
   }
+}
+
+/** First visible non-DIMENSIONS layer, else first non-DIMENSIONS, else the first layer. */
+function pickFallbackActiveLayer(layers: Layer[]): string {
+  const candidates = layers.filter((l) => l.name !== 'DIMENSIONS');
+  return (candidates.find((l) => l.visible) ?? candidates[0] ?? layers[0]).name;
 }
 
 // ─── Rename Layer ─────────────────────────────────────────────────────────────
@@ -677,18 +688,35 @@ export class RenameLayerCommand implements Command {
 }
 
 // ─── Update Layer Style ───────────────────────────────────────────────────────
-type LayerStylePatch = Partial<Pick<Layer, 'color' | 'linetype' | 'lineweight' | 'plot' | 'isAperture' | 'visible'>>;
+type LayerStylePatch = Partial<Pick<Layer, 'color' | 'linetype' | 'lineweight' | 'plot' | 'isAperture' | 'visible' | 'locked'>>;
 export class UpdateLayerStyleCommand implements Command {
   private before: Layer | null = null;
+  private savedActiveName: string | null = null;
   constructor(private layerName: string, private patch: LayerStylePatch) {}
   do(state: AppState): AppState {
     const layer = state.layers.find((l) => l.name === this.layerName);
     if (!layer) return state;
     this.before = { ...layer };
-    return {
-      ...state,
-      layers: state.layers.map((l) => (l.name === this.layerName ? { ...l, ...this.patch } : l)),
-    };
+    this.savedActiveName = null;
+    const layers = state.layers.map((l) => (l.name === this.layerName ? { ...l, ...this.patch } : l));
+    let activeLayerName = state.activeLayerName;
+    if (this.patch.visible === false && activeLayerName === this.layerName) {
+      // Never leave the active layer hidden: move to another visible layer if one exists.
+      const other = layers.find((l) => l.visible && l.name !== this.layerName && l.name !== 'DIMENSIONS');
+      if (other) {
+        this.savedActiveName = activeLayerName;
+        activeLayerName = other.name;
+      }
+    }
+    if (this.patch.locked === true && activeLayerName === this.layerName) {
+      // Never leave a locked layer as the drawing target.
+      const other = layers.find((l) => l.visible && !l.locked && l.name !== this.layerName && l.name !== 'DIMENSIONS');
+      if (other) {
+        this.savedActiveName = activeLayerName;
+        activeLayerName = other.name;
+      }
+    }
+    return { ...state, layers, activeLayerName };
   }
   undo(state: AppState): AppState {
     if (!this.before) return state;
@@ -696,6 +724,7 @@ export class UpdateLayerStyleCommand implements Command {
     return {
       ...state,
       layers: state.layers.map((l) => (l.name === this.layerName ? before : l)),
+      activeLayerName: this.savedActiveName ?? state.activeLayerName,
     };
   }
 }

@@ -7,6 +7,29 @@ function containsJapanese(text: string): boolean {
   return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\u00b5\u03bc]/.test(text);
 }
 
+/**
+ * Returns the unique characters that the embedded font cannot be expected to render:
+ * anything outside Latin/symbols, kana, CJK ideographs and fullwidth forms (e.g. emoji, astral-plane chars).
+ */
+export function findUnsupportedPdfChars(texts: string[]): string[] {
+  const seen = new Set<string>();
+  for (const t of texts) {
+    for (const ch of t) {
+      if (ch === '\n' || ch === '\r' || ch === '\t') continue;
+      const cp = ch.codePointAt(0) ?? 0;
+      const ok = cp < 0x2000                       // Latin, Greek, Cyrillic, etc.
+        || (cp >= 0x2000 && cp <= 0x2bff)          // punctuation, symbols, arrows, math
+        || (cp >= 0x3000 && cp <= 0x30ff)          // CJK punctuation, hiragana, katakana
+        || (cp >= 0x3400 && cp <= 0x4dbf)
+        || (cp >= 0x4e00 && cp <= 0x9fff)
+        || (cp >= 0xf900 && cp <= 0xfaff)
+        || (cp >= 0xff00 && cp <= 0xffef);         // fullwidth / halfwidth forms
+      if (!ok) seen.add(ch);
+    }
+  }
+  return [...seen];
+}
+
 function uint8ArrayToBase64(uint8: Uint8Array): string {
   let binary = '';
   const len = uint8.byteLength;
@@ -601,9 +624,15 @@ export async function buildPdf(state: AppState, docName: string, appName = 'Sten
   return f.pdf;
 }
 
-export async function downloadPdf(state: AppState, docName: string, filename?: string, appName = 'StencilDesigner3'): Promise<boolean> {
+/** Saves the PDF. Returns null when there is nothing to export, else the list of unsupported characters. */
+export async function downloadPdf(state: AppState, docName: string, filename?: string, appName = 'StencilDesigner3'): Promise<string[] | null> {
   const pdf = await buildPdf(state, docName, appName);
-  if (!pdf) return false;
+  if (!pdf) return null;
   pdf.save(filename ?? `${docName || 'stencil'}.pdf`);
-  return true;
+  const visible = new Set(state.layers.filter((l) => l.visible).map((l) => l.name));
+  return findUnsupportedPdfChars([
+    docName,
+    ...state.layers.filter((l) => l.visible).map((l) => l.name),
+    ...state.annotations.filter((a) => visible.has(a.layer)).map((a) => a.text),
+  ]);
 }

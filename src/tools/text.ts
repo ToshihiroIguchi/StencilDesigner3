@@ -134,6 +134,7 @@ export class TextTool extends BaseTool {
   }
 
   private placeSync(topLeft: Point, text: string, font: Font): void {
+    if (this.isActiveLayerLocked(this.ctx.history.state)) return;
     const layer = this.ctx.history.state.activeLayerName;
     const baselineY = topLeft.y + this.capHeightUm;
     const raw = textToPolygons(text, font, this.capHeightUm, topLeft.x, baselineY, this.letterSpacingUm, layer);
@@ -145,7 +146,18 @@ export class TextTool extends BaseTool {
   }
 
   private async placeAsync(topLeft: Point, text: string): Promise<void> {
-    const font = await loadFont();
+    const stateAtStart = this.ctx.history.state;
+    let font: Font;
+    try {
+      font = await loadFont();
+    } catch {
+      this.ctx.notify('Could not load the text font; text was not placed.');
+      return;
+    }
+    if (this.ctx.history.state !== stateAtStart) {
+      this.ctx.notify('Text was not placed because the document changed while the font was loading.');
+      return;
+    }
     this.placeSync(topLeft, text, font);
   }
 

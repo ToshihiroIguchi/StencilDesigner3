@@ -280,18 +280,23 @@ export function polygonEdgeDistance(a: Polygon, b: Polygon): { dist: number; loc
     const ca = ringCentroid(a.outer), cb = ringCentroid(b.outer);
     return { dist: 0, loc: { x: Math.round((ca.x + cb.x) / 2), y: Math.round((ca.y + cb.y) / 2) } };
   }
-  const na = a.outer.length, nb = b.outer.length;
   let minSq = Infinity;
   let midA: Point = a.outer[0], midB: Point = b.outer[0];
-  for (let i = 0; i < na; i++) {
-    const a1 = a.outer[i], a2 = a.outer[(i + 1) % na];
-    for (let j = 0; j < nb; j++) {
-      const b1 = b.outer[j], b2 = b.outer[(j + 1) % nb];
-      const dsq = segmentMinDistanceSq(a1, a2, b1, b2);
-      if (dsq < minSq) {
-        minSq = dsq;
-        midA = { x: Math.round((a1.x + a2.x) / 2), y: Math.round((a1.y + a2.y) / 2) };
-        midB = { x: Math.round((b1.x + b2.x) / 2), y: Math.round((b1.y + b2.y) / 2) };
+  for (const ra of [a.outer, ...a.holes]) {
+    const na = ra.length;
+    for (const rb of [b.outer, ...b.holes]) {
+      const nb = rb.length;
+      for (let i = 0; i < na; i++) {
+        const a1 = ra[i], a2 = ra[(i + 1) % na];
+        for (let j = 0; j < nb; j++) {
+          const b1 = rb[j], b2 = rb[(j + 1) % nb];
+          const dsq = segmentMinDistanceSq(a1, a2, b1, b2);
+          if (dsq < minSq) {
+            minSq = dsq;
+            midA = { x: Math.round((a1.x + a2.x) / 2), y: Math.round((a1.y + a2.y) / 2) };
+            midB = { x: Math.round((b1.x + b2.x) / 2), y: Math.round((b1.y + b2.y) / 2) };
+          }
+        }
       }
     }
   }
@@ -343,24 +348,49 @@ function connectingDirNearlyParallel(a1: Point, a2: Point, b1: Point, b2: Point)
  * Narrowest passage width of a polygon (min distance between non-adjacent edges).
  */
 export function polygonNarrowestPassage(poly: Polygon): { width: number; loc: Point } {
-  const ring = poly.outer;
-  const n = ring.length;
-  if (n < 4) return { width: Infinity, loc: ring[0] };
+  const rings = [poly.outer, ...poly.holes];
   let minSq = Infinity;
-  let bestLoc: Point = ring[0];
-  for (let i = 0; i < n; i++) {
-    const a1 = ring[i], a2 = ring[(i + 1) % n];
-    for (let j = i + 2; j < n; j++) {
-      if (i === 0 && j === n - 1) continue; // wrapping adjacency
-      const b1 = ring[j], b2 = ring[(j + 1) % n];
-      const dsq = segmentMinDistanceSq(a1, a2, b1, b2);
-      if (dsq < minSq) {
-        if (connectingDirNearlyParallel(a1, a2, b1, b2)) continue;
-        minSq = dsq;
-        bestLoc = {
-          x: Math.round((a1.x + a2.x + b1.x + b2.x) / 4),
-          y: Math.round((a1.y + a2.y + b1.y + b2.y) / 4),
-        };
+  let bestLoc: Point = poly.outer[0];
+
+  const consider = (a1: Point, a2: Point, b1: Point, b2: Point): void => {
+    const dsq = segmentMinDistanceSq(a1, a2, b1, b2);
+    if (dsq < minSq && !connectingDirNearlyParallel(a1, a2, b1, b2)) {
+      minSq = dsq;
+      bestLoc = {
+        x: Math.round((a1.x + a2.x + b1.x + b2.x) / 4),
+        y: Math.round((a1.y + a2.y + b1.y + b2.y) / 4),
+      };
+    }
+  };
+
+  for (let r = 0; r < rings.length; r++) {
+    const ring = rings[r];
+    const n = ring.length;
+    if (n === 3) {
+      // Triangle: narrowest passage is the minimum altitude (2*area / longest edge).
+      const [p, q, s] = ring;
+      const twiceArea = Math.abs((q.x - p.x) * (s.y - p.y) - (s.x - p.x) * (q.y - p.y));
+      const longest = Math.max(dist(p, q), dist(q, s), dist(s, p));
+      const alt = longest > 0 ? twiceArea / longest : 0;
+      if (alt * alt < minSq) {
+        minSq = alt * alt;
+        bestLoc = ringCentroid(ring);
+      }
+    } else if (n >= 4) {
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 2; j < n; j++) {
+          if (i === 0 && j === n - 1) continue; // wrapping adjacency
+          consider(ring[i], ring[(i + 1) % n], ring[j], ring[(j + 1) % n]);
+        }
+      }
+    }
+    // Cross-ring pairs (outer vs hole, hole vs hole)
+    for (let r2 = r + 1; r2 < rings.length; r2++) {
+      const o = rings[r2];
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < o.length; j++) {
+          consider(ring[i], ring[(i + 1) % n], o[j], o[(j + 1) % o.length]);
+        }
       }
     }
   }

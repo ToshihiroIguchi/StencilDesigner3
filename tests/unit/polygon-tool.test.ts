@@ -12,6 +12,7 @@ function makeCtx() {
     history,
     getSnap: (p: Point) => ({ point: p, kind: 'grid' as const }),
     requestRender: vi.fn(),
+    notify: vi.fn(),
   };
   return { ctx, history };
 }
