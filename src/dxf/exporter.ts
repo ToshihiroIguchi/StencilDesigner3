@@ -171,6 +171,8 @@ export function exportDxf(
   lines.push('0\nSECTION\n2\nENTITIES');
   for (const poly of polygons) {
     if (options.aperturesOnly && !apertureNames.has(poly.layer)) continue;
+    // Hidden layers are not exported (consistent with the PDF exporter).
+    if (layerMap.get(poly.layer)?.visible === false) continue;
     writeLwPolyline(lines, poly.outer, poly.layer, true);
     for (const hole of poly.holes) writeLwPolyline(lines, hole, poly.layer, true);
   }

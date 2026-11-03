@@ -20,6 +20,7 @@ export type FilletResult =
 function filletSegment(
   ring: Ring, idx: number, R: number, shareEdges = false
 ): { ok: true; pts: Ring } | { ok: false; reason: FilletSkipReason } {
+  if (!Number.isFinite(R) || R <= 0) return { ok: false, reason: 'r-too-small' };
   const n = ring.length;
   const P = ring[(idx - 1 + n) % n];
   const V = ring[idx];

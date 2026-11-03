@@ -5,10 +5,11 @@ import type { Point } from '../types';
  * Threshold: sin θ ≤ 0.001 (≈ 0.057°).
  */
 export function areEdgesParallel(e1: [Point, Point], e2: [Point, Point]): boolean {
-  const d1x = BigInt(e1[1].x - e1[0].x);
-  const d1y = BigInt(e1[1].y - e1[0].y);
-  const d2x = BigInt(e2[1].x - e2[0].x);
-  const d2y = BigInt(e2[1].y - e2[0].y);
+  // Math.round guards against non-integer input (BigInt() throws RangeError on floats).
+  const d1x = BigInt(Math.round(e1[1].x - e1[0].x));
+  const d1y = BigInt(Math.round(e1[1].y - e1[0].y));
+  const d2x = BigInt(Math.round(e2[1].x - e2[0].x));
+  const d2y = BigInt(Math.round(e2[1].y - e2[0].y));
   const cross = d1x * d2y - d1y * d2x;
   const len1Sq = d1x * d1x + d1y * d1y;
   const len2Sq = d2x * d2x + d2y * d2y;

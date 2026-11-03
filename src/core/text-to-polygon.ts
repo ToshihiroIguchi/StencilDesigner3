@@ -184,37 +184,45 @@ function pointInRing(px: number, py: number, ring: Ring): boolean {
 }
 
 /**
- * Group flat Ring[] into Polygon[].
- * Outer rings (by area) contain holes; all are passed through normalize().
+ * Group flat Ring[] into Polygon[] by nesting depth.
+ * Even depth = outer ring, odd depth = hole of its immediate parent.
+ * Islands inside holes (e.g. '@') therefore become their own polygons.
+ * Degenerate polygons that fail normalize() are skipped.
  */
 function groupRingsToPolygons(rings: Ring[], layer: string): Polygon[] {
   if (rings.length === 0) return [];
 
-  const withArea = rings.map(r => ({ ring: r, absArea: Math.abs(signedArea(r)) }));
-  withArea.sort((a, b) => b.absArea - a.absArea); // largest first = outers first
+  const items = rings
+    .map((r) => ({ ring: r, absArea: Math.abs(signedArea(r)) }))
+    .sort((a, b) => b.absArea - a.absArea); // largest first: containers precede contents
 
-  const assigned = new Set<Ring>();
-  const polys: Polygon[] = [];
-
-  for (const { ring: outer } of withArea) {
-    if (assigned.has(outer)) continue;
-    assigned.add(outer);
-
-    const holes: Ring[] = [];
-    const testPt = outer[0];
-
-    for (const { ring: candidate } of withArea) {
-      if (assigned.has(candidate)) continue;
-      // A ring is a hole of `outer` if its representative point lies inside `outer`.
-      if (pointInRing(candidate[0].x, candidate[0].y, outer)) {
-        holes.push(candidate);
-        assigned.add(candidate);
+  // parent = smallest-area earlier ring that contains this ring's representative point
+  const depth: number[] = new Array(items.length).fill(0);
+  const parent: number[] = new Array(items.length).fill(-1);
+  for (let i = 0; i < items.length; i++) {
+    const pt = items[i].ring[0];
+    for (let j = i - 1; j >= 0; j--) {
+      if (pointInRing(pt.x, pt.y, items[j].ring)) {
+        parent[i] = j;
+        depth[i] = depth[j] + 1;
+        break;
       }
     }
+  }
 
-    // normalize() enforces CCW outer / CW holes, deduplicates, removes collinear points.
-    void testPt;
-    polys.push(normalize({ id: newId(), outer, holes, layer }));
+  const polys: Polygon[] = [];
+  for (let i = 0; i < items.length; i++) {
+    if (depth[i] % 2 !== 0) continue;
+    const holes: Ring[] = [];
+    for (let k = 0; k < items.length; k++) {
+      if (parent[k] === i && depth[k] % 2 === 1) holes.push(items[k].ring);
+    }
+    try {
+      // normalize() enforces CCW outer / CW holes, deduplicates, removes collinear points.
+      polys.push(normalize({ id: newId(), outer: items[i].ring, holes, layer }));
+    } catch {
+      // Degenerate glyph ring: skip it rather than abort the whole string.
+    }
   }
 
   return polys;

@@ -9,6 +9,8 @@ export function findShape(state: AppState, id: string): Polygon | undefined {
 
 /** Move selected shapes by (dx, dy) µm. Returns new shapes array. */
 export function moveShapes(shapes: Polygon[], selection: Selection[], dx: number, dy: number): Polygon[] {
+  dx = Math.round(dx);
+  dy = Math.round(dy);
   const ids = new Set(selection.map((s) => s.shapeId));
   const moved = shapes.map((shape) => {
     if (!ids.has(shape.id)) return shape;
@@ -19,6 +21,8 @@ export function moveShapes(shapes: Polygon[], selection: Selection[], dx: number
 
 /** Copy selected shapes by (dx, dy) µm. Returns new shapes array with copies appended. */
 export function copyShapes(shapes: Polygon[], selection: Selection[], dx: number, dy: number): Polygon[] {
+  dx = Math.round(dx);
+  dy = Math.round(dy);
   const ids = new Set(selection.map((s) => s.shapeId));
   const copies: Polygon[] = [];
   for (const shape of shapes) {
@@ -51,6 +55,8 @@ export function arrayCopyShapes(
   pitchX: number,
   pitchY: number
 ): Polygon[] {
+  pitchX = Math.round(pitchX);
+  pitchY = Math.round(pitchY);
   const ids = new Set(selection.map((s) => s.shapeId));
   const originals = shapes.filter((s) => ids.has(s.id));
   const copies: Polygon[] = [];
@@ -80,6 +86,8 @@ export function resizePolygon(
   newW: number,
   newH: number,
 ): Polygon {
+  newMinX = Math.round(newMinX);
+  newMinY = Math.round(newMinY);
   const bb = polygonBbox(poly);
   const oldW = bb.maxX - bb.minX;
   const oldH = bb.maxY - bb.minY;

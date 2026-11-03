@@ -18,31 +18,40 @@ export function hitTest(
   const wp = canvasToWorld(px, py, vt);
   const snapRadiusWorld = snapRadius / vt.zoom;
 
-  // 1. Vertex check
+  // 1. Vertex check: nearest vertex wins; ties go to the topmost (last) shape.
+  let bestVertex: Selection | null = null;
+  let bestVertexD = Infinity;
   for (const shape of shapes) {
     const rings = [{ ring: shape.outer, holeIndex: -1 }, ...shape.holes.map((h, i) => ({ ring: h, holeIndex: i }))];
     for (const { ring, holeIndex } of rings) {
       for (let i = 0; i < ring.length; i++) {
-        if (dist(wp, ring[i]) <= snapRadiusWorld) {
-          return { type: 'vertex', shapeId: shape.id, index: i, holeIndex };
+        const d = dist(wp, ring[i]);
+        if (d <= snapRadiusWorld && d <= bestVertexD) {
+          bestVertexD = d;
+          bestVertex = { type: 'vertex', shapeId: shape.id, index: i, holeIndex };
         }
       }
     }
   }
+  if (bestVertex) return bestVertex;
 
-  // 2. Edge check
+  // 2. Edge check: nearest edge wins; ties go to the topmost (last) shape.
+  let bestEdge: Selection | null = null;
+  let bestEdgeD = Infinity;
   for (const shape of shapes) {
     const rings = [{ ring: shape.outer, holeIndex: -1 }, ...shape.holes.map((h, i) => ({ ring: h, holeIndex: i }))];
     for (const { ring, holeIndex } of rings) {
       for (let i = 0; i < ring.length; i++) {
         const j = (i + 1) % ring.length;
-        const dSq = distSqPointToSegment(wp, ring[i], ring[j]);
-        if (Math.sqrt(dSq) <= snapRadiusWorld) {
-          return { type: 'edge', shapeId: shape.id, index: i, holeIndex };
+        const d = Math.sqrt(distSqPointToSegment(wp, ring[i], ring[j]));
+        if (d <= snapRadiusWorld && d <= bestEdgeD) {
+          bestEdgeD = d;
+          bestEdge = { type: 'edge', shapeId: shape.id, index: i, holeIndex };
         }
       }
     }
   }
+  if (bestEdge) return bestEdge;
 
   // 3. Polygon interior check (test in reverse order = topmost first)
   for (let s = shapes.length - 1; s >= 0; s--) {

@@ -56,3 +56,5 @@ The application bundles the following font files in `public/fonts/`:
 - **Noto Sans JP** (`NotoSansJP-Regular.ttf`)
   - Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Noto Sans'.
   - License: SIL Open Font License, Version 1.1
+  - Modified version: the bundled file is a subset (ASCII + JIS X 0208) of the original font, with outlines converted from CFF to TrueType (see the note in `public/fonts/OFL.txt`). The font is embedded as-is in generated PDFs and is not sold on its own.
+  - The license text is in `public/fonts/OFL.txt`. The Reserved Font Name 'Noto Sans' is not used to brand this software or the bundled file beyond the original attribution; the subset is distributed under the same OFL 1.1 terms.
