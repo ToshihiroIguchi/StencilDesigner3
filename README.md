@@ -268,6 +268,31 @@ Notes:
 
 ---
 
+## Releasing (maintainers)
+
+Releases are built and published by GitHub Actions (`.github/workflows/release.yml`). Each release
+carries `stencildesigner3-dist-<version>.zip`, which contains `dist/`, `serve.py`, `LICENSE` and
+`THIRD-PARTY-LICENSES.md`.
+
+**Option A - from the GitHub UI (recommended).** Open *Actions > Release (built dist) > Run workflow*,
+choose the branch (normally `main`) and enter a version such as `1.2.0`. The workflow validates the
+version, runs the unit tests, builds the app, smoke-tests the zip with `serve.py`, then creates the tag
+and the release. If any step fails, nothing is tagged or published. Tick **Delete all older releases**
+to keep only the newest release.
+
+**Option B - from the command line.** Merge to `main`, then tag and push:
+
+```bash
+git checkout main && git pull
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+Pushing the tag starts the same workflow. To remove an old release and its tag:
+`gh release delete v1.1.0 --cleanup-tag --yes`.
+
+---
+
 ## Build for Production
 
 ```bash

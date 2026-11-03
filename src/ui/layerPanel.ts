@@ -79,6 +79,7 @@ function setActiveLayer(deps: LayerPanelDeps, name: string): void {
   const layer = state.layers.find((l) => l.name === name);
   if (!layer) return;
   if (layer.locked) return; // A locked layer cannot be the drawing target.
+  if (name === 'DIMENSIONS') return; // Auto-managed layer; shapes are never drawn on it.
   state.activeLayerName = name;
   if (!layer.visible) {
     state.layers = state.layers.map((l) => l.name === name ? { ...l, visible: true } : l);

@@ -1,19 +1,33 @@
 name: Release (built dist)
 
-# Builds the static app and attaches a ready-to-serve dist archive to a
-# GitHub Release. Lets Python-only / offline users download a single zip,
-# unzip it, and run `python serve.py` — no
-# Node.js needed on the target machine.
+# Builds the static app and attaches a ready-to-serve dist archive to a GitHub Release.
+# Python-only / offline users download the zip, unzip it, and run `python serve.py`
+# (no Node.js needed on the target machine).
 #
-# Note: the archive is built with the DEFAULT base path ("/"), so it works
-# when served from the root of a local server (http://localhost:8600/).
-# This is intentionally different from the GitHub Pages build, which uses
-# VITE_BASE=/StencilDesigner3/.
+# Two ways to trigger it:
+#   1. Push a tag:        git tag v1.2.0 && git push origin v1.2.0
+#   2. Run it from the Actions tab ("Run workflow") with a version such as 1.2.0 -
+#      the workflow validates the version, runs the tests, creates the tag on the
+#      selected branch and publishes the release. Nothing is tagged if a test fails.
+#
+# The archive is built with the DEFAULT base path ("/"), so it works when served from
+# the root of a local server (http://localhost:8600/). This differs from the GitHub
+# Pages build, which uses VITE_BASE=/StencilDesigner3/.
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 1.2.0 (a leading "v" is optional)'
+        required: true
+        type: string
+      prune_old:
+        description: 'Delete all older releases and their tags after publishing'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -27,6 +41,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve the release tag
+        id: tag
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            v="${INPUT_VERSION#v}"
+            if ! echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "Version must look like 1.2.3 (got: $INPUT_VERSION)" >&2
+              exit 1
+            fi
+            tag="v$v"
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "Tag $tag already exists" >&2
+              exit 1
+            fi
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag"
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20.x'
@@ -34,35 +70,56 @@ jobs:
 
       - run: npm ci
 
+      # Never publish a build that fails its tests.
+      - run: npm run test:unit
+
       # Build with the default base path ("/") for local/offline serving.
       - run: npm run build
-
-      # Smoke test: serve.py must serve ES modules and WASM with the right MIME types.
-      - name: Smoke-test serve.py
-        run: |
-          python3 serve.py --no-browser --port 8010 &
-          sleep 2
-          js=$(ls dist/assets/index-*.js | head -n1 | xargs basename)
-          wasm=$(ls dist/assets/*.wasm | head -n1 | xargs basename)
-          curl -sI http://127.0.0.1:8010/ | grep -i 'content-type: text/html'
-          curl -sI "http://127.0.0.1:8010/assets/$js" | grep -i 'content-type: text/javascript'
-          curl -sI "http://127.0.0.1:8010/assets/$wasm" | grep -i 'content-type: application/wasm'
-          kill %1
 
       # Bundle the GPL-3.0 license text and third-party notices alongside the
       # built app. The dist archive conveys the GPL-licensed LibreDWG WASM
       # binary, so GPL-3.0 (§4-6) requires the license and corresponding
       # notices to accompany it.
       - name: Package dist into a zip
-        run: zip -r "stencildesigner3-dist-${{ github.ref_name }}.zip" dist serve.py LICENSE THIRD-PARTY-LICENSES.md
+        run: |
+          zip -r "stencildesigner3-dist-${{ steps.tag.outputs.tag }}.zip" dist serve.py LICENSE THIRD-PARTY-LICENSES.md
+
+      # Smoke test the real archive the way a user would use it: unzip it elsewhere and
+      # start serve.py with its default port. MIME types for ES modules and WASM must be right.
+      - name: Smoke-test the zip
+        run: |
+          mkdir -p /tmp/unzipped
+          unzip -q "stencildesigner3-dist-${{ steps.tag.outputs.tag }}.zip" -d /tmp/unzipped
+          cd /tmp/unzipped
+          python3 serve.py --no-browser &
+          server=$!
+          sleep 2
+          js=$(ls dist/assets/index-*.js | head -n1 | xargs basename)
+          wasm=$(ls dist/assets/*.wasm | head -n1 | xargs basename)
+          curl -sfI http://127.0.0.1:8600/ | grep -i 'content-type: text/html'
+          curl -sfI "http://127.0.0.1:8600/assets/$js" | grep -i 'content-type: text/javascript'
+          curl -sfI "http://127.0.0.1:8600/assets/$wasm" | grep -i 'content-type: application/wasm'
+          kill $server
 
       - name: Create or update the release and upload the archive
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            "stencildesigner3-dist-${{ github.ref_name }}.zip" \
-            --title "${{ github.ref_name }}" \
-            --generate-notes \
-            || gh release upload "${{ github.ref_name }}" \
-                 "stencildesigner3-dist-${{ github.ref_name }}.zip" --clobber
+          tag="${{ steps.tag.outputs.tag }}"
+          zip="stencildesigner3-dist-$tag.zip"
+          # --target makes gh create the tag on this commit when it does not exist yet.
+          gh release create "$tag" "$zip" --title "$tag" --generate-notes --target "$GITHUB_SHA" \
+            || gh release upload "$tag" "$zip" --clobber
+
+      - name: Delete older releases and tags
+        if: ${{ inputs.prune_old }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r old; do
+            if [ "$old" != "$tag" ]; then
+              echo "Deleting $old"
+              gh release delete "$old" --cleanup-tag --yes
+            fi
+          done
