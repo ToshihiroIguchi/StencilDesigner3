@@ -2,7 +2,7 @@
 """Serve the built StencilDesigner3 app (dist/) using only the Python standard library.
 
 Usage:
-    python serve.py                 # http://127.0.0.1:8000/, opens the browser
+    python serve.py                 # http://127.0.0.1:8600/, opens the browser
     python serve.py --port 9090 --no-browser
 
 Why not `python -m http.server`? It guesses MIME types from the OS (on Windows,
@@ -47,7 +47,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Serve the built StencilDesigner3 app.")
     parser.add_argument("--dir", default=os.path.join(here, "dist"), help="directory to serve (default: ./dist)")
     parser.add_argument("--host", default="127.0.0.1", help="address to bind (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8000, help="port to listen on (default: 8000)")
+    parser.add_argument("--port", type=int, default=8600, help="port to listen on (default: 8600)")
     parser.add_argument("--no-browser", action="store_true", help="do not open a browser window")
     args = parser.parse_args()
 

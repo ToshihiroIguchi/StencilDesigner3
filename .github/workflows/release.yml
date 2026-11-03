@@ -6,7 +6,7 @@ name: Release (built dist)
 # Node.js needed on the target machine.
 #
 # Note: the archive is built with the DEFAULT base path ("/"), so it works
-# when served from the root of a local server (http://localhost:8000/).
+# when served from the root of a local server (http://localhost:8600/).
 # This is intentionally different from the GitHub Pages build, which uses
 # VITE_BASE=/StencilDesigner3/.
 
