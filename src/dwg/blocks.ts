@@ -46,7 +46,9 @@ export function insertMatrix(ins: DwgInsertEntity, basePoint: DwgPoint3D): Mat {
   const rot = ins.rotation ?? 0;
   const cos = Math.cos(rot);
   const sin = Math.sin(rot);
-  const ip = ins.insertionPoint;
+  const ip = ins.insertionPoint ?? { x: 0, y: 0 };
+  const bx = basePoint?.x ?? 0;
+  const by = basePoint?.y ?? 0;
 
   // 2x3 matrix with T(ip) · R · S expanded directly.
   // R·S = [[cos*sx, -sin*sy],[sin*sx, cos*sy]]
@@ -56,7 +58,7 @@ export function insertMatrix(ins: DwgInsertEntity, basePoint: DwgPoint3D): Mat {
     e: ip.x, f: ip.y,
   };
   // Compose T(-basePoint) on the right so the base-point subtraction happens first.
-  const tNegBase: Mat = { a: 1, b: 0, c: 0, d: 1, e: -basePoint.x, f: -basePoint.y };
+  const tNegBase: Mat = { a: 1, b: 0, c: 0, d: 1, e: -bx, f: -by };
   return multiply(rs, tNegBase);
 }
 
@@ -66,7 +68,11 @@ export function buildBlockMap(
 ): Map<string, DwgBlockRecordTableEntry> {
   const map = new Map<string, DwgBlockRecordTableEntry>();
   for (const e of entries) {
-    if (e?.name) map.set(e.name, e);
+    if (e?.name) {
+      map.set(e.name, e);
+      map.set(e.name.toUpperCase(), e);
+      map.set(e.name.toLowerCase(), e);
+    }
   }
   return map;
 }
@@ -101,9 +107,10 @@ export function flattenEntities(
 
       if (ent.type === 'INSERT') {
         const ins = ent as DwgInsertEntity;
-        const block = blockMap.get(ins.name);
+        const blockName = ins.name;
+        const block = blockMap.get(blockName) ?? (typeof blockName === 'string' ? (blockMap.get(blockName.toUpperCase()) ?? blockMap.get(blockName.toLowerCase())) : undefined);
         if (!block) continue;
-        if (visited.has(ins.name)) continue; // cycle guard
+        if (visited.has(blockName)) continue; // cycle guard
         const cols = Math.max(1, ins.columnCount ?? 1);
         const rows = Math.max(1, ins.rowCount ?? 1);
         const colSp = ins.columnSpacing ?? 0;

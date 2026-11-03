@@ -18,9 +18,18 @@ export interface DocMetadata {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let isDirty = false;
+let autosavePaused = false;
 
 export function markDirty(): void {
   isDirty = true;
+}
+
+export function getIsDirty(): boolean {
+  return isDirty;
+}
+
+export function setAutosavePaused(paused: boolean): void {
+  autosavePaused = paused;
 }
 
 async function setList(list: DocMetadata[]): Promise<void> {
@@ -40,14 +49,26 @@ export async function loadDoc(id: string): Promise<AppState | null> {
 
 export async function saveDoc(id: string, state: AppState): Promise<void> {
   const snapshot = JSON.parse(JSON.stringify(state)) as AppState;
-  await localforage.setItem(`doc:${id}`, snapshot);
+  // Skip docs that no longer exist (e.g. deleted while still current) so no orphan blob is resurrected.
+  const listBefore = await listDocs();
+  if (!listBefore.some((d) => d.id === id)) {
+    isDirty = false;
+    return;
+  }
+  // Clear the flag before the async write: edits made during the await re-set it and are not lost.
   isDirty = false;
-  const list = await listDocs();
-  const idx = list.findIndex((d) => d.id === id);
-  if (idx >= 0) {
-    list[idx].lastModified = Date.now();
-    list[idx].sizeBytes = JSON.stringify(state).length;
-    await setList(list);
+  try {
+    await localforage.setItem(`doc:${id}`, snapshot);
+    const list = await listDocs();
+    const idx = list.findIndex((d) => d.id === id);
+    if (idx >= 0) {
+      list[idx].lastModified = Date.now();
+      list[idx].sizeBytes = JSON.stringify(snapshot).length;
+      await setList(list);
+    }
+  } catch (e) {
+    isDirty = true;
+    throw e;
   }
 }
 
@@ -121,7 +142,7 @@ export function startDocAutosave(
 ): () => void {
   const tick = async () => {
     const id = getDocId();
-    if (isDirty && id) {
+    if (isDirty && id && !autosavePaused) {
       try {
         await saveDoc(id, getState());
       } catch (e) {

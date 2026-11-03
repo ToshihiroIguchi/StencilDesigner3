@@ -15,9 +15,18 @@ export interface LayerPanelDeps {
   requestRender(): void;
 }
 
+let lastRenderedStateKey = '';
+
 export function renderLayerPanel(deps: LayerPanelDeps, state: AppState): void {
   const listEl = document.getElementById('layer-list');
   if (!listEl) return;
+
+  const key = `${state.activeLayerName}|${state.layers.map((l) => `${l.name}:${l.color}:${l.visible}:${l.isAperture}:${l.locked}`).join(';')}`;
+  if (key === lastRenderedStateKey && listEl.children.length === state.layers.length) {
+    return;
+  }
+  lastRenderedStateKey = key;
+
   listEl.innerHTML = '';
   for (const layer of state.layers) {
     const isActive = layer.name === state.activeLayerName;
@@ -69,6 +78,7 @@ function setActiveLayer(deps: LayerPanelDeps, name: string): void {
   if (!layer.visible) {
     state.layers = state.layers.map((l) => l.name === name ? { ...l, visible: true } : l);
   }
+  markDirty();
   deps.requestRender();
 }
 

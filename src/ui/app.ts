@@ -19,7 +19,7 @@ import { findSnap, type SnapResult, findSelectionSnap, type SelectionSnapResult 
 import {
   DeleteCommand, UnionCommand, DifferenceCommand,
   DuplicateCommand, MoveCommand,
-  PasteCommand, SetSelectionCommand,
+  PasteCommand,
   ImportBatchCommand,
 } from '../state/commands';
 import { normalizeAll } from '../normalize';
@@ -27,7 +27,7 @@ import { loadPrefs } from '../state/autosave';
 import {
   listDocs, loadDoc, saveDoc, createDoc, deleteDoc, renameDoc,
   getCurrentDocId, setCurrentDocId,
-  migrateLegacyKey, uniqueUntitledName, markDirty, startDocAutosave,
+  migrateLegacyKey, uniqueUntitledName, markDirty, getIsDirty, startDocAutosave, setAutosavePaused,
 } from '../state/docStore';
 import { importDxf, type ImportResult } from '../dxf/importer';
 import { downloadDxf } from '../dxf/exporter';
@@ -81,6 +81,7 @@ export class App {
   private isDark = true;
   private activeTool: AnyTool;
   private isPanning = false;
+  private mouseDownOnCanvas = false;
   private isSpacePressed = false;
   private panStart: { x: number; y: number } | null = null;
   private panOrigin: { x: number; y: number } | null = null;
@@ -301,7 +302,8 @@ export class App {
   private setupEventListeners(): void {
     this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
     this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    // Listen on window so a release outside the canvas still ends drags and pans
+    window.addEventListener('mouseup', (e) => this.onMouseUp(e));
     this.canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('dblclick', (e) => this.onDblClick(e));
@@ -475,6 +477,7 @@ export class App {
   }
 
   private onMouseDown(e: MouseEvent): void {
+    this.mouseDownOnCanvas = true;
     if (e.button === 2 || (e.button === 1) || (e.button === 0 && this.isSpacePressed)) {
       // Right, middle, or left + Space: pan
       this.isPanning = true;
@@ -529,6 +532,9 @@ export class App {
   }
 
   private onMouseUp(e: MouseEvent): void {
+    // Ignore releases that did not start with a press on the canvas (e.g. toolbar clicks)
+    if (!this.mouseDownOnCanvas) return;
+    this.mouseDownOnCanvas = false;
     if (this.isPanning) {
       this.isPanning = false;
       this.panStart = null;
@@ -642,21 +648,21 @@ export class App {
       const key = e.key.toLowerCase();
       // Ctrl+Shift+Z must be checked before plain Ctrl+Z
       if (key === 'z' && e.shiftKey) {
-        if (editingText) return;
+        if (inInput || editingText || this.isAnyModalOpen()) return;
         e.preventDefault(); this.redo(); return;
       }
       if (key === 'z') {
-        if (editingText) return;
+        if (inInput || editingText || this.isAnyModalOpen()) return;
         e.preventDefault(); this.undo(); return;
       }
       if (key === 'y') {
-        if (editingText) return;
+        if (inInput || editingText || this.isAnyModalOpen()) return;
         e.preventDefault(); this.redo(); return;
       }
       if (key === 's') { e.preventDefault(); if (this.currentDocId) void saveDoc(this.currentDocId, this.history.state); return; }
-      // Clipboard / selection shortcuts — skip when focus is in an input or text tool is
+      // Clipboard / selection shortcuts — skip when focus is in an input, modal is open, or text tool is
       // editing; leave Shift-modified combos (e.g. Ctrl+Shift+C = devtools) to the browser
-      if (!inInput && !editingText && !e.shiftKey) {
+      if (!inInput && !editingText && !this.isAnyModalOpen() && !e.shiftKey) {
         if (key === 'a') { e.preventDefault(); this.selectAll(); return; }
         if (key === 'c') { e.preventDefault(); this.copySelectedToClipboard(); return; }
         if (key === 'x') { e.preventDefault(); this.cutSelected(); return; }
@@ -664,7 +670,7 @@ export class App {
         if (key === 'd') { e.preventDefault(); this.duplicateSelected(); return; }
       }
     }
-    if (!inInput && !e.ctrlKey && !e.metaKey) {
+    if (!inInput && !this.isAnyModalOpen() && !e.ctrlKey && !e.metaKey) {
       if (e.key === '?' || e.key === 'h' || e.key === 'H') { e.preventDefault(); this.toggleHelpModal(); return; }
       if (e.key === 'g' || e.key === 'G' || e.key === 'o' || e.key === 'O') {
         e.preventDefault();
@@ -732,7 +738,7 @@ export class App {
         }
       }
     }
-    if (e.key === 'Delete' || e.key === 'Backspace') {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && !this.isAnyModalOpen()) {
       // PolygonTool in progress consumes Backspace to pop the last vertex
       if (!inInput && this.activeTool instanceof PolygonTool && this.activeTool.isDrawing()) {
         // handled by onKeyDown below
@@ -751,7 +757,9 @@ export class App {
         if (relCoords) relCoords.style.display = 'none';
       }
     }
-    this.activeTool.onKeyDown(e.key, this.history.state);
+    if (!inInput && !this.isAnyModalOpen()) {
+      this.activeTool.onKeyDown(e.key, this.history.state);
+    }
   }
 
   setTool(tool: ToolType): void {
@@ -803,13 +811,31 @@ export class App {
   }
 
   undo(): void {
-    this.history.undo();
+    if (this.history.undo()) {
+      this.pruneSelection();
+      markDirty();
+    }
     this.requestRender();
   }
 
   redo(): void {
-    this.history.redo();
+    if (this.history.redo()) {
+      this.pruneSelection();
+      markDirty();
+    }
     this.requestRender();
+  }
+
+  /** Drop selection entries whose target no longer exists after undo/redo. */
+  private pruneSelection(): void {
+    const state = this.history.state;
+    const ids = new Set<string>([
+      ...state.shapes.map((s) => s.id),
+      ...state.dimensions.map((d) => d.id),
+      ...state.annotations.map((a) => a.id),
+    ]);
+    if (state.selection.every((s) => ids.has(s.shapeId))) return;
+    state.selection = state.selection.filter((s) => ids.has(s.shapeId));
   }
 
   deleteSelected(): void {
@@ -837,7 +863,7 @@ export class App {
     this.diffStep = 1;
     const prevSel = this.history.state.selection;
     if (prevSel.length > 0) {
-      this.history.execute(new SetSelectionCommand([], prevSel));
+      this.history.state.selection = [];
     }
     this.canvas.style.cursor = 'crosshair';
     document.getElementById('btn-difference')?.classList.add('active');
@@ -896,7 +922,7 @@ export class App {
     const newIds = new Set(newSel.map((s) => s.shapeId));
     const unchanged = currentIds.size === newIds.size && [...newIds].every((id) => currentIds.has(id));
     if (unchanged) return;
-    this.history.execute(new SetSelectionCommand(newSel, state.selection));
+    state.selection = newSel;
     this.requestRender();
   }
 
@@ -1244,12 +1270,25 @@ export class App {
           }
         }
 
-        this.history.execute(new ImportBatchCommand(newLayersToCreate, polygonsToImport));
+        // Text entities (MTEXT / TEXT) become annotations, scaled like the geometry.
+        const knownLayers = new Set([...currentExisting, ...newLayersToCreate.map((l) => l.name)]);
+        const annotationsToImport = (result.annotations ?? [])
+          .filter((a) => selectedLayers.has(a.layer))
+          .map((a) => ({
+            ...a,
+            layer: knownLayers.has(a.layer) ? a.layer : state.activeLayerName,
+            origin: { x: Math.round(a.origin.x * ratio), y: Math.round(a.origin.y * ratio) },
+            heightUm: Math.max(1, Math.round(a.heightUm * ratio)),
+          }));
+
+        this.history.execute(new ImportBatchCommand(newLayersToCreate, polygonsToImport, annotationsToImport));
         markDirty();
         this.fitToContent();
 
         const dropped = result.ignoredCounts['DROPPED_DEGENERATE'];
-        let msg = `Imported ${polygonsToImport.length} shapes across ${selectedLayers.size} layers.`;
+        let msg = `Imported ${polygonsToImport.length} shapes` +
+          (annotationsToImport.length > 0 ? ` and ${annotationsToImport.length} text notes` : '') +
+          ` across ${selectedLayers.size} layers.`;
         if (dropped) {
           msg += ` (${dropped} degenerate shapes skipped)`;
         }
@@ -1367,7 +1406,7 @@ export class App {
     const isUntitled = !this.currentDocName || /^Untitled( \d+)?$/.test(this.currentDocName);
     const namePrefix = isUntitled ? (config.defaultFilename || 'stencil') : this.currentDocName;
     const filename = `${namePrefix}.dxf`;
-    downloadDxf(state.shapes, state.layers, state.annotations, filename);
+    downloadDxf(state.shapes, state.layers, state.annotations, state.dimensions, filename, state.displayUnit);
   }
 
   async exportPdf(): Promise<void> {
@@ -1411,9 +1450,20 @@ export class App {
   // ─── Document management ────────────────────────────────────────────────────
 
   async openDoc(id: string): Promise<void> {
+    if (this.currentDocId && this.currentDocId !== id && getIsDirty()) {
+      try {
+        await saveDoc(this.currentDocId, this.history.state);
+      } catch (e) {
+        console.error('Failed to auto-save current document before switching:', e);
+      }
+    }
     const state = await loadDoc(id);
     if (!state) return;
     this.cancelDiffMode();
+    this.activeTool.cancel();
+    this.isPanning = false;
+    this.mouseDownOnCanvas = false;
+    setAutosavePaused(false);
     this.history.loadState(state);
     const s = this.history.state;
     s.gridSize = computeNiceGridSize(s.zoom);

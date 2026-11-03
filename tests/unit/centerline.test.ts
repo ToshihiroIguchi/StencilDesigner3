@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createDefaultState } from '../../src/types';
 import { AddDimensionCommand, DeleteDimensionCommand } from '../../src/state/commands';
 import { hitTestDimension } from '../../src/core/selection';
+import { centerlineEndpoints } from '../../src/core/centerline-geometry';
 import type { Dimension, ViewTransform } from '../../src/types';
 
 function makeCenterline(p1x: number, p1y: number, p2x: number, p2y: number): Dimension {
@@ -69,5 +70,28 @@ describe('Centerline (Dimension kind=centerline)', () => {
     const hit = hitTestDimension(2500, 0, [cl], [], VT, 10);
     expect(hit).not.toBeNull();
     expect(hit?.part).toBe('dimLine');
+  });
+
+  it('centerlineEndpoints for non-parallel edges places centerline between edges rather than at distant intersection', () => {
+    // Two slightly tapered vertical-ish edges at y=1000..2000, x around 1000 and 2000
+    // Edge 1: (950, 1000) to (1050, 2000)
+    // Edge 2: (2050, 1000) to (1950, 2000)
+    const e1: [{ x: number; y: number }, { x: number; y: number }] = [
+      { x: 950, y: 1000 },
+      { x: 1050, y: 2000 },
+    ];
+    const e2: [{ x: number; y: number }, { x: number; y: number }] = [
+      { x: 2050, y: 1000 },
+      { x: 1950, y: 2000 },
+    ];
+    const cl = centerlineEndpoints(e1, e2);
+    expect(cl).not.toBeNull();
+    if (!cl) return;
+
+    // Centerline should be near x=1500 (between the two edges) and spanning y around 1000..2000
+    expect(cl.p1.x).toBeCloseTo(1500, -2);
+    expect(cl.p2.x).toBeCloseTo(1500, -2);
+    expect(Math.min(cl.p1.y, cl.p2.y)).toBeLessThanOrEqual(1000);
+    expect(Math.max(cl.p1.y, cl.p2.y)).toBeGreaterThanOrEqual(2000);
   });
 });

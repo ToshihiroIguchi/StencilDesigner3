@@ -73,8 +73,10 @@ export class RectTool extends BaseTool {
 
       if (shift) {
         const size = Math.max(Math.abs(dx), Math.abs(dy));
-        dx = Math.sign(dx) * size;
-        dy = Math.sign(dy) * size;
+        const signX = Math.sign(dx) || 1;
+        const signY = Math.sign(dy) || 1;
+        dx = signX * size;
+        dy = signY * size;
       }
 
       const end = { x: this.startPt.x + dx, y: this.startPt.y + dy };
@@ -96,8 +98,10 @@ export class RectTool extends BaseTool {
 
       if (shift) {
         const size = Math.max(Math.abs(dx), Math.abs(dy));
-        dx = Math.sign(dx) * size;
-        dy = Math.sign(dy) * size;
+        const signX = Math.sign(dx) || 1;
+        const signY = Math.sign(dy) || 1;
+        dx = signX * size;
+        dy = signY * size;
       }
 
       const x2 = this.startPt.x + dx;

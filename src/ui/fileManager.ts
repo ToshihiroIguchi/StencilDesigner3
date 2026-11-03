@@ -144,10 +144,16 @@ export async function showFileManager(deps: FileManagerDeps): Promise<void> {
         if (!ok) return;
         await deleteDoc(id);
         if (id === deps.getCurrentDocId()) {
-          await deps.setCurrentDocId(null);
+          const remaining = await listDocs();
+          if (remaining.length > 0) {
+            await deps.openDoc(remaining[0].id);
+          } else {
+            const meta = await createDoc('Untitled');
+            await deps.openDoc(meta.id);
+          }
         }
         await renderList();
-        if (closeBtn) closeBtn.style.display = deps.getCurrentDocId() ? '' : 'none';
+        if (closeBtn) closeBtn.style.display = '';
       }
       return;
     }

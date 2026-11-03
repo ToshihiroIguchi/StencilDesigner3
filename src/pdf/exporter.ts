@@ -4,7 +4,7 @@ import { resolveDimension } from '../core/dimension-resolve';
 import { UnitConverter } from '../core/format';
 
 function containsJapanese(text: string): boolean {
-  return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/.test(text);
+  return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\u00b5\u03bc]/.test(text);
 }
 
 function uint8ArrayToBase64(uint8: Uint8Array): string {
@@ -62,6 +62,7 @@ async function loadJpFont(): Promise<string | null> {
       return base64;
     } catch (e) {
       console.warn('Failed to load Japanese font NotoSansJP-Regular.ttf, falling back to standard helvetica:', e);
+      jpFontLoadingPromise = null;
       return null;
     }
   })();
@@ -561,6 +562,10 @@ export async function buildPdf(state: AppState, docName: string, appName = 'Sten
         }
       }
     }
+  }
+
+  if (!hasJp && state.displayUnit === 'um') {
+    hasJp = true;
   }
 
   // 2. Setup A4 page framework

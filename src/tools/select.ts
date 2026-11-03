@@ -1,9 +1,9 @@
-import type { AppState, Annotation, Command, Point, Polygon, Selection } from '../types';
+import type { AppState, Annotation, Point, Polygon, Selection } from '../types';
 import { BaseTool, type ToolContext } from './base';
 import { hitTest, hitTestAnnotation, hitTestDimension, rubberBandSelect } from '../core/selection';
-import { CompoundCommand, MoveAnnotationCommand, MoveCommand, SetSelectionCommand } from '../state/commands';
+import { MoveCommand } from '../state/commands';
 import { translatePolygon } from '../core/geometry';
-import { markDirty } from '../state/docStore';
+import { markDirty, setAutosavePaused } from '../state/docStore';
 import type { SelectionSnapResult } from '../core/snap';
 
 const DRAG_THRESHOLD_PX = 5;
@@ -34,6 +34,8 @@ export class SelectTool extends BaseTool {
   }
 
   onMouseDown(worldPt: Point, canvasPt: Point, shift: boolean, state: AppState): void {
+    // Recover from any drag that was never terminated
+    setAutosavePaused(false);
     this.dragStartCanvas = { ...canvasPt };
     this.moveOrigin = { ...worldPt };
     this.dragThresholdReached = false;
@@ -69,11 +71,11 @@ export class SelectTool extends BaseTool {
       const alreadySelected = state.selection.some((s) => s.shapeId === hit.shapeId);
       if (!alreadySelected) {
         const newSel = shift ? [...state.selection, hit] : [hit];
-        this.ctx.history.execute(new SetSelectionCommand(newSel, state.selection));
+        state.selection = newSel; // selection is view-state: not recorded in history
         this.isDragging = true;
       } else if (shift) {
         const newSel = state.selection.filter((s) => s.shapeId !== hit.shapeId);
-        this.ctx.history.execute(new SetSelectionCommand(newSel, state.selection));
+        state.selection = newSel;
         this.isDragging = false;
       } else {
         this.isDragging = true;
@@ -89,7 +91,7 @@ export class SelectTool extends BaseTool {
     } else {
       this.isDragging = false;
       if (!shift) {
-        this.ctx.history.execute(new SetSelectionCommand([], state.selection));
+        state.selection = [];
       }
       this.isRubberBand = true;
       this.rubberBandStart = { ...canvasPt };
@@ -107,6 +109,7 @@ export class SelectTool extends BaseTool {
         const dyPx = canvasPt.y - this.dragStartCanvas.y;
         if (Math.sqrt(dxPx * dxPx + dyPx * dyPx) > DRAG_THRESHOLD_PX) {
           this.dragThresholdReached = true;
+          setAutosavePaused(true);
         }
       }
 
@@ -200,8 +203,7 @@ export class SelectTool extends BaseTool {
         const added = shift ? sel.filter((s) => !existingIds.has(s.shapeId)) : sel;
         if (!shift || added.length > 0) {
           const newSel = shift ? [...state.selection, ...added] : added;
-          this.ctx.history.execute(new SetSelectionCommand(newSel, state.selection));
-          markDirty();
+          state.selection = newSel;
         }
       }
     }
@@ -211,20 +213,7 @@ export class SelectTool extends BaseTool {
       state.shapes = this.savedShapes;
       state.annotations = this.savedAnnotations ?? state.annotations;
       if (this.pendingDx !== 0 || this.pendingDy !== 0) {
-        const cmds: Command[] = [];
-        const shapeSel = savedSel.filter((s) => s.type !== 'annotation');
-        if (shapeSel.length > 0) {
-          cmds.push(new MoveCommand(shapeSel, this.pendingDx, this.pendingDy));
-        }
-        const annIds = savedSel.filter((s) => s.type === 'annotation').map((s) => s.shapeId);
-        for (const id of annIds) {
-          const ann = state.annotations.find((a) => a.id === id);
-          if (!ann) continue;
-          const newOrigin = { x: ann.origin.x + this.pendingDx, y: ann.origin.y + this.pendingDy };
-          cmds.push(new MoveAnnotationCommand(id, newOrigin));
-        }
-        if (cmds.length === 1) this.ctx.history.execute(cmds[0]);
-        else if (cmds.length > 1) this.ctx.history.execute(new CompoundCommand(cmds));
+        this.ctx.history.execute(new MoveCommand(savedSel, this.pendingDx, this.pendingDy));
         markDirty();
       }
     }
@@ -258,6 +247,7 @@ export class SelectTool extends BaseTool {
     this.savedShapes = null;
     this.savedAnnotations = null;
     this.savedSelection = null;
+    setAutosavePaused(false);
     this.dragThresholdReached = false;
     this.pendingDx = 0;
     this.pendingDy = 0;

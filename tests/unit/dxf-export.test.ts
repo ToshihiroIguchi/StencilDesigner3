@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { exportDxf } from '../../src/dxf/exporter';
 import { rectToPolygon } from '../../src/core/geometry';
 import { defaultLayers, DIMENSIONS_LAYER } from '../../src/types';
-import type { Annotation, Layer } from '../../src/types';
+import type { Annotation, Layer, Dimension } from '../../src/types';
 
 const layers = defaultLayers();
 const apertureLayer = layers.find((l) => l.isAperture && l.name === '0')!;
@@ -182,5 +182,33 @@ describe('exportDxf — ACI color mapping', () => {
     // #10ef10 maps to ACI 96 (#1fff1f) with the full 255-colour palette; layer is
     // hidden so the sign is negated.
     expect(greenAciSection).toContain('62\n-96');
+  });
+});
+
+describe('exportDxf — dimension export', () => {
+  it('exports horizontal linear dimension and centerline as DXF entities', () => {
+    const dim: Dimension = {
+      id: 'd1',
+      kind: 'linear-h',
+      anchor1: { kind: 'free', point: { x: 1000, y: 1000 } },
+      anchor2: { kind: 'free', point: { x: 5000, y: 1000 } },
+      offset: 3000,
+      layer: 'DIMENSIONS',
+      frozen: false,
+    };
+    const cl: Dimension = {
+      id: 'cl1',
+      kind: 'centerline',
+      anchor1: { kind: 'free', point: { x: 2000, y: 2000 } },
+      anchor2: { kind: 'free', point: { x: 2000, y: 8000 } },
+      offset: 0,
+      layer: 'DIMENSIONS',
+      frozen: false,
+    };
+    const dxf = exportDxf([], layers, [], [dim, cl]);
+    expect(dxf).toContain('2\nDIMENSIONS');
+    expect(dxf).toContain('0\nLINE');
+    expect(dxf).toContain('0\nMTEXT');
+    expect(dxf).toContain('4.000 mm');
   });
 });

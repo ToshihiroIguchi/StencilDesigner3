@@ -118,13 +118,19 @@ function bisectorCenterline(e1: [Point, Point], e2: [Point, Point]): { p1: Point
   const midDir = { x: (midA.x + midB.x) / 2 - ix, y: (midA.y + midB.y) / 2 - iy };
   if (bx * midDir.x + by * midDir.y < 0) { bx = -bx; by = -by; }
 
-  // Half-length = mean edge length / 2, extended by CENTERLINE_EXTENSION_RATIO on each end
-  const baseHalf = Math.round((lenA + lenB) / 4);
-  const ext = Math.round(baseHalf * 2 * CENTERLINE_EXTENSION_RATIO);
-  const halfLen = baseHalf + ext;
+  // Project all 4 endpoints onto the bisector ray originating from (ix, iy)
+  const proj = (p: Point) => (p.x - ix) * bx + (p.y - iy) * by;
+  const pA1 = proj(a1), pA2 = proj(a2);
+  const pB1 = proj(b1), pB2 = proj(b2);
+
+  const minP = Math.min(pA1, pA2, pB1, pB2);
+  const maxP = Math.max(pA1, pA2, pB1, pB2);
+  const baseLen = Math.max(0, maxP - minP) || (lenA + lenB) / 2;
+  const ext = baseLen * CENTERLINE_EXTENSION_RATIO;
+
   return {
-    p1: { x: Math.round(ix - halfLen * bx), y: Math.round(iy - halfLen * by) },
-    p2: { x: Math.round(ix + halfLen * bx), y: Math.round(iy + halfLen * by) },
+    p1: { x: Math.round(ix + (minP - ext) * bx), y: Math.round(iy + (minP - ext) * by) },
+    p2: { x: Math.round(ix + (maxP + ext) * bx), y: Math.round(iy + (maxP + ext) * by) },
   };
 }
 

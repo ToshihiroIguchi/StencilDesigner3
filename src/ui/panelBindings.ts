@@ -1,4 +1,5 @@
 import type { History } from '../state/history';
+import type { Selection } from '../types';
 import { UnitConverter } from '../core/format';
 import { savePrefs } from '../state/autosave';
 import { markDirty } from '../state/docStore';
@@ -139,7 +140,9 @@ export function bindPanelInputs(deps: PanelBindingsDeps): void {
     const dx = newX - bb.minX;
     const dy = newY - bb.minY;
     if (dx === 0 && dy === 0) return;
-    deps.history.execute(new MoveCommand(state.selection, dx, dy));
+    // Always move the whole polygon, regardless of vertex/edge/annotation selection entries
+    const wholeSel: Selection[] = [{ type: 'polygon', shapeId: shapes[0].id, index: -1, holeIndex: -1 }];
+    deps.history.execute(new MoveCommand(wholeSel, dx, dy));
     markDirty();
     deps.requestRender();
   };
