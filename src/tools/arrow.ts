@@ -16,7 +16,8 @@ export class ArrowTool extends BaseTool {
     super(ctx);
   }
 
-  onMouseDown(worldPt: Point, _canvasPt: Point, _shift: boolean, _state: AppState): void {
+  onMouseDown(worldPt: Point, _canvasPt: Point, _shift: boolean, state: AppState): void {
+    if (this.isDimensionsLayerBlocked(state)) return;
     const s = this.ctx.getSnap(worldPt);
     this.p1 = s.point;
     this.anchor1 = snapToDimensionAnchor(s);

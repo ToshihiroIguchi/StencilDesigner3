@@ -41,7 +41,14 @@ export class AnnotationTool extends BaseTool {
 
   // ── Mouse handlers ───────────────────────────────────────────────────────────
 
-  onMouseDown(worldPt: Point, canvasPt: Point, _shift: boolean, _state: AppState): void {
+  onMouseDown(worldPt: Point, canvasPt: Point, _shift: boolean, state: AppState): void {
+    if (this.isDimensionsLayerBlocked(state)) {
+      if (this.overlay.isOpen) {
+        this.overlay.cancelBlurTimer();
+        this.overlay.commit();
+      }
+      return;
+    }
     const snapped = this.ctx.getSnap(worldPt).point;
     if (this.overlay.isOpen) {
       this.overlay.cancelBlurTimer();

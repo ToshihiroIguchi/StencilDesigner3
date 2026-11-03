@@ -208,18 +208,26 @@ copy that folder over.)
 
 **Step 3 — Serve it with Python on the target machine**
 
+Place `serve.py` (included in the release zip) next to the `dist/` folder, then run:
+
 ```bash
 # Windows (Command Prompt / PowerShell)
-python -m http.server 8000 --directory dist
+python serve.py
 
 # macOS / Linux
-python3 -m http.server 8000 --directory dist
+python3 serve.py
 ```
 
-Open **http://localhost:8000** in your browser. Node.js is never installed on this machine.
+The browser opens at **http://127.0.0.1:8000/**. Useful options: `--port 9090`,
+`--no-browser`, `--dir <path>`, and `--host 0.0.0.0` to let other machines on the
+network connect. Node.js is never installed on this machine. Press `Ctrl + C` to stop.
 
-> **Tip:** To let other machines on the same network reach it, the built-in server already
-> binds to all interfaces by default; open `http://<this-machine-ip>:8000` from another device.
+`serve.py` uses only the Python standard library (3.7+) and pins the MIME types the app
+needs (`text/javascript` for ES modules and Workers, `application/wasm` for DWG import).
+
+> **Alternative:** `python -m http.server 8000 --directory dist` also works, but on some
+> Windows machines the registry maps `.js` to `text/plain`, which makes the browser reject
+> the app's scripts and leaves a blank page. If that happens, use `serve.py`.
 
 ---
 

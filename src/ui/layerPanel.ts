@@ -4,7 +4,7 @@ import type { Command } from '../types';
 import {
   AddLayerCommand, DeleteLayerCommand, RenameLayerCommand,
   UpdateLayerStyleCommand, MoveShapesToLayerCommand,
-  SetSelectionCommand, CompoundCommand,
+  SetSelectionCommand, CompoundCommand, layerNameTaken, canRenameLayer,
 } from '../state/commands';
 import { markDirty } from '../state/docStore';
 import { showInputModal, showMessageModal } from './modals';
@@ -142,9 +142,14 @@ export async function addLayer(deps: LayerPanelDeps): Promise<void> {
   const name = await showInputModal({ title: 'New Layer', label: 'Layer name:' });
   if (!name) return;
   const trimmed = name.trim();
+  if (!trimmed) return;
   const state = deps.history.state;
-  if (state.layers.some((l) => l.name === trimmed)) {
-    await showMessageModal({ title: 'New Layer', message: `Layer "${trimmed}" already exists.` });
+  if (trimmed.toUpperCase() === 'DIMENSIONS') {
+    await showMessageModal({ title: 'New Layer', message: '"DIMENSIONS" is a reserved layer name.' });
+    return;
+  }
+  if (layerNameTaken(state.layers, trimmed)) {
+    await showMessageModal({ title: 'New Layer', message: `Layer "${trimmed}" already exists (names are case-insensitive).` });
     return;
   }
   deps.history.execute(new AddLayerCommand({
@@ -156,12 +161,20 @@ export async function addLayer(deps: LayerPanelDeps): Promise<void> {
 }
 
 async function renameLayer(deps: LayerPanelDeps, name: string): Promise<void> {
+  if (name === 'DIMENSIONS') {
+    await showMessageModal({ title: 'Rename Layer', message: 'The DIMENSIONS layer is managed automatically and cannot be renamed.' });
+    return;
+  }
   const newName = await showInputModal({ title: 'Rename Layer', label: 'New name:', defaultValue: name });
   if (!newName || newName.trim() === name) return;
   const trimmed = newName.trim();
   const state = deps.history.state;
-  if (state.layers.some((l) => l.name === trimmed)) {
-    await showMessageModal({ title: 'Rename Layer', message: `Layer "${trimmed}" already exists.` });
+  if (trimmed.toUpperCase() === 'DIMENSIONS') {
+    await showMessageModal({ title: 'Rename Layer', message: '"DIMENSIONS" is a reserved layer name.' });
+    return;
+  }
+  if (!canRenameLayer(state.layers, name, trimmed)) {
+    await showMessageModal({ title: 'Rename Layer', message: `Layer "${trimmed}" already exists (names are case-insensitive).` });
     return;
   }
   deps.history.execute(new RenameLayerCommand(name, trimmed));
@@ -196,7 +209,7 @@ async function deleteLayer(deps: LayerPanelDeps, name: string): Promise<void> {
 
   msg.textContent = `Layer "${name}" has ${shapeCount} shape(s).`;
   targetSel.innerHTML = state.layers
-    .filter((l) => l.name !== name)
+    .filter((l) => l.name !== name && l.name !== 'DIMENSIONS')
     .map((l) => `<option value="${escHtml(l.name)}">${escHtml(l.name)}</option>`)
     .join('');
 
@@ -223,6 +236,8 @@ async function deleteLayer(deps: LayerPanelDeps, name: string): Promise<void> {
     deps.requestRender();
   };
 
+  // DIMENSIONS items cannot live on other layers, and nothing may be moved onto DIMENSIONS.
+  btnMove.disabled = name === 'DIMENSIONS' || targetSel.options.length === 0;
   btnMove.onclick = onMove;
   btnDel.onclick = onDel;
   btnCancel.onclick = close;

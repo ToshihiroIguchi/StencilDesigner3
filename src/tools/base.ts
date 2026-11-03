@@ -42,6 +42,23 @@ export abstract class BaseTool {
     return false;
   }
 
+  /**
+   * Returns true (and notifies the user) when the DIMENSIONS layer exists but is locked or hidden,
+   * so dimensions, arrows, centerlines and notes would be created invisibly or against a lock.
+   */
+  protected isDimensionsLayerBlocked(state: AppState): boolean {
+    const layer = state.layers.find((l) => l.name === 'DIMENSIONS');
+    if (layer?.locked) {
+      this.ctx.notify('DIMENSIONS layer is locked');
+      return true;
+    }
+    if (layer && !layer.visible) {
+      this.ctx.notify('DIMENSIONS layer is hidden');
+      return true;
+    }
+    return false;
+  }
+
   onKeyDown(_key: string, _state: AppState): void {}
 
   cancel(): void {
