@@ -2,6 +2,31 @@ import { UnitConverter } from '../core/format';
 
 type Unit = 'mm' | 'um';
 
+/** Maximum number of grid cells ((nx+1)*(ny+1)) accepted by the duplicate modal. */
+export const MAX_DUPLICATE_GRID = 10000;
+
+/** True while an IME composition is in progress (Enter then confirms the composition, not the dialog). */
+function isComposingKey(e: KeyboardEvent): boolean {
+  return e.isComposing || e.keyCode === 229;
+}
+
+/** True when Enter was pressed on a button other than `okBtn` (it should activate that button instead). */
+function isOtherButton(e: KeyboardEvent, okBtn: HTMLElement): boolean {
+  const t = e.target;
+  return t instanceof HTMLButtonElement && t !== okBtn;
+}
+
+/** Open modals keyed by element id, so a second call returns the pending promise instead of stacking listeners. */
+const pendingModals = new Map<string, Promise<unknown>>();
+
+function guardSingle<T>(id: string, create: () => Promise<T>): Promise<T> {
+  const existing = pendingModals.get(id);
+  if (existing) return existing as Promise<T>;
+  const p = create().finally(() => { pendingModals.delete(id); });
+  pendingModals.set(id, p);
+  return p;
+}
+
 export interface MessageModalOptions {
   title: string;
   message: string;
@@ -11,7 +36,7 @@ export interface MessageModalOptions {
 }
 
 export function showMessageModal(opts: MessageModalOptions): Promise<boolean> {
-  return new Promise((resolve) => {
+  return guardSingle('message-modal', () => new Promise<boolean>((resolve) => {
     const modal = document.getElementById('message-modal') as HTMLElement;
     const titleEl = document.getElementById('message-modal-title') as HTMLElement;
     const msgEl = document.getElementById('message-modal-msg') as HTMLElement;
@@ -40,13 +65,17 @@ export function showMessageModal(opts: MessageModalOptions): Promise<boolean> {
     const onOk = () => close(true);
     const onCancel = () => close(false);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') close(true);
+      if (isComposingKey(e)) return;
+      if (e.key === 'Enter') {
+        if (isOtherButton(e, okBtn)) return;
+        close(true);
+      }
       if (e.key === 'Escape') close(opts.cancelText ? false : true);
     };
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
     modal.addEventListener('keydown', onKey);
-  });
+  }));
 }
 
 export interface InputModalOptions {
@@ -57,7 +86,7 @@ export interface InputModalOptions {
 }
 
 export function showInputModal(opts: InputModalOptions): Promise<string | null> {
-  return new Promise((resolve) => {
+  return guardSingle('input-modal', () => new Promise<string | null>((resolve) => {
     const modal = document.getElementById('input-modal') as HTMLElement;
     const titleEl = document.getElementById('input-modal-title') as HTMLElement;
     const labelEl = document.getElementById('input-modal-label') as HTMLElement;
@@ -82,13 +111,14 @@ export function showInputModal(opts: InputModalOptions): Promise<string | null> 
     const onOk = () => close(field.value.trim() || null);
     const onCancel = () => close(null);
     const onKey = (e: KeyboardEvent) => {
+      if (isComposingKey(e)) return;
       if (e.key === 'Enter') close(field.value.trim() || null);
       if (e.key === 'Escape') close(null);
     };
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
     field.addEventListener('keydown', onKey);
-  });
+  }));
 }
 
 export interface DuplicateModalInitial {
@@ -109,7 +139,7 @@ export interface DuplicateModalResult {
 export function showDuplicateModal(
   initial: DuplicateModalInitial,
 ): Promise<DuplicateModalResult | null> {
-  return new Promise((resolve) => {
+  return guardSingle('duplicate-modal', () => new Promise<DuplicateModalResult | null>((resolve) => {
     const modal = document.getElementById('duplicate-modal') as HTMLElement;
     const nxInput = document.getElementById('duplicate-modal-nx') as HTMLInputElement;
     const nyInput = document.getElementById('duplicate-modal-ny') as HTMLInputElement;
@@ -122,6 +152,15 @@ export function showDuplicateModal(
     nyInput.value = String(Math.max(0, initial.countY));
     pxInput.value = UnitConverter.formatOutput(initial.pitchX, unit);
     pyInput.value = UnitConverter.formatOutput(initial.pitchY, unit);
+    let errEl = modal.querySelector<HTMLElement>('.duplicate-modal-error');
+    if (!errEl) {
+      errEl = document.createElement('div');
+      errEl.className = 'duplicate-modal-error';
+      errEl.style.cssText = 'color:var(--danger);font-size:12px;margin-top:8px';
+      modal.querySelector('.modal-box')?.appendChild(errEl);
+    }
+    const errorEl = errEl;
+    errorEl.textContent = '';
     modal.style.display = '';
     nxInput.focus();
     nxInput.select();
@@ -139,15 +178,23 @@ export function showDuplicateModal(
       const pitchY = UnitConverter.parseInput(pyInput.value, unit);
       if (isNaN(nx) || isNaN(ny) || nx < 0 || ny < 0) return;
       if (nx === 0 && ny === 0) return;
+      if ((nx + 1) * (ny + 1) > MAX_DUPLICATE_GRID) {
+        errorEl.textContent = `Too many copies: the grid may contain at most ${MAX_DUPLICATE_GRID} cells.`;
+        return;
+      }
       close({ nx, ny, pitchX, pitchY });
     };
     const onCancel = () => close(null);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') onOk();
+      if (isComposingKey(e)) return;
+      if (e.key === 'Enter') {
+        if (isOtherButton(e, okBtn)) return;
+        onOk();
+      }
       if (e.key === 'Escape') close(null);
     };
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
     modal.addEventListener('keydown', onKey);
-  });
+  }));
 }

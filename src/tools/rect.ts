@@ -36,6 +36,7 @@ export class RectTool extends BaseTool {
     const y1 = this.placeY;
     const x2 = x1 + this.widthUm;
     const y2 = y1 + this.heightUm;
+    if (this.isActiveLayerLocked(state)) return;
     try {
       const poly = rectToPolygon(x1, y1, x2, y2, state.activeLayerName);
       this.ctx.history.execute(new AddShapeCommand(poly));
@@ -107,7 +108,7 @@ export class RectTool extends BaseTool {
       const x2 = this.startPt.x + dx;
       const y2 = this.startPt.y + dy;
 
-      if (Math.abs(dx) >= 1 && Math.abs(dy) >= 1) {
+      if (Math.abs(dx) >= 1 && Math.abs(dy) >= 1 && !this.isActiveLayerLocked(state)) {
         try {
           const poly = rectToPolygon(this.startPt.x, this.startPt.y, x2, y2, state.activeLayerName);
           this.ctx.history.execute(new AddShapeCommand(poly));
@@ -127,12 +128,14 @@ export class RectTool extends BaseTool {
       this.placeY = this.startPt.y;
       const x2 = this.placeX + this.widthUm;
       const y2 = this.placeY + this.heightUm;
-      try {
-        const poly = rectToPolygon(this.placeX, this.placeY, x2, y2, state.activeLayerName);
-        this.ctx.history.execute(new AddShapeCommand(poly));
-        markDirty();
-      } catch {
-        // Degenerate rect
+      if (!this.isActiveLayerLocked(state)) {
+        try {
+          const poly = rectToPolygon(this.placeX, this.placeY, x2, y2, state.activeLayerName);
+          this.ctx.history.execute(new AddShapeCommand(poly));
+          markDirty();
+        } catch {
+          // Degenerate rect
+        }
       }
     }
 
@@ -142,6 +145,13 @@ export class RectTool extends BaseTool {
     this.draft = null;
     this.snap = null;
     this.ctx.requestRender();
+  }
+
+  override cancel(): void {
+    this.startPt = null;
+    this.dragStartCanvas = null;
+    this.dragThresholdReached = false;
+    super.cancel();
   }
 
   /** Returns HUD label and world position for canvas overlay during drag. */

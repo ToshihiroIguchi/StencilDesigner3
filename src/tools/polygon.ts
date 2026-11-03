@@ -94,6 +94,11 @@ export class PolygonTool extends BaseTool {
         this.vertices.pop();
       }
     }
+    if (this.vertices.length < 2) {
+      // Double-click on the very first vertex: drop the stray single-vertex draft.
+      this.cancel();
+      return;
+    }
     this.commit(state);
   }
 
@@ -107,20 +112,32 @@ export class PolygonTool extends BaseTool {
   }
 
   private commit(state: AppState): void {
-    if (this.vertices.length < 3) return;
-    if (hasSelfIntersection(this.vertices)) return;
+    // Failures never discard the draft; the user fixes it (e.g. Backspace) and retries.
+    if (this.vertices.length < 3) {
+      this.ctx.notify('A polygon needs at least 3 vertices.');
+      return;
+    }
+    if (hasSelfIntersection(this.vertices)) {
+      this.ctx.notify("Can't close: the outline crosses itself. Press Backspace to remove the last vertex.");
+      return;
+    }
+    if (this.isActiveLayerLocked(state)) return;
+    let poly;
     try {
-      const poly = normalize({
+      poly = normalize({
         id: newId(),
         outer: this.vertices,
         holes: [],
         layer: state.activeLayerName,
       });
-      this.ctx.history.execute(new AddShapeCommand(poly));
-      markDirty();
     } catch {
-      // Degenerate polygon — ignore
+      this.ctx.notify(
+        "Can't close: the shape has no area. Press Backspace to remove the last vertex or add more vertices.",
+      );
+      return;
     }
+    this.ctx.history.execute(new AddShapeCommand(poly));
+    markDirty();
     this.cancel();
   }
 

@@ -1427,9 +1427,11 @@ export class App {
     const isUntitled = !this.currentDocName || /^Untitled( \d+)?$/.test(this.currentDocName);
     const namePrefix = isUntitled ? (config.defaultFilename || 'stencil') : this.currentDocName;
     const filename = `${namePrefix}.pdf`;
-    const ok = await downloadPdf(state, this.currentDocName, filename, config.appName);
-    if (!ok) {
+    const unsupported = await downloadPdf(state, this.currentDocName, filename, config.appName);
+    if (!unsupported) {
       await this.showMessageModal({ title: 'Export PDF', message: 'No visible content to export. Make at least one layer visible.' });
+    } else if (unsupported.length > 0) {
+      this.showNotify(`PDF exported, but these characters may not render: ${unsupported.slice(0, 10).join(' ')}`);
     }
   }
 

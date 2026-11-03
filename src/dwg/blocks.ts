@@ -85,6 +85,14 @@ export interface PlacedEntity {
 
 const MAX_DEPTH = 16;
 
+/** Mirror x -> -x: the OCS-to-WCS map for extrusion direction (0,0,-1). */
+export const OCS_MIRROR_X: Mat = { a: -1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+
+/** True when the extrusion direction points down (z < 0), i.e. the OCS is x-mirrored. */
+export function isOcsMirrored(ext: { z?: number } | undefined): boolean {
+  return typeof ext?.z === 'number' && ext.z < 0;
+}
+
 /**
  * Walks an entity list, recursively expanding INSERTs into a flat list of
  * "placed" real entities. Non-INSERT entities are emitted as (entity, current matrix).
@@ -110,7 +118,8 @@ export function flattenEntities(
         const blockName = ins.name;
         const block = blockMap.get(blockName) ?? (typeof blockName === 'string' ? (blockMap.get(blockName.toUpperCase()) ?? blockMap.get(blockName.toLowerCase())) : undefined);
         if (!block) continue;
-        if (visited.has(blockName)) continue; // cycle guard
+        const blockKey = String(block.name ?? blockName).toUpperCase();
+        if (visited.has(blockKey)) continue; // cycle guard (canonical name)
         const cols = Math.max(1, ins.columnCount ?? 1);
         const rows = Math.max(1, ins.rowCount ?? 1);
         const colSp = ins.columnSpacing ?? 0;
@@ -120,7 +129,7 @@ export function flattenEntities(
         const sin = Math.sin(rot);
         const baseM = insertMatrix(ins, block.basePoint);
         const nextVisited = new Set(visited);
-        nextVisited.add(ins.name);
+        nextVisited.add(blockKey);
         const insLayer = effectiveLayer;
 
         for (let r = 0; r < rows; r++) {
@@ -131,7 +140,9 @@ export function flattenEntities(
             const dx = lx * cos - ly * sin;
             const dy = lx * sin + ly * cos;
             const offset: Mat = { a: 1, b: 0, c: 0, d: 1, e: dx, f: dy };
-            const cellM = multiply(offset, baseM);
+            let cellM = multiply(offset, baseM);
+            // OCS with extrusion z<0: arbitrary-axis x axis is (-1,0,0), y axis (0,1,0)
+            if (isOcsMirrored(ins.extrusionDirection)) cellM = multiply(OCS_MIRROR_X, cellM);
             recurse(block.entities ?? [], multiply(matrix, cellM), nextVisited, depth + 1, insLayer);
           }
         }

@@ -13,7 +13,7 @@ import type { Ring, Vertex } from '../types';
 import { vertex } from '../core/vertex';
 import { buildImportResult, resolveUnitScale, type ImportResult, type BuildImportOptions } from '../dxf/importer';
 import { getLibreDwg } from './libredwg';
-import { flattenEntities, buildBlockMap, apply, type Mat } from './blocks';
+import { flattenEntities, buildBlockMap, apply, isOcsMirrored, type Mat } from './blocks';
 import { Dwg_File_Type } from '@mlightcad/libredwg-web';
 import type {
   DwgDatabase,
@@ -40,14 +40,30 @@ import {
 export { bsplinePointsMm, fitSplinePointsMm };
 
 /** Applies the matrix to an mm-space point, then rounds to µm with scale and Y-flips into a Vertex. */
-function toVertex(m: Mat, x: number, y: number, scale = 1000): Vertex {
+function toVertex(m: Mat, x: number, y: number, scale = 1000): Vertex | null {
   const p = apply(m, x, y);
-  return vertex(Math.round(p.x * scale), Math.round(-p.y * scale));
+  if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+  const ux = Math.round(p.x * scale), uy = Math.round(-p.y * scale);
+  if (!Number.isFinite(ux) || !Number.isFinite(uy)) return null;
+  return vertex(ux, uy);
 }
 
 /** Converts an mm-space point list to Vertices via matrix apply + scale µm/Y-flip. */
 function toVertices(m: Mat, pts: Pt[], scale = 1000): Vertex[] {
-  return pts.map((p) => toVertex(m, p.x, p.y, scale));
+  const out: Vertex[] = [];
+  for (const p of pts) {
+    const v = toVertex(m, p.x, p.y, scale);
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+/** Mirrors OCS polyline vertices into WCS for extrusion z<0 (x -> -x, bulge sign flips). */
+function mirrorPolyVerts<T extends { x: number; y: number; bulge?: number }>(
+  verts: T[], mirrored: boolean,
+): Array<{ x: number; y: number; bulge?: number }> {
+  if (!mirrored) return verts;
+  return verts.map((v) => ({ x: -v.x, y: v.y, bulge: v.bulge === undefined ? undefined : -v.bulge }));
 }
 
 
@@ -90,24 +106,24 @@ export function convertDwgDatabase(db: DwgDatabase, options: BuildImportOptions 
           const e = entity as DwgLineEntity;
           const a = toVertex(matrix, e.startPoint.x, e.startPoint.y, scale);
           const b = toVertex(matrix, e.endPoint.x, e.endPoint.y, scale);
-          segments.push({ seg: [a, b], layer });
+          if (a && b) segments.push({ seg: [a, b], layer });
           break;
         }
         case 'LWPOLYLINE': {
           const e = entity as DwgLWPolylineEntity;
           const isClosed = !!(e.flag & 1);
-          const mm = expandVertsMm(e.vertices ?? [], isClosed);
+          const mm = expandVertsMm(mirrorPolyVerts(e.vertices ?? [], isOcsMirrored(e.extrusionDirection)), isClosed);
           const verts = toVertices(matrix, mm, scale);
-          if (isClosed) closedRings.push({ ring: verts, layer });
+          if (isClosed) { if (verts.length >= 3) closedRings.push({ ring: verts, layer }); }
           else pushSegments(verts, layer, segments);
           break;
         }
         case 'POLYLINE2D': {
           const e = entity as DwgPolyline2dEntity;
           const isClosed = !!(e.flag & 1);
-          const mm = expandVertsMm(e.vertices ?? [], isClosed);
+          const mm = expandVertsMm(mirrorPolyVerts(e.vertices ?? [], isOcsMirrored(e.extrusionDirection)), isClosed);
           const verts = toVertices(matrix, mm, scale);
-          if (isClosed) closedRings.push({ ring: verts, layer });
+          if (isClosed) { if (verts.length >= 3) closedRings.push({ ring: verts, layer }); }
           else pushSegments(verts, layer, segments);
           break;
         }
@@ -116,35 +132,45 @@ export function convertDwgDatabase(db: DwgDatabase, options: BuildImportOptions 
           const isClosed = !!(e.flag & 1);
           const mm: Pt[] = (e.vertices ?? []).map((v) => ({ x: v.x, y: v.y }));
           const verts = toVertices(matrix, mm, scale);
-          if (isClosed) closedRings.push({ ring: verts, layer });
+          if (isClosed) { if (verts.length >= 3) closedRings.push({ ring: verts, layer }); }
           else pushSegments(verts, layer, segments);
           break;
         }
         case 'ARC': {
           const e = entity as DwgArcEntity;
-          const mm = arcPointsMm(e.center.x, e.center.y, e.radius, e.startAngle * RAD2DEG, e.endAngle * RAD2DEG, true);
+          const mirrored = isOcsMirrored(e.extrusionDirection);
+          // Mirror x -> -x: angle t maps to pi - t, so the CCW sweep s..e becomes pi-e .. pi-s.
+          const mm = mirrored
+            ? arcPointsMm(-e.center.x, e.center.y, e.radius, (Math.PI - e.endAngle) * RAD2DEG, (Math.PI - e.startAngle) * RAD2DEG, true)
+            : arcPointsMm(e.center.x, e.center.y, e.radius, e.startAngle * RAD2DEG, e.endAngle * RAD2DEG, true);
           pushSegments(toVertices(matrix, mm, scale), layer, segments);
           break;
         }
         case 'CIRCLE': {
           const e = entity as DwgCircleEntity;
-          const mm = arcPointsMm(e.center.x, e.center.y, e.radius, 0, 360, true);
+          const cx = isOcsMirrored(e.extrusionDirection) ? -e.center.x : e.center.x;
+          const mm = arcPointsMm(cx, e.center.y, e.radius, 0, 360, true);
           const verts = toVertices(matrix, mm.slice(0, -1), scale);
-          closedRings.push({ ring: verts, layer });
+          if (verts.length >= 3) closedRings.push({ ring: verts, layer });
           break;
         }
         case 'ELLIPSE': {
           const e = entity as DwgEllipseEntity;
           const isFull = Math.abs((e.endAngle - e.startAngle) - 2 * Math.PI) < 1e-6
             || (Math.abs(e.startAngle) < 1e-9 && (Math.abs(e.endAngle) < 1e-9 || Math.abs(e.endAngle - 2 * Math.PI) < 1e-6));
+          // Ellipse center/axis are WCS; with extrusion z<0 the sweep runs clockwise
+          // seen from +Z, i.e. parameter t maps to -t (a partial arc s..e becomes -e..-s).
+          const flip = isOcsMirrored(e.extrusionDirection) && !isFull;
           const mm = ellipsePointsMm(
             e.center.x, e.center.y,
             e.majorAxisEndPoint.x, e.majorAxisEndPoint.y,
             e.axisRatio,
-            e.startAngle, isFull ? e.startAngle + 2 * Math.PI : e.endAngle,
+            flip ? -e.endAngle : e.startAngle,
+            flip ? -e.startAngle : (isFull ? e.startAngle + 2 * Math.PI : e.endAngle),
           );
           if (isFull) {
-            closedRings.push({ ring: toVertices(matrix, mm.slice(0, -1), scale), layer });
+            const ring = toVertices(matrix, mm.slice(0, -1), scale);
+            if (ring.length >= 3) closedRings.push({ ring, layer });
           } else {
             pushSegments(toVertices(matrix, mm, scale), layer, segments);
           }
@@ -187,7 +213,7 @@ export function convertDwgDatabase(db: DwgDatabase, options: BuildImportOptions 
               && verts[0].y === verts[verts.length - 1].y)
               ? verts.slice(0, -1)
               : verts;
-            closedRings.push({ ring, layer });
+            if (ring.length >= 3) closedRings.push({ ring, layer });
           } else {
             pushSegments(verts, layer, segments);
           }
